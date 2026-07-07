@@ -110,6 +110,26 @@ continues to open through the existing managed Badger path. TreeDB startup calls
 `disabled_need_blocker` or `unsupported`; there is no silent fallback from a requested TreeDB
 backend to Badger.
 
+## Operator gates and default decision
+
+Issue #8 finalizes the current operator-facing gate report in `OperatorGateReport()`:
+
+| Gate                        | Current state   | Operator decision                                                                                                           |
+| --------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Badger default              | `pass`          | Badger remains the default Alpha posting-store backend.                                                                     |
+| TreeDB primitive durability | `evidence_only` | TreeDB can open, write, close, and reopen in the scaffold, but this is not a Dgraph posting-store backend.                  |
+| TreeDB selector             | `fail_closed`   | An explicit TreeDB selector is accepted but startup refuses to open while blockers remain.                                  |
+| Posting/schema workflows    | `fail_closed`   | Dgraph posting and schema workflows remain Badger-only until metadata and all-version semantics are implemented and tested. |
+| Backup/restore/export       | `fail_closed`   | Stream backup/export/import and snapshot workflows remain Badger-only.                                                      |
+| Subscriptions               | `fail_closed`   | `worker.SubscribeForUpdates` remains Badger-only.                                                                           |
+| Encryption/key registry     | `unsupported`   | TreeDB encryption/key-registry integration is unsupported in this integration lane.                                         |
+| Benchmark matrix            | `pass`          | The benchmark matrix is available for current evidence and future before/after runs.                                        |
+| Default decision            | `pass`          | `keep_badger_default`; TreeDB stays explicit, experimental, and fail-closed.                                                |
+
+Final decision for this tracker: keep Badger as the default. TreeDB is not production-ready and is
+not a drop-in posting-store backend until the fail-closed rows above move to supported with tests
+and benchmark evidence.
+
 Focused validation:
 
 ```sh
