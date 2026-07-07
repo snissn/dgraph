@@ -1,6 +1,9 @@
 # TreeDB vs Badger Comparison (for Dgraph Replacement)
 
-This document categorizes Badger features used by Dgraph into those TreeDB already supports and those it does not, along with implementation notes for missing features.
+This document categorizes Badger features used by Dgraph against latest TreeDB.
+Here, "gap" means "no Dgraph-compatible replacement for the Badger call sites
+that exist today"; it does not necessarily mean TreeDB lacks every lower-level
+primitive in that area.
 
 TreeDB has been synced to `snissn/gomap` commit
 `1d9e97618e4ed3801fc92bb358b190930261fc7b` through Go pseudo-version
@@ -14,11 +17,19 @@ TreeDB has been synced to `snissn/gomap` commit
 - **Point-in-Time Reads**: `AcquireSnapshot` providing a consistent view of the database.
 - **Tombstones**: Support for deleting keys while preserving historical consistency.
 - **Versioned Values**: `GetVersioned` and revision-aware internal batch paths exist in latest TreeDB.
+- **Native Conditional Transactions**: `NewConditionalTxn`, `SetWithRevision`,
+  `DeleteWithRevision`, `GetVersioned`, `Commit`, and `CommitSync` exist. These
+  are TreeDB-native revision checks, not Badger managed transactions. Under the
+  durable command-WAL profile used by this Dgraph scaffold, `NewConditionalTxn`
+  currently returns unsupported.
 
 ### Iteration
 - **Basic Iteration**: `Iterator(start, end)` and `ReverseIterator(start, end)` with `Valid`, `Next`, `Key`, and `Value`.
 - **Copy Control**: `KeyCopy` and `ValueCopy` provide caller-owned bytes when Dgraph cannot keep view lifetimes local.
-- **Gap**: TreeDB does not expose Badger's transaction-scoped `Seek`, `Rewind`, `Prefix`, or `AllVersions` iterator option surface yet.
+- **Gap**: Top-level TreeDB does not expose Badger's transaction-scoped `Seek`,
+  `Rewind`, item, `Prefix`, or `AllVersions` iterator option surface. Lower-level
+  TreeDB packages have additional iterator controls, but they are not a drop-in
+  replacement for Dgraph's Badger iterator call sites.
 
 ### Persistence and Lifecycle
 - **Durable Writes**: `SetSync`, `DeleteSync`, and `Batch.WriteSync` for fsync-backed writes.
@@ -32,16 +43,26 @@ TreeDB has been synced to `snissn/gomap` commit
 
 ---
 
-## 2. Features TreeDB Does Not Yet Have
+## 2. Dgraph Compatibility Gaps
 
 ### External Timestamp Management (Managed Mode)
 - **Badger Feature**: `OpenManaged`, `NewTransactionAt(ts)`, `CommitAt(ts)`.
 - **Dgraph Usage**: Dgraph manages its own MVCC timestamps.
-- **TreeDB Gap**: TreeDB exposes native entry revisions, but not the Badger-compatible managed transaction API Dgraph currently calls.
+- **TreeDB Status**: TreeDB exposes native entry revisions and native conditional
+  transaction APIs. Native conditional transactions are not currently usable under
+  the durable command-WAL profile selected by this scaffold.
+- **Compatibility Gap**: TreeDB does not expose Badger-compatible
+  `OpenManaged`, `NewTransactionAt(readTs)`, `CommitAt(commitTs)`,
+  `NewManagedWriteBatch`, or `SetEntryAt` APIs. Dgraph also needs read-at and
+  write-at semantics for externally assigned MVCC timestamps.
 - **Implementation Steps**:
-    1.  Add `CommitAt(ts)` to the Batch API to override internal sequence generation.
-    2.  Update `AcquireSnapshotAt(ts)` to allow reading from a specific historical version.
-    3.  Ensure `ValueLogGC` respects external timestamps when determining reachability.
+    1.  Decide whether Dgraph should adapt to TreeDB-native revisions or whether
+        TreeDB should grow a Badger-managed compatibility layer.
+    2.  Add a read-at timestamp boundary equivalent to `NewTransactionAt(ts)`.
+    3.  Add a write-at timestamp boundary equivalent to `CommitAt(ts)` and
+        `SetEntryAt`.
+    4.  Ensure maintenance and value-log GC preserve externally visible MVCC
+        history for Dgraph reads.
 
 ### Subscription (CDC)
 - **Badger Feature**: `Subscribe(ctx, callback, matches)`.
@@ -55,7 +76,9 @@ TreeDB has been synced to `snissn/gomap` commit
 ### Entry Metadata and TTL
 - **Badger Feature**: `Entry.UserMeta`, `Entry.ExpiresAt`.
 - **Dgraph Usage**: Uses `UserMeta` for tagging postings list types.
-- **TreeDB Gap**: TreeDB nodes and value log frames do not currently store a dedicated `UserMeta` byte or TTL timestamp per entry.
+- **TreeDB Gap**: TreeDB does not expose a Badger-compatible `Entry`/`Item`
+  metadata and TTL surface. TreeDB internal entry flags are storage metadata, not
+  a Dgraph `UserMeta` byte.
 - **Implementation Steps**:
     1.  Update the `LeafEntry` struct and on-disk leaf node layout to include an optional metadata byte.
     2.  Add a `TTL` field to the value log frame header.
@@ -64,7 +87,10 @@ TreeDB has been synced to `snissn/gomap` commit
 ### Streaming API
 - **Badger Feature**: `Stream` and `StreamWriter`.
 - **Dgraph Usage**: Fast bulk exports/imports and backups.
-- **TreeDB Gap**: No dedicated high-throughput streaming interface.
+- **TreeDB Gap**: No Badger-compatible `NewStreamAt`, `Stream.Orchestrate`,
+  callback, or `NewStreamWriter` interface. Standard TreeDB iterators and
+  batches exist, but Dgraph's backup/export/import paths are built around the
+  Badger stream contract and Badger protobuf buffers.
 - **Implementation Steps**:
     1.  Implement a `Stream` type that uses multiple goroutines to scan the B-tree and stream values.
     2.  Create a `StreamWriter` that bypasses the standard write path for optimized bulk loading (similar to `bulk.Build` but for live DBs).
@@ -72,7 +98,8 @@ TreeDB has been synced to `snissn/gomap` commit
 ### Encryption at Rest
 - **Badger Feature**: `WithEncryptionKey`, `KeyRegistry`.
 - **Dgraph Usage**: Encrypting both the main DB and the WAL.
-- **TreeDB Gap**: Architecture supports encryption post-processors, but the `KeyRegistry` and management logic are missing.
+- **TreeDB Gap**: No public `WithEncryptionKey`/`KeyRegistry`-compatible API was
+  found on the pinned TreeDB head.
 - **Implementation Steps**:
     1.  Implement a `KeyRegistry` to manage data encryption keys (DEKs).
     2.  Integrate the existing `AES_GCM_SIV` codec into the value log and pager write paths.
@@ -81,7 +108,11 @@ TreeDB has been synced to `snissn/gomap` commit
 ### Administrative Stats
 - **Badger Feature**: `Flatten`, `DB.Size`.
 - **Dgraph Usage**: Monitoring DB size and manually triggering level flattening.
-- **TreeDB Gap**: `Flatten` (LSM concept) isn't directly applicable to TreeDB's B-tree, but a similar "full vacuum/rebuild" exists. `Size` needs a consolidated return.
+- **TreeDB Status**: `Stats`, `Checkpoint`, `CompactStorage`, and
+  `VacuumIndexOnline` exist.
+- **Compatibility Gap**: `Flatten` (LSM concept) is not directly applicable to
+  TreeDB's B-tree, and Dgraph still expects Badger-shaped size, sync, flatten,
+  cache, and expvar metrics surfaces in several packages.
 - **Implementation Steps**:
     1.  Consolidate storage usage into a simple `Size()` method.
     2.  Expose `VacuumIndexOnline` as a replacement for `Flatten` for space reclamation and page locality.

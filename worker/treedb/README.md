@@ -12,16 +12,19 @@ What is wired here:
 
 - durable TreeDB command-WAL profile selection
 - Dgraph-shaped version retention default matching the current Badger `WithNumVersionsToKeep(math.MaxInt32)` posting-store setting
-- compile assertions for TreeDB point reads/writes, versioned values, snapshots, forward/reverse iteration, batches, value-log GC, full storage compaction, stats, and close
-- an open/read/write/snapshot/iterator smoke test
+- compile assertions for TreeDB point reads/writes, versioned values, native conditional transaction APIs, snapshots, forward/reverse iteration, batches, value-log GC, full storage compaction, stats, and close
+- an open/read/write/snapshot/iterator smoke test, plus a check that native conditional transactions are currently rejected under the durable command-WAL profile
 - fail-closed checks for encryption and in-memory mode
 
-What still blocks replacing Badger in the Alpha posting store:
+What still blocks replacing Badger in the Alpha posting store. These are
+Badger-compatibility gaps in Dgraph's current call sites, not proof that TreeDB
+lacks every lower-level primitive in the area:
 
-- Badger managed transaction API: `OpenManaged`, `NewTransactionAt`, `CommitAt`, `NewManagedWriteBatch`, `SetEntryAt`
-- Badger entry metadata and TTL: `Entry.UserMeta`, `Item.UserMeta`, `Entry.ExpiresAt`
-- Badger all-version/key iterators: `NewKeyIterator` plus `IteratorOptions.AllVersions`, `Prefix`, and prefetch settings
-- Badger stream import/export API: `NewStreamAt`, `Stream.Orchestrate`, `NewStreamWriter`
+- Badger managed transaction compatibility: `OpenManaged`, `NewTransactionAt`, `CommitAt`, `NewManagedWriteBatch`, `SetEntryAt`
+- TreeDB native conditional transactions exist but currently return unsupported under the durable command-WAL profile used by this scaffold
+- Badger entry metadata and TTL compatibility: `Entry.UserMeta`, `Item.UserMeta`, `Entry.ExpiresAt`
+- Badger all-version/key iterator compatibility: `NewKeyIterator` plus `IteratorOptions.AllVersions`, `Prefix`, and prefetch settings
+- Badger stream import/export compatibility: `NewStreamAt`, `Stream.Orchestrate`, `NewStreamWriter`
 - Badger subscription API used by `worker.SubscribeForUpdates`
 - Badger encryption and key-registry APIs used by posting stores, backups, debug, and `raftwal`
 - Badger protobuf compatibility: `github.com/dgraph-io/badger/v4/pb` `KV`, `KVList`, and `Match`

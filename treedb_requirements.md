@@ -11,7 +11,13 @@ Dgraph manages its own timestamps (MVCC) and uses Badger's "Managed Mode".
 - `badger.NewTransactionAt(ts, update)`: Creating a transaction at a specific read timestamp.
 - `txn.CommitAt(ts, callback)`: Committing a transaction at a specific commit timestamp.
 - **Requirement**: TreeDB must support external timestamp management and allow reading/writing at specific versions.
-- **Current status**: Latest TreeDB exposes native entry revisions and `GetVersioned`, but Dgraph still needs a Badger-compatible transaction boundary for `NewTransactionAt`, `CommitAt`, and managed write batches before the posting store can switch.
+- **Current status**: Latest TreeDB exposes native entry revisions,
+  `GetVersioned`, and native conditional transaction APIs, but native conditional
+  transactions currently return unsupported under the durable command-WAL profile
+  used by this scaffold. Dgraph still needs either a Badger-compatible
+  transaction boundary for `NewTransactionAt`, `CommitAt`, and managed write
+  batches, or a larger posting-store abstraction that maps Dgraph MVCC onto
+  TreeDB-native revisions.
 
 ## 2. Core KV API
 - `txn.Get(key)`: Retrieve an item by key.
@@ -32,6 +38,9 @@ Dgraph uses complex iteration patterns for range queries and rollups.
     - `Prefix`: Scoping iteration to a specific prefix.
 - `txn.NewIterator(opts)`: Creating an iterator.
 - `txn.NewKeyIterator(key, opts)`: Iterating over all versions of a *single* key (used in rollups).
+- **Current status**: TreeDB's top-level package exposes forward and reverse
+  range iterators. It does not expose Dgraph's current Badger transaction-scoped
+  item iterator shape, `NewKeyIterator`, or `AllVersions` semantics.
 
 ## 4. Streaming and Bulk Loading
 - `badger.Stream`: Efficiently streaming data out of the DB (used for backups and exports).
@@ -46,7 +55,8 @@ Dgraph uses complex iteration patterns for range queries and rollups.
 ## 5. Subscription (CDC)
 - `badger.Subscribe(ctx, callback, matches)`: Subscribing to key-value changes.
 - `badgerpb.Match`: Support for prefix-based filtering and ignoring specific bytes.
-- **Requirement**: As noted, TreeDB currently lacks this and it is a critical feature for Dgraph's internal communication and potentially CDC.
+- **Requirement**: Dgraph needs a replacement for Badger's subscription stream;
+  no public TreeDB equivalent was found on the pinned head.
 
 ## 6. Administrative and Lifecycle
 - `badger.DB.Close()`: Graceful shutdown.
@@ -54,6 +64,10 @@ Dgraph uses complex iteration patterns for range queries and rollups.
 - `badger.DB.RunValueLogGC(discardRatio)`: Value log garbage collection.
 - `badger.DB.Size()`: Getting the size of the DB (LSM and Value Log).
 - `badger.DB.Flatten()`: Compacting the LSM tree levels.
+- **Current status**: TreeDB exposes `Checkpoint`, `ValueLogGC`, `Stats`,
+  `CompactStorage`, and `VacuumIndexOnline`, but Dgraph's current code expects
+  Badger-shaped method names, return values, and metric names in several
+  packages.
 
 ## 7. Encryption and Security
 - `badger.Options.WithEncryptionKey(key)`: Support for transparent data encryption at rest.

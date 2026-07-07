@@ -77,10 +77,11 @@ type Handle struct {
 // Dgraph's Badger posting store with TreeDB.
 func UnsupportedFeatures() []string {
 	return []string{
-		"badger managed transaction API: OpenManaged, NewTransactionAt, CommitAt, NewManagedWriteBatch, SetEntryAt",
-		"badger entry metadata and TTL: Entry.UserMeta, Item.UserMeta, Entry.ExpiresAt",
-		"badger all-version/key iterators: NewKeyIterator plus IteratorOptions.AllVersions/Prefix/PrefetchValues",
-		"badger stream import/export API: NewStreamAt, Stream.Orchestrate, NewStreamWriter",
+		"badger managed transaction compatibility: OpenManaged, NewTransactionAt, CommitAt, NewManagedWriteBatch, SetEntryAt",
+		"TreeDB native conditional transactions currently return unsupported under the durable command-WAL profile",
+		"badger entry metadata and TTL compatibility: Entry.UserMeta, Item.UserMeta, Entry.ExpiresAt",
+		"badger all-version/key iterator compatibility: NewKeyIterator plus IteratorOptions.AllVersions/Prefix/PrefetchValues",
+		"badger stream import/export compatibility: NewStreamAt, Stream.Orchestrate, NewStreamWriter",
 		"badger subscription API used by worker.SubscribeForUpdates",
 		"badger encryption/key-registry APIs used by posting stores, backups, debug, and raftwal",
 		"badger protobuf compatibility: github.com/dgraph-io/badger/v4/pb KV/KVList/Match",
@@ -159,6 +160,7 @@ type dgraphTreeDBAPI interface {
 	Iterator([]byte, []byte) (td.Iterator, error)
 	ReverseIterator([]byte, []byte) (td.Iterator, error)
 	NewBatch() td.Batch
+	NewConditionalTxn() (*td.ConditionalTxn, error)
 	ValueLogGC(context.Context, td.ValueLogGCOptions) (td.ValueLogGCStats, error)
 	CompactStorage(context.Context, td.CompactStorageOptions) (td.CompactStorageStats, error)
 	Stats() map[string]string
@@ -181,8 +183,18 @@ type dgraphTreeDBBatchAPI interface {
 	Close() error
 }
 
+type dgraphTreeDBConditionalTxnAPI interface {
+	GetVersioned([]byte) ([]byte, td.EntryRevision, error)
+	SetWithRevision([]byte, []byte, td.EntryRevision) error
+	DeleteWithRevision([]byte, td.EntryRevision) error
+	Commit() error
+	CommitSync() error
+	Close() error
+}
+
 var (
-	_ dgraphTreeDBAPI         = (*td.DB)(nil)
-	_ dgraphTreeDBSnapshotAPI = td.Snapshot(nil)
-	_ dgraphTreeDBBatchAPI    = td.Batch(nil)
+	_ dgraphTreeDBAPI               = (*td.DB)(nil)
+	_ dgraphTreeDBSnapshotAPI       = td.Snapshot(nil)
+	_ dgraphTreeDBBatchAPI          = td.Batch(nil)
+	_ dgraphTreeDBConditionalTxnAPI = (*td.ConditionalTxn)(nil)
 )

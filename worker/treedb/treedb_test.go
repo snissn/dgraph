@@ -67,6 +67,10 @@ func TestOpenSmoke(t *testing.T) {
 	require.NoError(t, batch.Write())
 	require.NoError(t, batch.Close())
 
+	_, err = handle.DB.NewConditionalTxn()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "conditional transactions unsupported")
+
 	snap := handle.DB.AcquireSnapshot()
 	require.NotNil(t, snap)
 	defer func() {
