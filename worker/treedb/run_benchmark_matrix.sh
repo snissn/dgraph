@@ -27,7 +27,7 @@ USAGE
 }
 
 smoke=0
-artifact_dir="${ARTIFACT_DIR:-}"
+artifact_dir="${ARTIFACT_DIR-}"
 bench_key_count=256
 bench_version_count=4
 bench_value_size=128
@@ -62,7 +62,7 @@ done
 repo_root=$(git rev-parse --show-toplevel)
 cd "${repo_root}"
 
-if [[ -z "${artifact_dir}" ]]; then
+if [[ -z ${artifact_dir} ]]; then
 	artifact_dir="/tmp/dgraph-treedb-bench/$(date -u +%Y%m%dT%H%M%SZ)"
 fi
 mkdir -p "${artifact_dir}"
@@ -71,7 +71,7 @@ bench="${BENCH:-^BenchmarkDgraphTreeDBMatrix$}"
 benchtime="${BENCHTIME:-500ms}"
 count="${COUNT:-1}"
 timeout="${TIMEOUT:-10m}"
-if [[ "${smoke}" -eq 1 ]]; then
+if [[ ${smoke} -eq 1 ]]; then
 	benchtime="${BENCHTIME:-1x}"
 	count="${COUNT:-1}"
 fi
@@ -99,6 +99,7 @@ goos=$(go env GOOS)
 goarch=$(go env GOARCH)
 cpu=$(awk -F': ' '/model name/ { print $2; exit }' /proc/cpuinfo 2>/dev/null || true)
 kernel=$(uname -srvmo)
+bt='`'
 
 {
 	echo "Dgraph TreeDB benchmark matrix context"
@@ -182,17 +183,17 @@ set -e
 	echo
 	echo "| Row | Status | Reason |"
 	echo "| --- | --- | --- |"
-	echo "| \`Blocked/ManagedTimestampTransactions\` | skipped | TreeDB does not expose Badger-compatible OpenManaged/NewTransactionAt/CommitAt/SetEntryAt semantics required by Dgraph posting stores. |"
-	echo "| \`Blocked/EntryMetadataAndTTL\` | skipped | TreeDB primitives do not yet provide Badger Entry.UserMeta/Item.UserMeta/Entry.ExpiresAt compatibility for Dgraph posting metadata. |"
-	echo "| \`Blocked/AllVersionKeyIterator\` | skipped | TreeDB native revisions are not a Badger IteratorOptions.AllVersions/NewKeyIterator substitute for Dgraph posting-list version scans. |"
-	echo "| \`Blocked/StreamBackupExport\` | skipped | TreeDB does not yet provide Dgraph's Badger NewStreamAt/Stream.Orchestrate backup-export contract. |"
-	echo "| \`Blocked/StreamWriterImport\` | skipped | TreeDB does not yet provide Dgraph's Badger NewStreamWriter import/restore contract. |"
-	echo "| \`Blocked/Subscriptions\` | skipped | TreeDB does not yet provide the Badger Subscribe API used by worker.SubscribeForUpdates. |"
-	echo "| \`Blocked/EncryptionKeyRegistry\` | skipped | TreeDB Dgraph scaffold intentionally fails closed for Badger-compatible encryption and key registry APIs. |"
+	echo "| ${bt}Blocked/ManagedTimestampTransactions${bt} | skipped | TreeDB does not expose Badger-compatible OpenManaged/NewTransactionAt/CommitAt/SetEntryAt semantics required by Dgraph posting stores. |"
+	echo "| ${bt}Blocked/EntryMetadataAndTTL${bt} | skipped | TreeDB primitives do not yet provide Badger Entry.UserMeta/Item.UserMeta/Entry.ExpiresAt compatibility for Dgraph posting metadata. |"
+	echo "| ${bt}Blocked/AllVersionKeyIterator${bt} | skipped | TreeDB native revisions are not a Badger IteratorOptions.AllVersions/NewKeyIterator substitute for Dgraph posting-list version scans. |"
+	echo "| ${bt}Blocked/StreamBackupExport${bt} | skipped | TreeDB does not yet provide Dgraph's Badger NewStreamAt/Stream.Orchestrate backup-export contract. |"
+	echo "| ${bt}Blocked/StreamWriterImport${bt} | skipped | TreeDB does not yet provide Dgraph's Badger NewStreamWriter import/restore contract. |"
+	echo "| ${bt}Blocked/Subscriptions${bt} | skipped | TreeDB does not yet provide the Badger Subscribe API used by worker.SubscribeForUpdates. |"
+	echo "| ${bt}Blocked/EncryptionKeyRegistry${bt} | skipped | TreeDB Dgraph scaffold intentionally fails closed for Badger-compatible encryption and key registry APIs. |"
 	echo
 	echo "## Result"
 	echo
-	if [[ "${status}" -eq 0 ]]; then
+	if [[ ${status} -eq 0 ]]; then
 		echo "go test benchmark command exited successfully."
 	else
 		echo "go test benchmark command failed with exit status ${status}."
