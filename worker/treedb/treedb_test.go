@@ -55,6 +55,23 @@ func TestResolveOptionsRejectsNonRuntimeProfiles(t *testing.T) {
 	}
 }
 
+func TestOpenReopenDurability(t *testing.T) {
+	dir := t.TempDir()
+	handle, err := Open(OpenOptions{Dir: dir})
+	require.NoError(t, err)
+	require.NoError(t, handle.DB.Set([]byte("durable"), []byte("value")))
+	require.NoError(t, handle.Close())
+
+	reopened, err := Open(OpenOptions{Dir: dir})
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, reopened.Close())
+	}()
+	value, err := reopened.DB.Get([]byte("durable"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("value"), value)
+}
+
 func TestOpenSmoke(t *testing.T) {
 	handle, err := Open(OpenOptions{Dir: t.TempDir()})
 	require.NoError(t, err)
