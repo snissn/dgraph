@@ -33,12 +33,14 @@ func TestResolveOptionsRejectsUnsupportedFeatures(t *testing.T) {
 		RequireEncryption: true,
 	})
 	require.ErrorIs(t, err, ErrUnsupportedFeature)
+	require.Contains(t, err.Error(), "encryption_key_registry=unsupported")
 
 	_, err = ResolveOptions(OpenOptions{
 		Dir:             t.TempDir(),
 		RequireInMemory: true,
 	})
 	require.ErrorIs(t, err, ErrUnsupportedFeature)
+	require.Contains(t, err.Error(), "in_memory_posting_store=unsupported")
 }
 
 func TestResolveOptionsRejectsNonRuntimeProfiles(t *testing.T) {

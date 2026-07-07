@@ -73,22 +73,6 @@ type Handle struct {
 	DB      *td.DB
 }
 
-// UnsupportedFeatures returns the known runtime blockers for replacing
-// Dgraph's Badger posting store with TreeDB.
-func UnsupportedFeatures() []string {
-	return []string{
-		"badger managed transaction compatibility: OpenManaged, NewTransactionAt, CommitAt, NewManagedWriteBatch, SetEntryAt",
-		"TreeDB native conditional transactions currently return unsupported under the durable command-WAL profile",
-		"badger entry metadata and TTL compatibility: Entry.UserMeta, Item.UserMeta, Entry.ExpiresAt",
-		"badger all-version/key iterator compatibility: NewKeyIterator plus IteratorOptions.AllVersions/Prefix/PrefetchValues",
-		"badger stream import/export compatibility: NewStreamAt, Stream.Orchestrate, NewStreamWriter",
-		"badger subscription API used by worker.SubscribeForUpdates",
-		"badger encryption/key-registry APIs used by posting stores, backups, debug, and raftwal",
-		"badger protobuf compatibility: github.com/dgraph-io/badger/v4/pb KV/KVList/Match",
-		"badger cache metrics and cache sizing APIs used by Dgraph monitoring",
-	}
-}
-
 // ResolveOptions converts Dgraph integration settings into TreeDB options.
 func ResolveOptions(cfg OpenOptions) (td.Options, error) {
 	dir := strings.TrimSpace(cfg.Dir)
@@ -96,10 +80,10 @@ func ResolveOptions(cfg OpenOptions) (td.Options, error) {
 		return td.Options{}, errEmptyDir
 	}
 	if cfg.RequireEncryption {
-		return td.Options{}, unsupported("encryption/key registry")
+		return td.Options{}, CheckRequiredFeatures(FeatureEncryptionKeyRegistry)
 	}
 	if cfg.RequireInMemory {
-		return td.Options{}, unsupported("in-memory posting store")
+		return td.Options{}, CheckRequiredFeatures(FeatureInMemoryPostingStore)
 	}
 
 	profile := cfg.Profile
@@ -144,10 +128,6 @@ func (h *Handle) Close() error {
 		return nil
 	}
 	return h.DB.Close()
-}
-
-func unsupported(feature string) error {
-	return fmt.Errorf("%w: %s", ErrUnsupportedFeature, feature)
 }
 
 func isDgraphRuntimeProfile(profile td.Profile) bool {
