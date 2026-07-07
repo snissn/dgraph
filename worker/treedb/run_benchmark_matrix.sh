@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
       artifact_dir="$2"
       shift 2
       ;;
-    --help|-h)
+    --help | -h)
       usage
       exit 0
       ;;
@@ -60,18 +60,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 repo_root=$(git rev-parse --show-toplevel)
-cd "$repo_root"
+cd "${repo_root}"
 
-if [[ -z "$artifact_dir" ]]; then
+if [[ -z "${artifact_dir}" ]]; then
   artifact_dir="/tmp/dgraph-treedb-bench/$(date -u +%Y%m%dT%H%M%SZ)"
 fi
-mkdir -p "$artifact_dir"
+mkdir -p "${artifact_dir}"
 
 bench="${BENCH:-^BenchmarkDgraphTreeDBMatrix$}"
 benchtime="${BENCHTIME:-500ms}"
 count="${COUNT:-1}"
 timeout="${TIMEOUT:-10m}"
-if [[ "$smoke" -eq 1 ]]; then
+if [[ "${smoke}" -eq 1 ]]; then
   benchtime="${BENCHTIME:-1x}"
   count="${COUNT:-1}"
 fi
@@ -79,58 +79,69 @@ fi
 baseline_ref="${BASELINE_REF:-origin/main}"
 candidate_ref="${CANDIDATE_REF:-HEAD}"
 baseline_sha="unresolved"
-if baseline_sha_resolved=$(git rev-parse --verify "$baseline_ref" 2>/dev/null); then
-  baseline_sha="$baseline_sha_resolved"
+if baseline_sha_resolved=$(git rev-parse --verify "${baseline_ref}" 2>/dev/null); then
+  baseline_sha="${baseline_sha_resolved}"
 fi
-candidate_sha=$(git rev-parse --verify "$candidate_ref")
-raw_file="$artifact_dir/raw.txt"
-context_file="$artifact_dir/context.txt"
-summary_file="$artifact_dir/summary.md"
+candidate_sha=$(git rev-parse --verify "${candidate_ref}")
+raw_file="${artifact_dir}/raw.txt"
+context_file="${artifact_dir}/context.txt"
+summary_file="${artifact_dir}/summary.md"
 
-cmd=(go test ./worker/treedb -run '^$' -bench "$bench" -benchtime "$benchtime" -count "$count" -timeout "$timeout" -benchmem -v)
+cmd=(go test ./worker/treedb -run '^$' -bench "${bench}" -benchtime "${benchtime}" -count "${count}" -timeout "${timeout}" -benchmem -v)
+
+utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+repo_url=$(git config --get remote.origin.url || true)
+branch_name=$(git branch --show-current || true)
+gocache=$(GOWORK=off go env GOCACHE)
+gomodcache=$(GOWORK=off go env GOMODCACHE)
+go_version=$(go version)
+goos=$(go env GOOS)
+goarch=$(go env GOARCH)
+cpu=$(awk -F': ' '/model name/ { print $2; exit }' /proc/cpuinfo 2>/dev/null || true)
+kernel=$(uname -srvmo)
 
 {
   echo "Dgraph TreeDB benchmark matrix context"
   echo "======================================"
-  echo "utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "repo: $(git config --get remote.origin.url || true)"
-  echo "branch: $(git branch --show-current || true)"
-  echo "baseline_ref: $baseline_ref"
-  echo "baseline_sha: $baseline_sha"
-  echo "candidate_ref: $candidate_ref"
-  echo "candidate_sha: $candidate_sha"
+  echo "utc: ${utc}"
+  echo "repo: ${repo_url}"
+  echo "branch: ${branch_name}"
+  echo "baseline_ref: ${baseline_ref}"
+  echo "baseline_sha: ${baseline_sha}"
+  echo "candidate_ref: ${candidate_ref}"
+  echo "candidate_sha: ${candidate_sha}"
   echo "GOWORK: off"
   echo "TMPDIR: ${TMPDIR:-/tmp}"
-  echo "GOCACHE: $(GOWORK=off go env GOCACHE)"
-  echo "GOMODCACHE: $(GOWORK=off go env GOMODCACHE)"
-  echo "go_version: $(go version)"
-  echo "goos: $(go env GOOS)"
-  echo "goarch: $(go env GOARCH)"
-  echo "cpu: $(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ //')"
-  echo "kernel: $(uname -srvmo)"
+  echo "GOCACHE: ${gocache}"
+  echo "GOMODCACHE: ${gomodcache}"
+  echo "go_version: ${go_version}"
+  echo "goos: ${goos}"
+  echo "goarch: ${goarch}"
+  echo "cpu: ${cpu}"
+  echo "kernel: ${kernel}"
   echo "benchmark_package: ./worker/treedb"
-  echo "benchmark_regex: $bench"
-  echo "benchtime: $benchtime"
-  echo "count: $count"
-  echo "timeout: $timeout"
-  echo "fixture_shape: keys=$bench_key_count versions=$bench_version_count value_bytes=$bench_value_size batch_size=$bench_batch_size"
+  echo "benchmark_regex: ${bench}"
+  echo "benchtime: ${benchtime}"
+  echo "count: ${count}"
+  echo "timeout: ${timeout}"
+  echo "fixture_shape: keys=${bench_key_count} versions=${bench_version_count} value_bytes=${bench_value_size} batch_size=${bench_batch_size}"
   echo "timed_boundary: Go benchmark timers exclude fixture setup, database open, and benchmark artifact generation; each row times only the named Badger/TreeDB operation loop."
   echo "exact_command: GOWORK=off ${cmd[*]}"
-} >"$context_file"
+} >"${context_file}"
 
 set +e
-GOWORK=off "${cmd[@]}" 2>&1 | tee "$raw_file"
+GOWORK=off "${cmd[@]}" 2>&1 | tee "${raw_file}"
 status=${PIPESTATUS[0]}
 set -e
 
 {
   echo "# Dgraph Badger-vs-TreeDB Benchmark Matrix"
   echo
-  echo "- Artifact directory: \`$artifact_dir\`"
-  echo "- Context: \`$context_file\`"
-  echo "- Raw output: \`$raw_file\`"
-  echo "- Baseline: \`$baseline_ref\` / \`$baseline_sha\`"
-  echo "- Candidate: \`$candidate_ref\` / \`$candidate_sha\`"
+  echo "- Artifact directory: \`${artifact_dir}\`"
+  echo "- Context: \`${context_file}\`"
+  echo "- Raw output: \`${raw_file}\`"
+  echo "- Baseline: \`${baseline_ref}\` / \`${baseline_sha}\`"
+  echo "- Candidate: \`${candidate_ref}\` / \`${candidate_sha}\`"
   echo "- Exact command: \`GOWORK=off ${cmd[*]}\`"
   echo "- Measurement boundary: fixture setup, DB open, and artifact generation are outside Go benchmark timers."
   echo
@@ -165,7 +176,7 @@ set -e
       if (ns + 0 > 0) { ops = sprintf("%.2f", 1000000000 / (ns + 0)) }
       print "| `" esc(name) "` | " iterations " | " ns " | " ops " | " bytes " | " allocs " | " esc(other) " |"
     }
-  ' "$raw_file"
+  ' "${raw_file}"
   echo
   echo "## Explicit blocker / skip rows"
   echo
@@ -181,14 +192,14 @@ set -e
   echo
   echo "## Result"
   echo
-  if [[ "$status" -eq 0 ]]; then
+  if [[ "${status}" -eq 0 ]]; then
     echo "go test benchmark command exited successfully."
   else
-    echo "go test benchmark command failed with exit status $status."
+    echo "go test benchmark command failed with exit status ${status}."
   fi
-} >"$summary_file"
+} >"${summary_file}"
 
 printf 'artifact_dir=%s\ncontext=%s\nraw=%s\nsummary=%s\nstatus=%s\n' \
-  "$artifact_dir" "$context_file" "$raw_file" "$summary_file" "$status"
+  "${artifact_dir}" "${context_file}" "${raw_file}" "${summary_file}" "${status}"
 
-exit "$status"
+exit "${status}"
