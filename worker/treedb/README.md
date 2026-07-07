@@ -91,7 +91,8 @@ GOWORK=off go test ./worker/treedb -run '^$' \
 Artifacts are written under `/tmp/dgraph-treedb-bench/<UTC timestamp>` by default, or to
 `ARTIFACT_DIR` / `--artifact-dir` when provided:
 
-- `context.txt`: repository, baseline/candidate refs, `GOWORK=off`, Go/CPU/kernel, cache/TMPDIR, exact command, and fixture shape.
+- `context.txt`: repository, baseline/candidate refs, `GOWORK=off`, Go/CPU/kernel, cache/TMPDIR,
+  exact command, and fixture shape.
 - `raw.txt`: complete `go test` benchmark output, including explicit skipped blocker rows.
 - `summary.md`: parsed benchmark table plus the Dgraph-required TreeDB blocker/skip table.
 
