@@ -60,3 +60,43 @@ Focused validation:
 ```sh
 GOWORK=off go test ./worker/treedb -count=1
 ```
+
+## Benchmark matrix
+
+This package also owns the Dgraph Badger-vs-TreeDB evidence matrix for the TreeDB posting-store
+work. The matrix is intentionally limited to benchmark evidence and does not add a runtime backend
+selector or adapter implementation.
+
+Smoke run, suitable for PR validation:
+
+```sh
+worker/treedb/run_benchmark_matrix.sh --smoke
+```
+
+Fuller local run, suitable for before/after evidence on future hot-path PRs:
+
+```sh
+BENCHTIME=1s COUNT=5 worker/treedb/run_benchmark_matrix.sh \
+  --artifact-dir /tmp/dgraph-treedb-bench/full-$(git rev-parse --short HEAD)
+```
+
+The script runs:
+
+```sh
+GOWORK=off go test ./worker/treedb -run '^$' \
+  -bench '^BenchmarkDgraphTreeDBMatrix$' -benchtime "$BENCHTIME" \
+  -count "$COUNT" -timeout "${TIMEOUT:-10m}" -benchmem -v
+```
+
+Artifacts are written under `/tmp/dgraph-treedb-bench/<UTC timestamp>` by default, or to
+`ARTIFACT_DIR` / `--artifact-dir` when provided:
+
+- `context.txt`: repository, baseline/candidate refs, `GOWORK=off`, Go/CPU/kernel, cache/TMPDIR, exact command, and fixture shape.
+- `raw.txt`: complete `go test` benchmark output, including explicit skipped blocker rows.
+- `summary.md`: parsed benchmark table plus the Dgraph-required TreeDB blocker/skip table.
+
+Timed rows include Badger managed write/read/all-version baselines and TreeDB `Set`, `Get`,
+`GetVersioned`, batch write/sync write, snapshot read/iterate, iterator, reverse iterator, and
+`Stats` primitives. Skipped rows document Dgraph-required Badger contracts TreeDB cannot yet run:
+managed timestamp transactions, entry metadata/TTL, all-version key iterators, stream export/import,
+subscriptions, and encryption/key registry support.
