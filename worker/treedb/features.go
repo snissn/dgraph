@@ -22,6 +22,7 @@ const (
 	FeatureBatchWrite                        FeatureID = "batch_write"
 	FeatureSnapshotRead                      FeatureID = "snapshot_read"
 	FeatureForwardIterator                   FeatureID = "forward_iterator"
+	FeaturePostingStoreAdapterContract       FeatureID = "posting_store_adapter_contract"
 	FeatureBadgerManagedTransactions         FeatureID = "badger_managed_transactions"
 	FeatureCommandWALConditionalTransactions FeatureID = "command_wal_conditional_transactions"
 	FeatureBadgerEntryMetadataTTL            FeatureID = "badger_entry_metadata_ttl"
@@ -113,6 +114,15 @@ var featureRegistry = []FeatureRecord{
 		Evidence: []string{
 			"TestOpenSmoke",
 			"dgraphTreeDBAPI compile assertion",
+		},
+	},
+	{
+		ID:     FeaturePostingStoreAdapterContract,
+		Status: StatusSupported,
+		Reason: "Dgraph has a narrow posting.Store adapter boundary with a Badger implementation for managed reads, managed writes, metadata, expiry, and all-version iteration",
+		Evidence: []string{
+			"posting.TestBadgerStorePreservesManagedTimestampsMetadataAndIteration",
+			"posting.TestTxnWriterForStorePreservesBadgerWriteBehavior",
 		},
 	},
 	{
