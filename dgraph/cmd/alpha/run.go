@@ -127,6 +127,12 @@ they form a Raft group and provide synchronous replication.
 			"The number of goroutines to use in badger.Stream.").
 		String())
 
+	flag.String("posting-store", worker.PostingStoreDefaults,
+		z.NewSuperFlagHelp(worker.PostingStoreDefaults).
+			Head("Experimental Alpha posting-store backend selector.").
+			Flag("backend", "Posting-store backend. Supported values: badger (default), treedb (experimental and fail-closed until TreeDB compatibility gates pass).").
+			String())
+
 	// Cache flags.
 	flag.String("cache", worker.CacheDefaults, z.NewSuperFlagHelp(worker.CacheDefaults).
 		Head("Cache options").
@@ -679,6 +685,8 @@ func run() {
 		pstoreBlockCacheSize, pstoreIndexCacheSize)
 	bopts := badger.DefaultOptions("").FromSuperFlag(worker.BadgerDefaults + cacheOpts).
 		FromSuperFlag(Alpha.Conf.GetString("badger"))
+	postingStore := z.NewSuperFlag(Alpha.Conf.GetString("posting-store")).MergeAndCheckDefault(
+		worker.PostingStoreDefaults)
 	security := z.NewSuperFlag(Alpha.Conf.GetString("security")).MergeAndCheckDefault(
 		worker.SecurityDefaults)
 	conf := audit.GetAuditConf(Alpha.Conf.GetString("audit"))
@@ -689,11 +697,12 @@ func run() {
 	enableMcp := Alpha.Conf.GetBool("mcp")
 
 	opts := worker.Options{
-		PostingDir:      Alpha.Conf.GetString("postings"),
-		WALDir:          Alpha.Conf.GetString("wal"),
-		CacheMb:         totalCache,
-		CachePercentage: cachePercentage,
-		RemoveOnUpdate:  removeOnUpdate,
+		PostingDir:          Alpha.Conf.GetString("postings"),
+		WALDir:              Alpha.Conf.GetString("wal"),
+		PostingStoreBackend: postingStore.GetString("backend"),
+		CacheMb:             totalCache,
+		CachePercentage:     cachePercentage,
+		RemoveOnUpdate:      removeOnUpdate,
 
 		MutationsMode:      worker.AllowMutations,
 		AuthToken:          security.GetString("token"),

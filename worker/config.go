@@ -30,6 +30,9 @@ type Options struct {
 	PostingDir string
 	// WALDir is the path to the directory storing the write-ahead log.
 	WALDir string
+	// PostingStoreBackend selects the Alpha posting-store backend. Badger is the default;
+	// TreeDB is experimental and fail-closed until readiness gates pass.
+	PostingStoreBackend string
 	// MutationsMode is the mode used to handle mutation requests.
 	MutationsMode int
 	// AuthToken is the token to be passed for Alter HTTP requests.
@@ -87,6 +90,10 @@ func SetConfiguration(newConfig *Options) {
 var AvailableMemory int64
 
 func (opt *Options) validate() {
+	backend, err := NormalizePostingStoreBackend(opt.PostingStoreBackend)
+	x.Checkf(err, "Invalid posting-store backend")
+	opt.PostingStoreBackend = backend
+
 	pd, err := filepath.Abs(opt.PostingDir)
 	x.Check(err)
 	wd, err := filepath.Abs(opt.WALDir)
@@ -113,11 +120,11 @@ func (opt *Options) validate() {
 
 // String implements the Stringer interface to redact sensitive fields when logging.
 func (opt Options) String() string {
-	return fmt.Sprintf("{PostingDir:%s WALDir:%s MutationsMode:%d AuthToken:**** "+
-		"AclJwtAlg:%v AclSecretKey:**** AclSecretKeyBytes:**** AccessJwtTtl:%v "+
+	return fmt.Sprintf("{PostingDir:%s WALDir:%s PostingStoreBackend:%s MutationsMode:%d "+
+		"AuthToken:**** AclJwtAlg:%v AclSecretKey:**** AclSecretKeyBytes:**** AccessJwtTtl:%v "+
 		"RefreshJwtTtl:%v CachePercentage:%s CacheMb:%d RemoveOnUpdate:%v Audit:%v "+
 		"ChangeDataConf:%s TypeFilterUidLimit:%d}",
-		opt.PostingDir, opt.WALDir, opt.MutationsMode, opt.AclJwtAlg,
+		opt.PostingDir, opt.WALDir, opt.PostingStoreBackend, opt.MutationsMode, opt.AclJwtAlg,
 		opt.AccessJwtTtl, opt.RefreshJwtTtl, opt.CachePercentage, opt.CacheMb,
 		opt.RemoveOnUpdate, opt.Audit, opt.ChangeDataConf, opt.TypeFilterUidLimit)
 }
