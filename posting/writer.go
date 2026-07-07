@@ -6,7 +6,6 @@
 package posting
 
 import (
-	"math"
 	"sync"
 
 	"github.com/golang/glog"
@@ -15,18 +14,25 @@ import (
 	"github.com/dgraph-io/badger/v4/pb"
 )
 
-// TxnWriter is in charge or writing transactions to badger.
+// TxnWriter is in charge of writing transactions to the posting store.
 type TxnWriter struct {
-	db  *badger.DB
-	wg  sync.WaitGroup
-	che chan error
+	store Store
+	wg    sync.WaitGroup
+	che   chan error
 }
 
-// NewTxnWriter returns a new TxnWriter instance.
+// NewTxnWriter returns a new TxnWriter instance backed by Badger.
 func NewTxnWriter(db *badger.DB) *TxnWriter {
+	return NewTxnWriterForStore(NewBadgerStore(db))
+}
+
+// NewTxnWriterForStore returns a TxnWriter for an explicit posting-store
+// adapter. It exists for TreeDB adapter experiments; production callers should
+// continue to use NewTxnWriter so Badger remains the default path.
+func NewTxnWriterForStore(store Store) *TxnWriter {
 	return &TxnWriter{
-		db:  db,
-		che: make(chan error, 1),
+		store: store,
+		che:   make(chan error, 1),
 	}
 }
 
@@ -57,11 +63,11 @@ func (w *TxnWriter) Write(kvs *pb.KVList) error {
 	return nil
 }
 
-func (w *TxnWriter) update(commitTs uint64, f func(txn *badger.Txn) error) error {
+func (w *TxnWriter) update(commitTs uint64, f func(txn WriteTxn) error) error {
 	if commitTs == 0 {
 		return nil
 	}
-	txn := w.db.NewTransactionAt(math.MaxUint64, true)
+	txn := w.store.NewWriteTxn()
 	defer txn.Discard()
 
 	err := f(txn)
@@ -76,28 +82,13 @@ func (w *TxnWriter) update(commitTs uint64, f func(txn *badger.Txn) error) error
 
 // SetAt writes a key-value pair at the given timestamp.
 func (w *TxnWriter) SetAt(key, val []byte, meta byte, ts uint64) error {
-	return w.update(ts, func(txn *badger.Txn) error {
-		switch meta {
-		case BitCompletePosting, BitEmptyPosting:
-			err := txn.SetEntry((&badger.Entry{
-				Key:      key,
-				Value:    val,
-				UserMeta: meta,
-			}).WithDiscard())
-			if err != nil {
-				return err
-			}
-		default:
-			err := txn.SetEntry(&badger.Entry{
-				Key:      key,
-				Value:    val,
-				UserMeta: meta,
-			})
-			if err != nil {
-				return err
-			}
-		}
-		return nil
+	return w.update(ts, func(txn WriteTxn) error {
+		return txn.SetEntry(Entry{
+			Key:                    key,
+			Value:                  val,
+			UserMeta:               meta,
+			DiscardEarlierVersions: meta == BitCompletePosting || meta == BitEmptyPosting,
+		})
 	})
 }
 

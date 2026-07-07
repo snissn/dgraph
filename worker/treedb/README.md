@@ -55,6 +55,24 @@ current call sites, not proof that TreeDB lacks every lower-level primitive in t
 - `in_memory_posting_store` (`unsupported`): Dgraph's posting store is persistent; in-memory TreeDB
   mode fails closed.
 
+## Posting-store adapter contract
+
+Issue #5 adds the first Dgraph-side adapter seam in `posting.Store`. The contract is deliberately
+narrow and maps to concrete posting-store call sites instead of a generic key/value wishlist:
+
+- managed read transactions at a caller-provided read timestamp;
+- managed write transactions committed at a caller-provided commit timestamp;
+- posting entry `UserMeta`, `ExpiresAt`, and discard-earlier-version markers;
+- prefix iteration with forward/reverse, value prefetch, and `AllVersions` controls; and
+- item views exposing keys, values, versions, metadata, expiry, deletion/expiry state, and value
+  size.
+
+`posting.NewBadgerStore` is the only production implementation, and `posting.NewTxnWriter` still
+selects Badger by default. `posting.NewTxnWriterForStore` exists only as an explicit experiment
+seam. TreeDB runtime selection remains blocked until the non-supported feature rows above are
+resolved or fail closed with tests; the adapter must not silently drop Badger metadata, timestamps,
+versions, stream/import/export semantics, subscriptions, or encryption guarantees.
+
 Focused validation:
 
 ```sh

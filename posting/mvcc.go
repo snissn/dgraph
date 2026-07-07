@@ -290,7 +290,7 @@ func (txn *Txn) CommitToDisk(writer *TxnWriter, commitTs uint64) error {
 		// writer.update can return early from the loop in case we encounter badger.ErrTxnTooBig. On
 		// that error, writer.update would still commit the transaction and return any error. If
 		// nil, we continue to process the remaining keys.
-		err := writer.update(commitTs, func(btxn *badger.Txn) error {
+		err := writer.update(commitTs, func(wtxn WriteTxn) error {
 			for ; idx < len(keys); idx++ {
 				key := keys[idx]
 				data := cache.deltas[key]
@@ -303,7 +303,7 @@ func (txn *Txn) CommitToDisk(writer *TxnWriter, commitTs uint64) error {
 					// not output anything here.
 					continue
 				}
-				err := btxn.SetEntry(&badger.Entry{
+				err := wtxn.SetEntry(Entry{
 					Key:      []byte(key),
 					Value:    data,
 					UserMeta: BitDeltaPosting,
