@@ -21,6 +21,10 @@ func TestResolveOptionsUsesDgraphDefaults(t *testing.T) {
 	require.Equal(t, dir, opts.Dir)
 	require.True(t, opts.CommandWAL)
 	require.Equal(t, DefaultKeepRecent, opts.KeepRecent)
+
+	custom, err := ResolveOptions(OpenOptions{Dir: dir, KeepRecent: 32})
+	require.NoError(t, err)
+	require.Equal(t, uint64(32), custom.KeepRecent)
 }
 
 func TestResolveOptionsRejectsUnsupportedFeatures(t *testing.T) {
@@ -37,13 +41,16 @@ func TestResolveOptionsRejectsUnsupportedFeatures(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnsupportedFeature)
 }
 
-func TestResolveOptionsRejectsNonPublicProfile(t *testing.T) {
-	_, err := ResolveOptions(OpenOptions{
-		Dir:     t.TempDir(),
-		Profile: td.Profile("durable"),
-	})
-	require.Error(t, err)
-	require.False(t, errors.Is(err, ErrUnsupportedFeature))
+func TestResolveOptionsRejectsNonRuntimeProfiles(t *testing.T) {
+	for _, profile := range []td.Profile{td.Profile("durable"), td.ProfileBench} {
+		_, err := ResolveOptions(OpenOptions{
+			Dir:     t.TempDir(),
+			Profile: profile,
+		})
+		require.Error(t, err)
+		require.False(t, errors.Is(err, ErrUnsupportedFeature))
+		require.Contains(t, err.Error(), "command_wal_durable or command_wal_relaxed")
+	}
 }
 
 func TestOpenSmoke(t *testing.T) {

@@ -16,7 +16,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"strings"
 
@@ -29,10 +28,10 @@ const (
 	// no-WAL modes.
 	DefaultProfile = td.ProfileCommandWALDurable
 
-	// DefaultKeepRecent mirrors Dgraph's current Badger posting-store retention
-	// setting, which keeps a very large version window for externally managed
-	// read timestamps.
-	DefaultKeepRecent = uint64(math.MaxInt32)
+	// DefaultKeepRecent leaves TreeDB's profile default in place. Dgraph's
+	// Badger managed timestamp reads are not implemented for TreeDB yet, so this
+	// scaffold must not retain an unbounded TreeDB generation window by default.
+	DefaultKeepRecent uint64 = 0
 )
 
 var (
@@ -48,12 +47,13 @@ var (
 type OpenOptions struct {
 	Dir string
 
-	// Profile defaults to DefaultProfile. Non-public/deprecated TreeDB profiles
-	// are rejected because this package is a runtime integration surface, not a
-	// benchmark harness.
+	// Profile defaults to DefaultProfile. Non-command-WAL and benchmark-only
+	// TreeDB profiles are rejected because this package is a runtime integration
+	// surface, not a benchmark harness.
 	Profile td.Profile
 
-	// KeepRecent defaults to DefaultKeepRecent.
+	// KeepRecent optionally overrides TreeDB's profile default. Leave it zero
+	// until TreeDB supports Dgraph-managed timestamp reads.
 	KeepRecent uint64
 
 	// MemtableMode optionally overrides the TreeDB profile default.
@@ -107,12 +107,11 @@ func ResolveOptions(cfg OpenOptions) (td.Options, error) {
 		profile = DefaultProfile
 	}
 	normalized, ok := td.NormalizePublicProfile(profile)
-	if !ok {
-		return td.Options{}, fmt.Errorf("unsupported TreeDB profile %q; allowed: %s", profile, td.ProfileFlagHelp)
+	if !ok || !isDgraphRuntimeProfile(normalized) {
+		return td.Options{}, fmt.Errorf("unsupported TreeDB profile %q; allowed: command_wal_durable or command_wal_relaxed", profile)
 	}
 
 	opts := td.OptionsFor(normalized, dir)
-	opts.KeepRecent = DefaultKeepRecent
 	if cfg.KeepRecent != 0 {
 		opts.KeepRecent = cfg.KeepRecent
 	}
@@ -149,6 +148,15 @@ func (h *Handle) Close() error {
 
 func unsupported(feature string) error {
 	return fmt.Errorf("%w: %s", ErrUnsupportedFeature, feature)
+}
+
+func isDgraphRuntimeProfile(profile td.Profile) bool {
+	switch profile {
+	case td.ProfileCommandWALDurable, td.ProfileCommandWALRelaxed:
+		return true
+	default:
+		return false
+	}
 }
 
 type dgraphTreeDBAPI interface {

@@ -13,8 +13,8 @@ Current TreeDB head used by this branch:
 What is wired here:
 
 - durable TreeDB command-WAL profile selection
-- Dgraph-shaped version retention default matching the current Badger
-  `WithNumVersionsToKeep(math.MaxInt32)` posting-store setting
+- Dgraph-shaped durable command-WAL profile selection that rejects benchmark-only no-WAL profiles
+- TreeDB generation retention left at the profile default unless a caller explicitly overrides it
 - compile assertions for TreeDB point reads/writes, versioned values, native conditional transaction
   APIs, snapshots, forward/reverse iteration, batches, value-log GC, full storage compaction, stats,
   and close
