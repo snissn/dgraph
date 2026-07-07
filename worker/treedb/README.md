@@ -95,6 +95,21 @@ operator output, but they are not sufficient by themselves to enable or block an
 selector. Unsupported or blocker rows must fail closed with the operator-facing messages from the
 matrix rather than falling back silently or returning partial TreeDB behavior.
 
+## Experimental Alpha selector
+
+Issue #7 adds the explicit Alpha selector flag:
+
+```sh
+dgraph alpha --posting-store backend=badger   # default
+dgraph alpha --posting-store backend=treedb   # experimental, currently fail-closed
+```
+
+The selector is parsed into `worker.Config.PostingStoreBackend`. Badger remains the default and
+continues to open through the existing managed Badger path. TreeDB startup calls
+`CheckPostingStoreBackendReady()` and refuses to open while required compatibility rows remain
+`disabled_need_blocker` or `unsupported`; there is no silent fallback from a requested TreeDB
+backend to Badger.
+
 Focused validation:
 
 ```sh
