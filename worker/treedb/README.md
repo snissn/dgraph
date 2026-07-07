@@ -73,6 +73,28 @@ seam. TreeDB runtime selection remains blocked until the non-supported feature r
 resolved or fail closed with tests; the adapter must not silently drop Badger metadata, timestamps,
 versions, stream/import/export semantics, subscriptions, or encryption guarantees.
 
+## Compatibility blocker matrix
+
+Issue #6 records final Dgraph-side decisions for the Badger feature families that currently block a
+TreeDB posting-store backend in `PostingCompatibilityMatrix()`. Runtime selector code should call
+`CheckPostingBackendReady()` and must refuse TreeDB while required rows remain non-supported.
+
+Current selector-blocking rows:
+
+- managed timestamp transactions: `disabled_need_blocker`
+- command-WAL-compatible conditional transactions: `disabled_need_blocker`
+- entry metadata, TTL, and discard markers: `disabled_need_blocker`
+- all-version/key iteration: `disabled_need_blocker`
+- stream backup/export/import: `disabled_need_blocker`
+- subscriptions: `disabled_need_blocker`
+- Badger protobuf compatibility: `disabled_need_blocker`
+- encryption/key registry: `unsupported`
+
+Metrics/cache APIs are classified as `disabled_want`: they must be surfaced as unavailable in
+operator output, but they are not sufficient by themselves to enable or block an experimental
+selector. Unsupported or blocker rows must fail closed with the operator-facing messages from the
+matrix rather than falling back silently or returning partial TreeDB behavior.
+
 Focused validation:
 
 ```sh
