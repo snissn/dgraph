@@ -308,18 +308,9 @@ func PostingCompatibilityMatrix() []CompatibilityRecord {
 // PostingBackendBlockers returns compatibility rows that still block enabling
 // TreeDB as a posting-store backend.
 func PostingBackendBlockers() []CompatibilityRecord {
-	blockers := make([]CompatibilityRecord, 0)
-	required := make(map[FeatureID]struct{})
-	for _, feature := range PostingBackendRequiredFeatures() {
-		required[feature] = struct{}{}
-	}
-	for _, record := range postingCompatibilityMatrix {
-		if _, ok := required[record.Feature]; !ok {
-			continue
-		}
-		if record.Status != StatusSupported {
-			blockers = append(blockers, cloneCompatibilityRecord(record))
-		}
+	blockers, err := PostingBackendBlockersForTier(TierBenchmarkMinimal)
+	if err != nil {
+		panic(err)
 	}
 	return blockers
 }

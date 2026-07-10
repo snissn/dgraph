@@ -48,8 +48,8 @@ absence therefore cannot silently become a benchmark blocker or a supported capa
 Current non-supported TreeDB readiness entries. These are Badger-compatibility gaps in Dgraph's
 current call sites, not proof that TreeDB lacks every lower-level primitive in the area:
 
-- `badger_managed_transactions` (`disabled_need_blocker`): `OpenManaged`, `NewTransactionAt`,
-  `CommitAt`, `NewManagedWriteBatch`, `SetEntryAt`.
+- `badger_managed_transactions` (`disabled_need_blocker`, benchmark-minimal): `OpenManaged`,
+  `NewTransactionAt`, `CommitAt`, `NewManagedWriteBatch`, `SetEntryAt`.
 - `treedb_store_implementation` (`disabled_need_blocker`, benchmark-minimal): the backend-neutral
   seam exists, but issue #21 must provide the TreeDB implementation.
 - `command_wal_conditional_transactions` (`unsupported`, no tier): native conditional transactions
@@ -58,7 +58,7 @@ current call sites, not proof that TreeDB lacks every lower-level primitive in t
   `Item.UserMeta`, and discard-earlier-version markers.
 - `badger_entry_ttl` (`unsupported`, operational): nonzero `Entry.ExpiresAt` values must be rejected
   until an expiry contract exists. TTL does not block the benchmark-minimal tier.
-- `badger_all_version_iterators` (`disabled_need_blocker`): `NewKeyIterator`,
+- `badger_all_version_iterators` (`disabled_need_blocker`, benchmark-minimal): `NewKeyIterator`,
   `IteratorOptions.AllVersions`, `Prefix`, and prefetch settings.
 - `lifecycle_gc_stats` (`disabled_need_blocker`, benchmark-minimal): TreeDB close, GC, compaction,
   and stats primitives exist, but Alpha lifecycle wiring belongs to the restricted runtime work.
