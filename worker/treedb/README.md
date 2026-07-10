@@ -144,9 +144,9 @@ Issue #8 finalizes the current operator-facing gate report in `OperatorGateRepor
 | Gate                        | Current state   | Operator decision                                                                                                           |
 | --------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Badger default              | `pass`          | Badger remains the default Alpha posting-store backend.                                                                     |
-| Benchmark-minimal tier      | `fail_closed`   | Managed timestamps, metadata/discard markers, and all-version iteration block the restricted Alpha benchmark.              |
+| Benchmark-minimal tier      | `fail_closed`   | Managed timestamps, metadata/discard markers, and all-version iteration block the restricted Alpha benchmark.               |
 | Operational tier            | `fail_closed`   | Operational parity is later work and does not block benchmark-minimal startup.                                              |
-| Production tier             | `unsupported`   | Production readiness is a future decision; encryption/key-registry support is not implemented.                             |
+| Production tier             | `unsupported`   | Production readiness is a future decision; encryption/key-registry support is not implemented.                              |
 | TreeDB primitive durability | `evidence_only` | TreeDB can open, write, close, and reopen in the scaffold, but this is not a Dgraph posting-store backend.                  |
 | TreeDB selector             | `fail_closed`   | An explicit TreeDB selector is accepted but startup refuses to open while blockers remain.                                  |
 | Posting/schema workflows    | `fail_closed`   | Dgraph posting and schema workflows remain Badger-only until metadata and all-version semantics are implemented and tested. |
