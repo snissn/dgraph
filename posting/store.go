@@ -6,10 +6,23 @@
 package posting
 
 import (
+	"errors"
+	"fmt"
 	"math"
 
 	"github.com/dgraph-io/badger/v4"
 )
+
+// ErrBadgerOperationalPath identifies a deliberately excluded Badger-only
+// stream, destructive-maintenance, or namespace operation.
+var ErrBadgerOperationalPath = errors.New("operation requires the Badger operational backend")
+
+func requireBadgerOperationalStore(operation string) (*badger.DB, error) {
+	if pstore == nil {
+		return nil, fmt.Errorf("%w: %s", ErrBadgerOperationalPath, operation)
+	}
+	return pstore, nil
+}
 
 // Store is the narrow posting-store contract needed before experimenting with
 // non-Badger posting stores. It intentionally models the Dgraph call sites that
@@ -22,18 +35,21 @@ import (
 type Store interface {
 	NewReadTxn(readTs uint64) ReadTxn
 	NewWriteTxn() WriteTxn
+	IsClosed() bool
 }
 
 // ReadTxn is the read side of the posting-store contract.
 type ReadTxn interface {
 	Get(key []byte) (Item, error)
 	NewIterator(opts IteratorOptions) Iterator
+	NewKeyIterator(key []byte, opts IteratorOptions) Iterator
 	Discard()
 }
 
 // WriteTxn is the managed-write side of the posting-store contract.
 type WriteTxn interface {
 	SetEntry(entry Entry) error
+	Delete(key []byte) error
 	CommitAt(commitTs uint64, cb func(error)) error
 	Discard()
 }
@@ -70,12 +86,15 @@ type Iterator interface {
 
 // Item is the value/metadata view Dgraph expects from posting-store reads.
 type Item interface {
+	Key() []byte
 	KeyCopy(dst []byte) []byte
+	Value(func([]byte) error) error
 	ValueCopy(dst []byte) ([]byte, error)
 	UserMeta() byte
 	Version() uint64
 	ExpiresAt() uint64
 	IsDeletedOrExpired() bool
+	DiscardEarlierVersions() bool
 	ValueSize() int64
 }
 
@@ -100,6 +119,11 @@ func (s BadgerStore) NewWriteTxn() WriteTxn {
 	return badgerWriteTxn{txn: s.db.NewTransactionAt(math.MaxUint64, true)}
 }
 
+// IsClosed reports whether the underlying Badger database has been closed.
+func (s BadgerStore) IsClosed() bool {
+	return s.db.IsClosed()
+}
+
 type badgerReadTxn struct {
 	txn *badger.Txn
 }
@@ -114,6 +138,10 @@ func (t badgerReadTxn) Get(key []byte) (Item, error) {
 
 func (t badgerReadTxn) NewIterator(opts IteratorOptions) Iterator {
 	return badgerIterator{itr: t.txn.NewIterator(toBadgerIteratorOptions(opts))}
+}
+
+func (t badgerReadTxn) NewKeyIterator(key []byte, opts IteratorOptions) Iterator {
+	return badgerIterator{itr: t.txn.NewKeyIterator(key, toBadgerIteratorOptions(opts))}
 }
 
 func (t badgerReadTxn) Discard() {
@@ -135,6 +163,10 @@ func (t badgerWriteTxn) SetEntry(entry Entry) error {
 		badgerEntry = badgerEntry.WithDiscard()
 	}
 	return t.txn.SetEntry(badgerEntry)
+}
+
+func (t badgerWriteTxn) Delete(key []byte) error {
+	return t.txn.Delete(key)
 }
 
 func (t badgerWriteTxn) CommitAt(commitTs uint64, cb func(error)) error {
@@ -181,8 +213,16 @@ type badgerItem struct {
 	item *badger.Item
 }
 
+func (i badgerItem) Key() []byte {
+	return i.item.Key()
+}
+
 func (i badgerItem) KeyCopy(dst []byte) []byte {
 	return i.item.KeyCopy(dst)
+}
+
+func (i badgerItem) Value(fn func([]byte) error) error {
+	return i.item.Value(fn)
 }
 
 func (i badgerItem) ValueCopy(dst []byte) ([]byte, error) {
@@ -205,6 +245,10 @@ func (i badgerItem) IsDeletedOrExpired() bool {
 	return i.item.IsDeletedOrExpired()
 }
 
+func (i badgerItem) DiscardEarlierVersions() bool {
+	return i.item.DiscardEarlierVersions()
+}
+
 func (i badgerItem) ValueSize() int64 {
 	return i.item.ValueSize()
 }
@@ -217,3 +261,11 @@ func toBadgerIteratorOptions(opts IteratorOptions) badger.IteratorOptions {
 	badgerOpts.PrefetchValues = opts.PrefetchValues
 	return badgerOpts
 }
+
+var (
+	_ Store    = BadgerStore{}
+	_ ReadTxn  = badgerReadTxn{}
+	_ WriteTxn = badgerWriteTxn{}
+	_ Iterator = badgerIterator{}
+	_ Item     = badgerItem{}
+)

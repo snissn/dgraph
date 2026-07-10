@@ -28,8 +28,9 @@ import (
 )
 
 var (
-	pstate *state
-	pstore *badger.DB
+	pstate      *state
+	pstore      *badger.DB
+	schemaStore Store
 )
 
 // We maintain two schemas for a predicate if a background task is building indexes
@@ -94,7 +95,7 @@ func (s *state) Delete(attr string, ts uint64) error {
 	defer s.Unlock()
 
 	glog.Infof("Deleting schema for predicate: [%s]", attr)
-	txn := pstore.NewTransactionAt(ts, true)
+	txn := schemaStore.NewWriteTxn()
 	defer txn.Discard()
 	if err := txn.Delete(x.SchemaKey(attr)); err != nil {
 		return err
@@ -119,7 +120,7 @@ func (s *state) DeleteType(typeName string, ts uint64) error {
 	defer s.Unlock()
 
 	glog.Infof("Deleting type definition for type: [%s]", typeName)
-	txn := pstore.NewTransactionAt(ts, true)
+	txn := schemaStore.NewWriteTxn()
 	defer txn.Discard()
 	if err := txn.Delete(x.TypeKey(typeName)); err != nil {
 		return err
@@ -524,6 +525,15 @@ func (s *state) IndexingInProgress() bool {
 // Init resets the schema state, setting the underlying DB to the given pointer.
 func Init(ps *badger.DB) {
 	pstore = ps
+	schemaStore = newBadgerStore(ps)
+	reset()
+}
+
+// InitForStore initializes live schema point reads and mutations through an
+// explicit store. Badger stream bootstrap is unavailable in this mode.
+func InitForStore(store Store) {
+	pstore = nil
+	schemaStore = store
 	reset()
 }
 
@@ -534,7 +544,7 @@ func Load(predicate string) error {
 	}
 	State().DeleteMutSchema(predicate)
 	key := x.SchemaKey(predicate)
-	txn := pstore.NewTransactionAt(math.MaxUint64, false)
+	txn := schemaStore.NewReadTxn(math.MaxUint64)
 	defer txn.Discard()
 	item, err := txn.Get(key)
 	if err == badger.ErrKeyNotFound || err == badger.ErrBannedKey {
@@ -576,6 +586,9 @@ const (
 
 // loadFromDb iterates through the DB and loads all the stored schema updates.
 func loadFromDB(ctx context.Context, loadType int) error {
+	if pstore == nil {
+		return errors.New("schema stream bootstrap requires the Badger operational backend")
+	}
 	stream := pstore.NewStreamAt(math.MaxUint64)
 
 	switch loadType {

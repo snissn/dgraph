@@ -2241,7 +2241,7 @@ func (l *List) readListPart(startUid uint64) (*pb.PostingList, error) {
 			"cannot generate key for list with base key %s and start UID %d",
 			hex.EncodeToString(l.key), startUid)
 	}
-	txn := pstore.NewTransactionAt(l.minTs, false)
+	txn := postingStore.NewReadTxn(l.minTs)
 	defer txn.Discard()
 	item, err := txn.Get(key)
 	if err != nil {
@@ -2249,7 +2249,7 @@ func (l *List) readListPart(startUid uint64) (*pb.PostingList, error) {
 			hex.EncodeToString(key))
 	}
 	part := &pb.PostingList{}
-	if err := unmarshalOrCopy(part, item); err != nil {
+	if err := unmarshalStoreItem(part, item); err != nil {
 		return nil, errors.Wrapf(err, "cannot unmarshal list part with key %s",
 			hex.EncodeToString(key))
 	}

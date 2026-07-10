@@ -422,14 +422,15 @@ type IterateDiskArgs struct {
 }
 
 func (ml *MemoryLayer) IterateDisk(ctx context.Context, f IterateDiskArgs) error {
-	txn := pstore.NewTransactionAt(f.ReadTs, false)
+	txn := postingStore.NewReadTxn(f.ReadTs)
 	defer txn.Discard()
 
-	itOpt := badger.DefaultIteratorOptions
-	itOpt.PrefetchValues = f.Prefetch
-	itOpt.AllVersions = f.AllVersions
-	itOpt.Reverse = f.Reverse
-	itOpt.Prefix = f.Prefix
+	itOpt := IteratorOptions{
+		Prefix:         f.Prefix,
+		Reverse:        f.Reverse,
+		AllVersions:    f.AllVersions,
+		PrefetchValues: f.Prefetch,
+	}
 	it := txn.NewIterator(itOpt)
 	defer it.Close()
 
@@ -482,7 +483,7 @@ func (ml *MemoryLayer) IterateDisk(ctx context.Context, f IterateDiskArgs) error
 			}
 		}
 
-		l, err := ReadPostingList(item.KeyCopy(nil), it)
+		l, err := readPostingList(item.KeyCopy(nil), it)
 		if err != nil {
 			return err
 		}
@@ -620,7 +621,7 @@ func (txn *Txn) UpdateCachedKeys(commitTs uint64) {
 	}
 }
 
-func unmarshalOrCopy(plist *pb.PostingList, item *badger.Item) error {
+func unmarshalStoreItem(plist *pb.PostingList, item Item) error {
 	if plist == nil {
 		return errors.Errorf("cannot unmarshal value to a nil posting list of key %s",
 			hex.Dump(item.Key()))
@@ -635,10 +636,10 @@ func unmarshalOrCopy(plist *pb.PostingList, item *badger.Item) error {
 	})
 }
 
-// ReadPostingList constructs the posting list from the disk using the passed iterator.
+// readPostingList constructs the posting list from the disk using the passed iterator.
 // Use forward iterator with allversions enabled in iter options.
 // key would now be owned by the posting list. So, ensure that it isn't reused elsewhere.
-func ReadPostingList(key []byte, it *badger.Iterator) (*List, error) {
+func readPostingList(key []byte, it Iterator) (*List, error) {
 	// Previously, ReadPostingList was not checking that a multi-part list could only
 	// be read via the main key. This lead to issues during rollup because multi-part
 	// lists ended up being rolled-up multiple times. This issue was caught by the
@@ -704,7 +705,7 @@ func ReadPostingList(key []byte, it *badger.Iterator) (*List, error) {
 		case BitEmptyPosting:
 			return l, nil
 		case BitCompletePosting:
-			if err := unmarshalOrCopy(l.plist, item); err != nil {
+			if err := unmarshalStoreItem(l.plist, item); err != nil {
 				return nil, err
 			}
 
@@ -742,6 +743,17 @@ func ReadPostingList(key []byte, it *badger.Iterator) (*List, error) {
 	return l, nil
 }
 
+func unmarshalOrCopy(plist *pb.PostingList, item *badger.Item) error {
+	return unmarshalStoreItem(plist, badgerItem{item: item})
+}
+
+// ReadPostingList preserves the Badger-facing operational API used by backup,
+// export, debug, and index-rebuild paths. Core posting reads use readPostingList
+// through the backend-neutral Iterator contract.
+func ReadPostingList(key []byte, it *badger.Iterator) (*List, error) {
+	return readPostingList(key, badgerIterator{itr: it})
+}
+
 func copyList(l *List) *List {
 	l.AssertRLock()
 	// No need to clone the immutable layer or the key since mutations will not modify it.
@@ -776,19 +788,20 @@ func (ml *MemoryLayer) readFromCache(key []byte, readTs uint64) *List {
 	return nil
 }
 
-func (ml *MemoryLayer) readFromDisk(key []byte, pstore *badger.DB, readTs uint64, readUids bool) (*List, error) {
-	txn := pstore.NewTransactionAt(readTs, false)
+func (ml *MemoryLayer) readFromDisk(key []byte, store Store, readTs uint64, readUids bool) (*List, error) {
+	txn := store.NewReadTxn(readTs)
 	defer txn.Discard()
 
 	// When we do rollups, an older version would go to the top of the LSM tree, which can cause
 	// issues during txn.Get. Therefore, always iterate.
-	iterOpts := badger.DefaultIteratorOptions
-	iterOpts.AllVersions = true
-	iterOpts.PrefetchValues = false
+	iterOpts := IteratorOptions{
+		AllVersions:    true,
+		PrefetchValues: false,
+	}
 	itr := txn.NewKeyIterator(key, iterOpts)
 	defer itr.Close()
 	itr.Seek(key)
-	l, err := ReadPostingList(key, itr)
+	l, err := readPostingList(key, itr)
 	if err != nil {
 		return l, err
 	}
@@ -810,7 +823,7 @@ func (ml *MemoryLayer) saveInCache(key []byte, l *List) {
 	ml.cache.set(key, cacheItem)
 }
 
-func (ml *MemoryLayer) ReadData(key []byte, pstore *badger.DB, readTs uint64, readUids bool) (*List, error) {
+func (ml *MemoryLayer) ReadData(key []byte, store Store, readTs uint64, readUids bool) (*List, error) {
 	// We first try to read the data from cache, if it is present. If it's not present, then we would read the
 	// latest data from the disk. This would get stored in the cache. If this read has a minTs > readTs then
 	// we would have to read the correct timestamp from the disk.
@@ -819,7 +832,7 @@ func (ml *MemoryLayer) ReadData(key []byte, pstore *badger.DB, readTs uint64, re
 		l.mutationMap.setTs(readTs)
 		return l, nil
 	}
-	l, err := ml.readFromDisk(key, pstore, math.MaxUint64, readUids)
+	l, err := ml.readFromDisk(key, store, math.MaxUint64, readUids)
 	if err != nil {
 		return nil, err
 	}
@@ -829,7 +842,7 @@ func (ml *MemoryLayer) ReadData(key []byte, pstore *badger.DB, readTs uint64, re
 		return l, nil
 	}
 
-	l, err = ml.readFromDisk(key, pstore, readTs, readUids)
+	l, err = ml.readFromDisk(key, store, readTs, readUids)
 	if err != nil {
 		return nil, err
 	}
@@ -843,11 +856,15 @@ func GetNew(key []byte, pstore *badger.DB, readTs uint64, readUids bool) (*List,
 }
 
 func getNew(key []byte, pstore *badger.DB, readTs uint64, readUids bool) (*List, error) {
-	if pstore.IsClosed() {
+	return getNewForStore(key, NewBadgerStore(pstore), readTs, readUids)
+}
+
+func getNewForStore(key []byte, store Store, readTs uint64, readUids bool) (*List, error) {
+	if store.IsClosed() {
 		return nil, badger.ErrDBClosed
 	}
 
-	l, err := MemLayerInstance.ReadData(key, pstore, readTs, readUids)
+	l, err := MemLayerInstance.ReadData(key, store, readTs, readUids)
 	if err != nil {
 		return l, err
 	}
