@@ -62,17 +62,17 @@ current call sites, not proof that TreeDB lacks every lower-level primitive in t
   `IteratorOptions.AllVersions`, `Prefix`, and prefetch settings.
 - `lifecycle_gc_stats` (`disabled_need_blocker`, benchmark-minimal): TreeDB close, GC, compaction,
   and stats primitives exist, but Alpha lifecycle wiring belongs to the restricted runtime work.
-- `badger_stream_import_export` (`disabled_need_blocker`, operational): `NewStreamAt`, `Stream.Orchestrate`,
-  `NewStreamWriter`.
+- `badger_stream_import_export` (`disabled_need_blocker`, operational): `NewStreamAt`,
+  `Stream.Orchestrate`, `NewStreamWriter`.
 - `badger_subscriptions` (`disabled_need_blocker`, operational): `worker.SubscribeForUpdates`.
-- `encryption_key_registry` (`unsupported`, production): encryption/key-registry requests fail closed until
-  TreeDB exposes compatible semantics.
-- `badger_protobuf_compatibility` (`disabled_need_blocker`, operational): Badger `pb.KV`, `pb.KVList`, and
-  `pb.Match` shapes.
-- `metrics_cache_apis` (`disabled_want`, operational): Badger cache sizing and metrics used by monitoring are not
-  wired for TreeDB.
-- `in_memory_posting_store` (`unsupported`, no tier): Dgraph's posting store is persistent; in-memory TreeDB
-  mode fails closed.
+- `encryption_key_registry` (`unsupported`, production): encryption/key-registry requests fail
+  closed until TreeDB exposes compatible semantics.
+- `badger_protobuf_compatibility` (`disabled_need_blocker`, operational): Badger `pb.KV`,
+  `pb.KVList`, and `pb.Match` shapes.
+- `metrics_cache_apis` (`disabled_want`, operational): Badger cache sizing and metrics used by
+  monitoring are not wired for TreeDB.
+- `in_memory_posting_store` (`unsupported`, no tier): Dgraph's posting store is persistent;
+  in-memory TreeDB mode fails closed.
 
 ## Posting-store adapter contract
 
@@ -109,10 +109,10 @@ Current benchmark-minimal selector-blocking rows:
 - Alpha lifecycle/GC/stats wiring: `disabled_need_blocker`
 
 TTL, stream backup/export/import, subscriptions, Badger protobuf compatibility, and metrics/cache
-APIs are operational requirements. Encryption/key registry is a production requirement.
-Conditional transactions and in-memory mode are excluded from the integration tiers. Unsupported
-or blocker rows fail with the stable feature ID/status from `FeatureReadinessError`; they never
-fall back to Badger or return partial TreeDB behavior.
+APIs are operational requirements. Encryption/key registry is a production requirement. Conditional
+transactions and in-memory mode are excluded from the integration tiers. Unsupported or blocker rows
+fail with the stable feature ID/status from `FeatureReadinessError`; they never fall back to Badger
+or return partial TreeDB behavior.
 
 ## Experimental Alpha selector
 
@@ -133,9 +133,9 @@ issue #19.
 ## Performance boundary
 
 Capability classification runs only during backend selection or at an optional feature's entry
-point. It is not called from per-key, per-posting, iterator-step, or commit loops. This issue changes
-control-plane registry lookups and documentation only, so Badger data-path benchmark comparison is
-not applicable.
+point. It is not called from per-key, per-posting, iterator-step, or commit loops. This issue
+changes control-plane registry lookups and documentation only, so Badger data-path benchmark
+comparison is not applicable.
 
 ## Operator gates and default decision
 
