@@ -32,28 +32,47 @@ registry entries whose status is not `supported`. Status meanings:
   or redesigned.
 - `unsupported`: intentionally not supported for this integration lane.
 
+`RequiredFeaturesForTier(...)`, `CapabilityTierBlockers(...)`, and `CheckCapabilityTier(...)`
+mechanically separate three cumulative gates:
+
+| Tier                | Purpose                                                   | Required capability families                                                                                                                                               | Current decision                                                                                                              |
+| ------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `benchmark_minimal` | Restricted live Alpha A/B benchmark                       | durable open/lifecycle, point and snapshot primitives, a TreeDBStore implementation, externally assigned timestamps, `UserMeta`/discard markers, and all-version iteration | fail closed until the adapter, managed timestamps, metadata/discard markers, all-version iteration, and lifecycle wiring pass |
+| `operational`       | Operational parity after a successful Alpha decision gate | everything above plus nonzero TTL, backup/export/import, subscriptions, Badger protobuf translation, and monitoring/cache status                                           | not ticketed by the Alpha graph; unsupported invocations fail explicitly                                                      |
+| `production`        | A future production-readiness decision                    | everything above plus encryption/key-registry integration                                                                                                                  | unsupported; TreeDB is not a production backend                                                                               |
+
+TreeDB-native conditional transactions and in-memory posting storage are excluded from all three
+tiers. Dgraph owns posting conflict detection, and this integration lane is persistent. Their
+absence therefore cannot silently become a benchmark blocker or a supported capability.
+
 Current non-supported TreeDB readiness entries. These are Badger-compatibility gaps in Dgraph's
 current call sites, not proof that TreeDB lacks every lower-level primitive in the area:
 
-- `badger_managed_transactions` (`disabled_need_blocker`): `OpenManaged`, `NewTransactionAt`,
-  `CommitAt`, `NewManagedWriteBatch`, `SetEntryAt`.
-- `command_wal_conditional_transactions` (`disabled_need_blocker`): native conditional transactions
-  currently fail closed under the durable command-WAL profile.
-- `badger_entry_metadata_ttl` (`disabled_need_blocker`): `Entry.UserMeta`, `Item.UserMeta`,
-  `Entry.ExpiresAt`.
-- `badger_all_version_iterators` (`disabled_need_blocker`): `NewKeyIterator`,
+- `badger_managed_transactions` (`disabled_need_blocker`, benchmark-minimal): `OpenManaged`,
+  `NewTransactionAt`, `CommitAt`, `NewManagedWriteBatch`, `SetEntryAt`.
+- `treedb_store_implementation` (`disabled_need_blocker`, benchmark-minimal): the backend-neutral
+  seam exists, but issue #21 must provide the TreeDB implementation.
+- `command_wal_conditional_transactions` (`unsupported`, no tier): native conditional transactions
+  fail closed; the Dgraph adapter must use Dgraph-owned conflict detection.
+- `badger_entry_metadata` (`disabled_need_blocker`, benchmark-minimal): `Entry.UserMeta`,
+  `Item.UserMeta`, and discard-earlier-version markers.
+- `badger_entry_ttl` (`unsupported`, operational): nonzero `Entry.ExpiresAt` values must be rejected
+  until an expiry contract exists. TTL does not block the benchmark-minimal tier.
+- `badger_all_version_iterators` (`disabled_need_blocker`, benchmark-minimal): `NewKeyIterator`,
   `IteratorOptions.AllVersions`, `Prefix`, and prefetch settings.
-- `badger_stream_import_export` (`disabled_need_blocker`): `NewStreamAt`, `Stream.Orchestrate`,
-  `NewStreamWriter`.
-- `badger_subscriptions` (`disabled_need_blocker`): `worker.SubscribeForUpdates`.
-- `encryption_key_registry` (`unsupported`): encryption/key-registry requests fail closed until
-  TreeDB exposes compatible semantics.
-- `badger_protobuf_compatibility` (`disabled_need_blocker`): Badger `pb.KV`, `pb.KVList`, and
-  `pb.Match` shapes.
-- `metrics_cache_apis` (`disabled_want`): Badger cache sizing and metrics used by monitoring are not
-  wired for TreeDB.
-- `in_memory_posting_store` (`unsupported`): Dgraph's posting store is persistent; in-memory TreeDB
-  mode fails closed.
+- `lifecycle_gc_stats` (`disabled_need_blocker`, benchmark-minimal): TreeDB close, GC, compaction,
+  and stats primitives exist, but Alpha lifecycle wiring belongs to the restricted runtime work.
+- `badger_stream_import_export` (`disabled_need_blocker`, operational): `NewStreamAt`,
+  `Stream.Orchestrate`, `NewStreamWriter`.
+- `badger_subscriptions` (`disabled_need_blocker`, operational): `worker.SubscribeForUpdates`.
+- `encryption_key_registry` (`unsupported`, production): encryption/key-registry requests fail
+  closed until TreeDB exposes compatible semantics.
+- `badger_protobuf_compatibility` (`disabled_need_blocker`, operational): Badger `pb.KV`,
+  `pb.KVList`, and `pb.Match` shapes.
+- `metrics_cache_apis` (`disabled_want`, operational): Badger cache sizing and metrics used by
+  monitoring are not wired for TreeDB.
+- `in_memory_posting_store` (`unsupported`, no tier): Dgraph's posting store is persistent;
+  in-memory TreeDB mode fails closed.
 
 ## Posting-store adapter contract
 
@@ -69,31 +88,31 @@ narrow and maps to concrete posting-store call sites instead of a generic key/va
 
 `posting.NewBadgerStore` is the only production implementation, and `posting.NewTxnWriter` still
 selects Badger by default. `posting.NewTxnWriterForStore` exists only as an explicit experiment
-seam. TreeDB runtime selection remains blocked until the non-supported feature rows above are
-resolved or fail closed with tests; the adapter must not silently drop Badger metadata, timestamps,
-versions, stream/import/export semantics, subscriptions, or encryption guarantees.
+seam. TreeDB runtime selection remains blocked until the benchmark-minimal feature rows above are
+resolved. Later-tier calls must use `CheckFeatureAvailable(...)` and fail at invocation rather than
+silently dropping TTL, stream/import/export, subscription, protobuf, monitoring, or encryption
+semantics.
 
 ## Compatibility blocker matrix
 
-Issue #6 records final Dgraph-side decisions for the Badger feature families that currently block a
-TreeDB posting-store backend in `PostingCompatibilityMatrix()`. Runtime selector code should call
-`CheckPostingBackendReady()` and must refuse TreeDB while required rows remain non-supported.
+Issue #6 recorded the original Dgraph-side decisions for Badger feature families. Issue #18 assigns
+those records to cumulative tiers in `PostingCompatibilityMatrix()`. Runtime selector code calls
+`CheckPostingBackendReady()`, which checks only `benchmark_minimal`; later-tier entry points must
+gate their own capability with `CheckFeatureAvailable(...)`.
 
-Current selector-blocking rows:
+Current benchmark-minimal selector-blocking rows:
 
+- TreeDBStore implementation: `disabled_need_blocker`
 - managed timestamp transactions: `disabled_need_blocker`
-- command-WAL-compatible conditional transactions: `disabled_need_blocker`
-- entry metadata, TTL, and discard markers: `disabled_need_blocker`
+- entry metadata and discard markers: `disabled_need_blocker`
 - all-version/key iteration: `disabled_need_blocker`
-- stream backup/export/import: `disabled_need_blocker`
-- subscriptions: `disabled_need_blocker`
-- Badger protobuf compatibility: `disabled_need_blocker`
-- encryption/key registry: `unsupported`
+- Alpha lifecycle/GC/stats wiring: `disabled_need_blocker`
 
-Metrics/cache APIs are classified as `disabled_want`: they must be surfaced as unavailable in
-operator output, but they are not sufficient by themselves to enable or block an experimental
-selector. Unsupported or blocker rows must fail closed with the operator-facing messages from the
-matrix rather than falling back silently or returning partial TreeDB behavior.
+TTL, stream backup/export/import, subscriptions, Badger protobuf compatibility, and metrics/cache
+APIs are operational requirements. Encryption/key registry is a production requirement. Conditional
+transactions and in-memory mode are excluded from the integration tiers. Unsupported or blocker rows
+fail with the stable feature ID/status from `FeatureReadinessError`; they never fall back to Badger
+or return partial TreeDB behavior.
 
 ## Experimental Alpha selector
 
@@ -106,9 +125,19 @@ dgraph alpha --posting-store backend=treedb   # experimental, currently fail-clo
 
 The selector is parsed into `worker.Config.PostingStoreBackend`. Badger remains the default and
 continues to open through the existing managed Badger path. TreeDB startup calls
-`CheckPostingStoreBackendReady()` and refuses to open while required compatibility rows remain
-`disabled_need_blocker` or `unsupported`; there is no silent fallback from a requested TreeDB
-backend to Badger.
+`CheckPostingStoreBackendReady()` and refuses to open while the cumulative `benchmark_minimal`
+requirements remain blocked; there is no silent fallback from a requested TreeDB backend to Badger.
+Startup requirements outside that tier are checked separately: an encrypted TreeDB selection is
+rejected by `CheckPostingStoreBackendReadyForConfig()` before the experimental opener is reached.
+Passing this classification gate does not open TreeDB yet: restricted runtime enablement belongs to
+issue #19.
+
+## Performance boundary
+
+Capability classification runs only during backend selection or at an optional feature's entry
+point. It is not called from per-key, per-posting, iterator-step, or commit loops. This issue
+changes control-plane registry lookups and documentation only, so Badger data-path benchmark
+comparison is not applicable.
 
 ## Operator gates and default decision
 
@@ -117,6 +146,9 @@ Issue #8 finalizes the current operator-facing gate report in `OperatorGateRepor
 | Gate                        | Current state   | Operator decision                                                                                                           |
 | --------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Badger default              | `pass`          | Badger remains the default Alpha posting-store backend.                                                                     |
+| Benchmark-minimal tier      | `fail_closed`   | Managed timestamps, metadata/discard markers, and all-version iteration block the restricted Alpha benchmark.               |
+| Operational tier            | `fail_closed`   | Operational parity is later work and does not block benchmark-minimal startup.                                              |
+| Production tier             | `unsupported`   | Production readiness is a future decision; encryption/key-registry support is not implemented.                              |
 | TreeDB primitive durability | `evidence_only` | TreeDB can open, write, close, and reopen in the scaffold, but this is not a Dgraph posting-store backend.                  |
 | TreeDB selector             | `fail_closed`   | An explicit TreeDB selector is accepted but startup refuses to open while blockers remain.                                  |
 | Posting/schema workflows    | `fail_closed`   | Dgraph posting and schema workflows remain Badger-only until metadata and all-version semantics are implemented and tested. |

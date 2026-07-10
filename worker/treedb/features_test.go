@@ -25,6 +25,10 @@ func TestFeatureRegistryStatusTaxonomy(t *testing.T) {
 		require.NotEmpty(t, feature.Reason)
 		require.NotEmpty(t, feature.Evidence)
 		require.False(t, ids[feature.ID], "duplicate feature ID %s", feature.ID)
+		if feature.RequiredTier != "" {
+			_, ok := capabilityTierRank(feature.RequiredTier)
+			require.True(t, ok, "unknown required tier %q for feature %s", feature.RequiredTier, feature.ID)
+		}
 
 		ids[feature.ID] = true
 		switch feature.Status {
@@ -54,6 +58,167 @@ func TestFeatureRegistryStatusTaxonomy(t *testing.T) {
 	feature, ok = FeatureForID(FeatureTreeDBOpen)
 	require.True(t, ok)
 	require.Equal(t, "TestResolveOptionsUsesDgraphDefaults", feature.Evidence[0])
+}
+
+func TestCapabilityTierRequirementsAndBlockers(t *testing.T) {
+	require.Equal(t, []CapabilityTier{
+		TierBenchmarkMinimal,
+		TierOperational,
+		TierProduction,
+	}, CapabilityTiers())
+
+	tests := []struct {
+		name                string
+		tier                CapabilityTier
+		wantRequired        []FeatureID
+		wantBlockers        []FeatureID
+		wantExcludedFeature []FeatureID
+	}{
+		{
+			name: "benchmark minimal",
+			tier: TierBenchmarkMinimal,
+			wantRequired: []FeatureID{
+				FeatureTreeDBOpen,
+				FeaturePostingStoreAdapterContract,
+				FeatureTreeDBStoreImplementation,
+				FeatureBadgerManagedTransactions,
+				FeatureBadgerEntryMetadata,
+				FeatureBadgerAllVersionIterators,
+				FeatureLifecycleGCStats,
+			},
+			wantBlockers: []FeatureID{
+				FeatureTreeDBStoreImplementation,
+				FeatureBadgerManagedTransactions,
+				FeatureBadgerEntryMetadata,
+				FeatureBadgerAllVersionIterators,
+				FeatureLifecycleGCStats,
+			},
+			wantExcludedFeature: []FeatureID{
+				FeatureBadgerEntryTTL,
+				FeatureBadgerStreamImportExport,
+				FeatureBadgerSubscriptions,
+				FeatureEncryptionKeyRegistry,
+				FeatureCommandWALConditionalTransactions,
+				FeatureInMemoryPostingStore,
+			},
+		},
+		{
+			name: "operational is cumulative",
+			tier: TierOperational,
+			wantRequired: []FeatureID{
+				FeatureBadgerManagedTransactions,
+				FeatureBadgerEntryTTL,
+				FeatureBadgerStreamImportExport,
+				FeatureBadgerSubscriptions,
+				FeatureBadgerProtobufCompatibility,
+				FeatureMetricsCacheAPIs,
+			},
+			wantBlockers: []FeatureID{
+				FeatureTreeDBStoreImplementation,
+				FeatureBadgerManagedTransactions,
+				FeatureBadgerEntryMetadata,
+				FeatureBadgerEntryTTL,
+				FeatureBadgerAllVersionIterators,
+				FeatureBadgerStreamImportExport,
+				FeatureBadgerSubscriptions,
+				FeatureBadgerProtobufCompatibility,
+				FeatureMetricsCacheAPIs,
+				FeatureLifecycleGCStats,
+			},
+			wantExcludedFeature: []FeatureID{
+				FeatureEncryptionKeyRegistry,
+				FeatureCommandWALConditionalTransactions,
+				FeatureInMemoryPostingStore,
+			},
+		},
+		{
+			name: "production is cumulative",
+			tier: TierProduction,
+			wantRequired: []FeatureID{
+				FeatureBadgerManagedTransactions,
+				FeatureBadgerStreamImportExport,
+				FeatureEncryptionKeyRegistry,
+			},
+			wantBlockers: []FeatureID{
+				FeatureTreeDBStoreImplementation,
+				FeatureBadgerManagedTransactions,
+				FeatureBadgerEntryMetadata,
+				FeatureBadgerEntryTTL,
+				FeatureBadgerAllVersionIterators,
+				FeatureBadgerStreamImportExport,
+				FeatureBadgerSubscriptions,
+				FeatureEncryptionKeyRegistry,
+				FeatureBadgerProtobufCompatibility,
+				FeatureMetricsCacheAPIs,
+				FeatureLifecycleGCStats,
+			},
+			wantExcludedFeature: []FeatureID{
+				FeatureCommandWALConditionalTransactions,
+				FeatureInMemoryPostingStore,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			required, err := RequiredFeaturesForTier(tt.tier)
+			require.NoError(t, err)
+			for _, id := range tt.wantRequired {
+				require.Contains(t, required, id)
+			}
+			for _, id := range tt.wantExcludedFeature {
+				require.NotContains(t, required, id)
+			}
+
+			blockers, err := CapabilityTierBlockers(tt.tier)
+			require.NoError(t, err)
+			blockerIDs := make([]FeatureID, 0, len(blockers))
+			for _, blocker := range blockers {
+				blockerIDs = append(blockerIDs, blocker.ID)
+			}
+			require.ElementsMatch(t, tt.wantBlockers, blockerIDs)
+
+			err = CheckCapabilityTier(tt.tier)
+			require.ErrorIs(t, err, ErrUnsupportedFeature)
+			require.Contains(t, err.Error(), "capability tier "+string(tt.tier)+" is not ready")
+		})
+	}
+
+	_, err := RequiredFeaturesForTier("future")
+	require.ErrorIs(t, err, ErrUnsupportedFeature)
+	require.EqualError(t, err, `dgraph treedb integration: unsupported feature: unknown capability tier "future"`)
+}
+
+func TestOptionalCapabilityInvocationFailsClosed(t *testing.T) {
+	tests := []struct {
+		name    string
+		feature FeatureID
+		status  FeatureStatus
+	}{
+		{name: "ttl", feature: FeatureBadgerEntryTTL, status: StatusUnsupported},
+		{name: "legacy metadata and ttl", feature: FeatureBadgerEntryMetadataTTL, status: StatusUnsupported},
+		{name: "stream", feature: FeatureBadgerStreamImportExport, status: StatusDisabledNeedBlocker},
+		{name: "subscriptions", feature: FeatureBadgerSubscriptions, status: StatusDisabledNeedBlocker},
+		{name: "encryption", feature: FeatureEncryptionKeyRegistry, status: StatusUnsupported},
+		{name: "in memory", feature: FeatureInMemoryPostingStore, status: StatusUnsupported},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := CheckFeatureAvailable(tt.feature)
+			require.ErrorIs(t, err, ErrUnsupportedFeature)
+			require.Contains(t, err.Error(), string(tt.feature)+"="+string(tt.status))
+		})
+	}
+}
+
+func TestLegacyMetadataTTLFeatureIDRemainsFailClosed(t *testing.T) {
+	require.Equal(t, FeatureID("badger_entry_metadata_ttl"), FeatureBadgerEntryMetadataTTL)
+
+	feature, ok := FeatureForID(FeatureID("badger_entry_metadata_ttl"))
+	require.True(t, ok)
+	require.Equal(t, StatusUnsupported, feature.Status)
+	require.Empty(t, feature.RequiredTier)
+	require.ErrorIs(t, CheckRequiredFeatures(FeatureBadgerEntryMetadataTTL), ErrUnsupportedFeature)
 }
 
 func TestCheckRequiredFeaturesFailClosed(t *testing.T) {
