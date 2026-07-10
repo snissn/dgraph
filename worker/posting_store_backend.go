@@ -71,6 +71,10 @@ func PostingStoreBackendStatus(backend string) string {
 	if normalized == PostingStoreBackendBadger {
 		return "posting-store backend badger: default production backend"
 	}
-	return fmt.Sprintf("posting-store backend treedb: experimental, disabled until %d compatibility blockers are resolved",
-		len(treedb.PostingBackendBlockers()))
+	blockers, err := treedb.CapabilityTierBlockers(treedb.TierBenchmarkMinimal)
+	if err != nil {
+		return fmt.Sprintf("posting-store backend treedb: invalid capability registry: %v", err)
+	}
+	return fmt.Sprintf("posting-store backend treedb: experimental, %s disabled until %d capability blockers are resolved",
+		treedb.TierBenchmarkMinimal, len(blockers))
 }

@@ -14,13 +14,18 @@ type CompatibilityFamilyID string
 const (
 	CompatibilityManagedTimestampTransactions CompatibilityFamilyID = "managed_timestamp_transactions"
 	CompatibilityCommandWALTransactions       CompatibilityFamilyID = "command_wal_transactions"
-	CompatibilityEntryMetadataTTL             CompatibilityFamilyID = "entry_metadata_ttl"
-	CompatibilityAllVersionIteration          CompatibilityFamilyID = "all_version_iteration"
-	CompatibilityStreamImportExport           CompatibilityFamilyID = "stream_import_export"
-	CompatibilitySubscriptions                CompatibilityFamilyID = "subscriptions"
-	CompatibilityEncryptionKeyRegistry        CompatibilityFamilyID = "encryption_key_registry"
-	CompatibilityBadgerProtobuf               CompatibilityFamilyID = "badger_protobuf"
-	CompatibilityMetricsCache                 CompatibilityFamilyID = "metrics_cache"
+	CompatibilityEntryMetadata                CompatibilityFamilyID = "entry_metadata"
+	CompatibilityEntryTTL                     CompatibilityFamilyID = "entry_ttl"
+	// CompatibilityEntryMetadataTTL is retained for source compatibility and
+	// now aliases the benchmark-minimal metadata row. TTL has its own row.
+	// Deprecated: use CompatibilityEntryMetadata and CompatibilityEntryTTL.
+	CompatibilityEntryMetadataTTL      CompatibilityFamilyID = CompatibilityEntryMetadata
+	CompatibilityAllVersionIteration   CompatibilityFamilyID = "all_version_iteration"
+	CompatibilityStreamImportExport    CompatibilityFamilyID = "stream_import_export"
+	CompatibilitySubscriptions         CompatibilityFamilyID = "subscriptions"
+	CompatibilityEncryptionKeyRegistry CompatibilityFamilyID = "encryption_key_registry"
+	CompatibilityBadgerProtobuf        CompatibilityFamilyID = "badger_protobuf"
+	CompatibilityMetricsCache          CompatibilityFamilyID = "metrics_cache"
 )
 
 // CompatibilityRecord is the explicit Dgraph posting-store compatibility
@@ -29,6 +34,7 @@ type CompatibilityRecord struct {
 	ID              CompatibilityFamilyID
 	Feature         FeatureID
 	Status          FeatureStatus
+	RequiredTier    CapabilityTier
 	Decision        string
 	OperatorMessage string
 	RequiredAPIs    []string
@@ -41,6 +47,7 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		ID:              CompatibilityManagedTimestampTransactions,
 		Feature:         FeatureBadgerManagedTransactions,
 		Status:          StatusDisabledNeedBlocker,
+		RequiredTier:    TierBenchmarkMinimal,
 		Decision:        "fail closed until a TreeDB adapter can preserve externally managed read/write timestamps and commit-at semantics",
 		OperatorMessage: "TreeDB posting-store backend is disabled because Dgraph requires Badger managed transactions: OpenManaged, NewTransactionAt, CommitAt, NewManagedWriteBatch, and SetEntryAt.",
 		RequiredAPIs: []string{
@@ -65,9 +72,9 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 	{
 		ID:              CompatibilityCommandWALTransactions,
 		Feature:         FeatureCommandWALConditionalTransactions,
-		Status:          StatusDisabledNeedBlocker,
-		Decision:        "fail closed under the durable command-WAL profile until conditional writes have a Dgraph-safe TreeDB contract or an accepted alternative",
-		OperatorMessage: "TreeDB posting-store backend is disabled because durable command-WAL conditional transaction semantics are not available for Dgraph writes.",
+		Status:          StatusUnsupported,
+		Decision:        "not required: Dgraph owns posting conflict detection instead of delegating it to TreeDB-native conditional transactions",
+		OperatorMessage: "TreeDB-native conditional transactions are unavailable; Dgraph's posting adapter must use Dgraph-owned conflict detection.",
 		RequiredAPIs: []string{
 			"TreeDB durable command-WAL profile",
 			"TreeDB conditional transaction begin/commit/abort semantics",
@@ -81,16 +88,15 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		},
 	},
 	{
-		ID:              CompatibilityEntryMetadataTTL,
-		Feature:         FeatureBadgerEntryMetadataTTL,
+		ID:              CompatibilityEntryMetadata,
+		Feature:         FeatureBadgerEntryMetadata,
 		Status:          StatusDisabledNeedBlocker,
-		Decision:        "fail closed until UserMeta, discard markers, and ExpiresAt survive TreeDB writes, reads, iteration, backup, and restore",
-		OperatorMessage: "TreeDB posting-store backend is disabled because Dgraph posting lists require Badger entry metadata and TTL fields.",
+		RequiredTier:    TierBenchmarkMinimal,
+		Decision:        "fail closed until UserMeta and discard markers survive TreeDB writes, reads, and iteration",
+		OperatorMessage: "TreeDB benchmark-minimal posting storage is disabled because Dgraph posting lists require Badger UserMeta and discard markers.",
 		RequiredAPIs: []string{
 			"badger.Entry.UserMeta",
 			"(*badger.Item).UserMeta",
-			"badger.Entry.ExpiresAt",
-			"(*badger.Item).ExpiresAt",
 			"(*badger.Entry).WithDiscard",
 		},
 		DgraphCallSites: []string{
@@ -105,9 +111,29 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		},
 	},
 	{
+		ID:              CompatibilityEntryTTL,
+		Feature:         FeatureBadgerEntryTTL,
+		Status:          StatusUnsupported,
+		RequiredTier:    TierOperational,
+		Decision:        "reject nonzero expiry at invocation until TreeDB has a tested TTL contract",
+		OperatorMessage: "TreeDB entry TTL is unavailable; nonzero ExpiresAt values are rejected instead of being dropped.",
+		RequiredAPIs: []string{
+			"badger.Entry.ExpiresAt",
+			"(*badger.Item).ExpiresAt",
+		},
+		DgraphCallSites: []string{
+			"posting.TxnWriter.SetAt",
+			"worker.restore_map.go",
+		},
+		Evidence: []string{
+			"FeatureRegistry badger_entry_ttl invocation gate",
+		},
+	},
+	{
 		ID:              CompatibilityAllVersionIteration,
 		Feature:         FeatureBadgerAllVersionIterators,
 		Status:          StatusDisabledNeedBlocker,
+		RequiredTier:    TierBenchmarkMinimal,
 		Decision:        "fail closed until prefix, reverse, all-version, prefetch, and key-iterator behavior matches Dgraph posting-list expectations",
 		OperatorMessage: "TreeDB posting-store backend is disabled because Dgraph reconstructs posting lists with Badger all-version iterators.",
 		RequiredAPIs: []string{
@@ -133,6 +159,7 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		ID:              CompatibilityStreamImportExport,
 		Feature:         FeatureBadgerStreamImportExport,
 		Status:          StatusDisabledNeedBlocker,
+		RequiredTier:    TierOperational,
 		Decision:        "fail closed until TreeDB can provide Dgraph-compatible snapshot/export/import stream contracts or explicit replacement workflows",
 		OperatorMessage: "TreeDB posting-store backend is disabled because backup, export, restore, and snapshot paths require Badger stream APIs.",
 		RequiredAPIs: []string{
@@ -157,6 +184,7 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		ID:              CompatibilitySubscriptions,
 		Feature:         FeatureBadgerSubscriptions,
 		Status:          StatusDisabledNeedBlocker,
+		RequiredTier:    TierOperational,
 		Decision:        "fail closed until worker update subscriptions have TreeDB-backed ordering, filtering, and cancellation semantics",
 		OperatorMessage: "TreeDB posting-store backend is disabled because worker.SubscribeForUpdates requires Badger subscription behavior.",
 		RequiredAPIs: []string{
@@ -176,6 +204,7 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		ID:              CompatibilityEncryptionKeyRegistry,
 		Feature:         FeatureEncryptionKeyRegistry,
 		Status:          StatusUnsupported,
+		RequiredTier:    TierProduction,
 		Decision:        "unsupported in this integration lane until TreeDB exposes Dgraph-compatible encryption/key-registry semantics",
 		OperatorMessage: "TreeDB posting-store backend is disabled when encryption or key-registry support is required.",
 		RequiredAPIs: []string{
@@ -195,6 +224,7 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		ID:              CompatibilityBadgerProtobuf,
 		Feature:         FeatureBadgerProtobufCompatibility,
 		Status:          StatusDisabledNeedBlocker,
+		RequiredTier:    TierOperational,
 		Decision:        "fail closed until TreeDB import/export/subscription code can produce or replace Badger pb.KV, pb.KVList, and pb.Match shapes without data loss",
 		OperatorMessage: "TreeDB posting-store backend is disabled because Dgraph backup and subscription paths exchange Badger protobuf payloads.",
 		RequiredAPIs: []string{
@@ -216,6 +246,7 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		ID:              CompatibilityMetricsCache,
 		Feature:         FeatureMetricsCacheAPIs,
 		Status:          StatusDisabledWant,
+		RequiredTier:    TierOperational,
 		Decision:        "not a selector blocker by itself, but must be surfaced as disabled-want until TreeDB-native metrics/cache fields exist",
 		OperatorMessage: "TreeDB metrics and cache counters are not wired; monitoring must treat them as unavailable, not zero.",
 		RequiredAPIs: []string{
@@ -235,17 +266,11 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 // PostingBackendRequiredFeatures returns the feature set that must be supported
 // before the experimental TreeDB posting-store backend can be enabled.
 func PostingBackendRequiredFeatures() []FeatureID {
-	return []FeatureID{
-		FeaturePostingStoreAdapterContract,
-		FeatureBadgerManagedTransactions,
-		FeatureCommandWALConditionalTransactions,
-		FeatureBadgerEntryMetadataTTL,
-		FeatureBadgerAllVersionIterators,
-		FeatureBadgerStreamImportExport,
-		FeatureBadgerSubscriptions,
-		FeatureEncryptionKeyRegistry,
-		FeatureBadgerProtobufCompatibility,
+	required, err := RequiredFeaturesForTier(TierBenchmarkMinimal)
+	if err != nil {
+		panic(err)
 	}
+	return required
 }
 
 // PostingCompatibilityMatrix returns a copy of the current compatibility
@@ -277,12 +302,34 @@ func PostingBackendBlockers() []CompatibilityRecord {
 	return blockers
 }
 
+// PostingBackendBlockersForTier returns compatibility rows that block a
+// cumulative capability tier. Primitive registry-only rows are enforced by
+// CheckCapabilityTier but do not appear in this compatibility-specific view.
+func PostingBackendBlockersForTier(tier CapabilityTier) ([]CompatibilityRecord, error) {
+	requiredFeatures, err := RequiredFeaturesForTier(tier)
+	if err != nil {
+		return nil, err
+	}
+	required := make(map[FeatureID]struct{}, len(requiredFeatures))
+	for _, feature := range requiredFeatures {
+		required[feature] = struct{}{}
+	}
+	blockers := make([]CompatibilityRecord, 0)
+	for _, record := range postingCompatibilityMatrix {
+		if _, ok := required[record.Feature]; ok && record.Status != StatusSupported {
+			blockers = append(blockers, cloneCompatibilityRecord(record))
+		}
+	}
+	return blockers, nil
+}
+
 // CheckPostingBackendReady fails closed for every unsupported Dgraph-required
 // Badger feature family. Runtime selector code should call this before opening
 // a TreeDB-backed posting store.
 func CheckPostingBackendReady() error {
-	if err := CheckRequiredFeatures(PostingBackendRequiredFeatures()...); err != nil {
-		return fmt.Errorf("TreeDB posting-store backend is not ready; refusing to enable experimental TreeDB: %w", err)
+	if err := CheckCapabilityTier(TierBenchmarkMinimal); err != nil {
+		return fmt.Errorf("TreeDB posting-store backend is not ready for %s; refusing to enable experimental TreeDB: %w",
+			TierBenchmarkMinimal, err)
 	}
 	return nil
 }

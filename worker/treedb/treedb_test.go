@@ -55,6 +55,23 @@ func TestResolveOptionsRejectsNonRuntimeProfiles(t *testing.T) {
 	}
 }
 
+func TestRuntimeProfilesUseCumulativeCapabilityTiers(t *testing.T) {
+	profiles := []td.Profile{td.ProfileCommandWALDurable, td.ProfileCommandWALRelaxed}
+	for _, profile := range profiles {
+		for _, tier := range CapabilityTiers() {
+			t.Run(string(profile)+"/"+string(tier), func(t *testing.T) {
+				opts, err := ResolveOptions(OpenOptions{Dir: t.TempDir(), Profile: profile})
+				require.NoError(t, err)
+				require.True(t, opts.CommandWAL)
+
+				err = CheckCapabilityTier(tier)
+				require.ErrorIs(t, err, ErrUnsupportedFeature)
+				require.Contains(t, err.Error(), "capability tier "+string(tier)+" is not ready")
+			})
+		}
+	}
+}
+
 func TestOpenReopenDurability(t *testing.T) {
 	dir := t.TempDir()
 	handle, err := Open(OpenOptions{Dir: dir})

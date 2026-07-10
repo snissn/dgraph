@@ -63,9 +63,12 @@ func TestCheckPostingStoreBackendReadyFailsClosedForTreeDB(t *testing.T) {
 	err := CheckPostingStoreBackendReady(PostingStoreBackendTreeDB)
 	require.ErrorIs(t, err, treedb.ErrUnsupportedFeature)
 	require.Contains(t, err.Error(), "posting-store backend \"treedb\" is experimental and not ready")
+	require.Contains(t, err.Error(), string(treedb.TierBenchmarkMinimal))
 	require.Contains(t, err.Error(), string(treedb.FeatureBadgerManagedTransactions))
-	require.Contains(t, err.Error(), string(treedb.FeatureBadgerStreamImportExport))
-	require.Contains(t, err.Error(), string(treedb.FeatureEncryptionKeyRegistry))
+	require.Contains(t, err.Error(), string(treedb.FeatureBadgerEntryMetadata))
+	require.Contains(t, err.Error(), string(treedb.FeatureBadgerAllVersionIterators))
+	require.NotContains(t, err.Error(), string(treedb.FeatureBadgerStreamImportExport))
+	require.NotContains(t, err.Error(), string(treedb.FeatureEncryptionKeyRegistry))
 
 	var readinessErr *treedb.FeatureReadinessError
 	require.True(t, errors.As(err, &readinessErr))
@@ -76,6 +79,6 @@ func TestPostingStoreBackendStatus(t *testing.T) {
 	require.Equal(t, "posting-store backend badger: default production backend",
 		PostingStoreBackendStatus(""))
 	require.Contains(t, PostingStoreBackendStatus(PostingStoreBackendTreeDB),
-		"posting-store backend treedb: experimental, disabled until")
+		"posting-store backend treedb: experimental, benchmark_minimal disabled until")
 	require.Contains(t, PostingStoreBackendStatus("unknown"), "posting-store backend \"unknown\" is not supported")
 }

@@ -10,6 +10,9 @@ type OperatorGateID string
 
 const (
 	GateBadgerDefault             OperatorGateID = "badger_default"
+	GateBenchmarkMinimalTier      OperatorGateID = "benchmark_minimal_tier"
+	GateOperationalTier           OperatorGateID = "operational_tier"
+	GateProductionTier            OperatorGateID = "production_tier"
 	GateTreeDBPrimitiveDurability OperatorGateID = "treedb_primitive_durability"
 	GateTreeDBSelector            OperatorGateID = "treedb_selector"
 	GatePostingSchemaWorkflows    OperatorGateID = "posting_schema_workflows"
@@ -58,6 +61,45 @@ var operatorGateReport = []OperatorGate{
 		},
 	},
 	{
+		ID:       GateBenchmarkMinimalTier,
+		Status:   GateStatusFailClosed,
+		Decision: "TreeDB may run the restricted Alpha benchmark only after the benchmark-minimal capability tier passes.",
+		Summary:  "TreeDBStore, managed timestamps, posting metadata/discard markers, all-version iteration, and backend lifecycle wiring still block the benchmark-minimal tier.",
+		Evidence: []string{
+			"CheckCapabilityTier(benchmark_minimal)",
+			"TestCapabilityTierRequirementsAndBlockers/benchmark_minimal",
+		},
+		FollowUps: []string{
+			"Implement the gomap MVCC substrate and the Dgraph TreeDBStore adapter before changing this gate.",
+		},
+	},
+	{
+		ID:       GateOperationalTier,
+		Status:   GateStatusFailClosed,
+		Decision: "Backup/import/export, subscriptions, TTL, Badger protobuf translation, and monitoring remain outside the Alpha benchmark.",
+		Summary:  "Operational capabilities are cumulative but do not block benchmark-minimal startup; each unsupported invocation must fail explicitly.",
+		Evidence: []string{
+			"CheckCapabilityTier(operational)",
+			"TestOptionalCapabilityInvocationFailsClosed",
+		},
+		FollowUps: []string{
+			"Ticket operational parity only after the Alpha benchmark decision gate justifies continuing.",
+		},
+	},
+	{
+		ID:       GateProductionTier,
+		Status:   GateStatusUnsupported,
+		Decision: "TreeDB is not a production backend and encryption/key-registry support is not implemented in this lane.",
+		Summary:  "Production is a cumulative future tier, not a claim or deliverable of the Alpha benchmark graph.",
+		Evidence: []string{
+			"CheckCapabilityTier(production)",
+			"TestResolveOptionsRejectsUnsupportedFeatures",
+		},
+		FollowUps: []string{
+			"Create a production-readiness graph only after operational parity and durability evidence exist.",
+		},
+	},
+	{
 		ID:       GateTreeDBPrimitiveDurability,
 		Status:   GateStatusEvidence,
 		Decision: "TreeDB primitives can open, write, close, and reopen in the scaffold, but this is not a Dgraph posting-store backend.",
@@ -78,7 +120,7 @@ var operatorGateReport = []OperatorGate{
 		},
 		FollowUps: []string{
 			"Resolve managed timestamp transactions before opening TreeDB as a posting store.",
-			"Resolve metadata, all-version iteration, stream, subscription, protobuf, and encryption gates before enabling runtime TreeDB.",
+			"Resolve posting metadata and all-version iteration before enabling benchmark-minimal runtime TreeDB.",
 		},
 	},
 	{
