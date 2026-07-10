@@ -15,6 +15,8 @@ import (
 	"github.com/dgraph-io/badger/v4"
 	"github.com/dgraph-io/badger/v4/options"
 	bpb "github.com/dgraph-io/badger/v4/pb"
+	"github.com/dgraph-io/dgraph/v25/protos/pb"
+	"github.com/dgraph-io/dgraph/v25/x"
 )
 
 func TestBadgerStorePreservesManagedTimestampsMetadataAndIteration(t *testing.T) {
@@ -148,9 +150,33 @@ func TestBadgerOperationalPathsFailClosedWithoutBadger(t *testing.T) {
 	require.ErrorIs(t, err, ErrBadgerOperationalPath)
 	require.Contains(t, err.Error(), "drop all posting data")
 
-	err = (&IndexRebuild{}).DropIndexes(t.Context())
+	noop := &IndexRebuild{
+		Attr:          x.AttrInRootNamespace("store-noop"),
+		CurrentSchema: &pb.SchemaUpdate{},
+	}
+	require.NoError(t, noop.DropIndexes(t.Context()))
+	require.NoError(t, noop.BuildData(t.Context()))
+
+	drop := &IndexRebuild{
+		Attr: x.AttrInRootNamespace("store-drop"),
+		OldSchema: &pb.SchemaUpdate{
+			Directive: pb.SchemaUpdate_INDEX,
+			Tokenizer: []string{"term"},
+		},
+		CurrentSchema: &pb.SchemaUpdate{},
+	}
+	err = drop.DropIndexes(t.Context())
 	require.ErrorIs(t, err, ErrBadgerOperationalPath)
 	require.Contains(t, err.Error(), "drop index prefixes")
+
+	listRebuild := &IndexRebuild{
+		Attr:          x.AttrInRootNamespace("store-list-rebuild"),
+		OldSchema:     &pb.SchemaUpdate{List: false},
+		CurrentSchema: &pb.SchemaUpdate{List: true},
+	}
+	err = listRebuild.BuildData(t.Context())
+	require.ErrorIs(t, err, ErrBadgerOperationalPath)
+	require.Contains(t, err.Error(), "rebuild list data")
 }
 
 func TestTxnWriterForStorePreservesBadgerWriteBehavior(t *testing.T) {

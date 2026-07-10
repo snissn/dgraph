@@ -1167,9 +1167,6 @@ func (rb *IndexRebuild) GetQuerySchema() *pb.SchemaUpdate {
 
 // DropIndexes drops the indexes that need to be rebuilt.
 func (rb *IndexRebuild) DropIndexes(ctx context.Context) error {
-	if _, err := requireBadgerOperationalStore("drop index prefixes"); err != nil {
-		return err
-	}
 	rebuildInfo := rb.needsTokIndexRebuild()
 	prefixes, err := rebuildInfo.prefixesForTokIndexes()
 	if err != nil {
@@ -1184,6 +1181,9 @@ func (rb *IndexRebuild) DropIndexes(ctx context.Context) error {
 	prefixes = append(prefixes, prefixesToDropCountIndex(ctx, rb)...)
 	prefixes = append(prefixes, prefixesToDropVectorIndexEdges(ctx, rb)...)
 	if len(prefixes) > 0 {
+		if _, err := requireBadgerOperationalStore("drop index prefixes"); err != nil {
+			return err
+		}
 		// This trace message now gets logged only if there are any prefixes to
 		// to be deleted
 		glog.Infof("Deleting indexes for %s", rb.Attr)
@@ -1194,9 +1194,6 @@ func (rb *IndexRebuild) DropIndexes(ctx context.Context) error {
 
 // BuildData updates data.
 func (rb *IndexRebuild) BuildData(ctx context.Context) error {
-	if _, err := requireBadgerOperationalStore("rebuild list data"); err != nil {
-		return err
-	}
 	return rebuildListType(ctx, rb)
 }
 
@@ -1828,6 +1825,9 @@ func (rb *IndexRebuild) needsListTypeRebuild() (bool, error) {
 // We need to fingerprint the values to get the new ValueId.
 func rebuildListType(ctx context.Context, rb *IndexRebuild) error {
 	if needsRebuild, err := rb.needsListTypeRebuild(); !needsRebuild || err != nil {
+		return err
+	}
+	if _, err := requireBadgerOperationalStore("rebuild list data"); err != nil {
 		return err
 	}
 

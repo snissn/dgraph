@@ -48,6 +48,13 @@ func TestSchemaStorePreservesLoadAndDelete(t *testing.T) {
 func TestSchemaStoreFailsClosedForBadgerStreamBootstrap(t *testing.T) {
 	InitForStore(newBadgerStore(ps))
 	t.Cleanup(func() { Init(ps) })
+	predicate := x.AttrInRootNamespace("schema-store-preserved-on-bootstrap-error")
+	want := &pb.SchemaUpdate{Predicate: predicate, ValueType: pb.Posting_STRING}
+	State().Set(predicate, want)
+
 	err := LoadFromDb(context.Background())
 	require.EqualError(t, err, "schema stream bootstrap requires the Badger operational backend")
+	got, ok := State().Get(context.Background(), predicate)
+	require.True(t, ok)
+	require.True(t, proto.Equal(want, &got))
 }
