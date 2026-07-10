@@ -127,6 +127,8 @@ The selector is parsed into `worker.Config.PostingStoreBackend`. Badger remains 
 continues to open through the existing managed Badger path. TreeDB startup calls
 `CheckPostingStoreBackendReady()` and refuses to open while the cumulative `benchmark_minimal`
 requirements remain blocked; there is no silent fallback from a requested TreeDB backend to Badger.
+Startup requirements outside that tier are checked separately: an encrypted TreeDB selection is
+rejected by `CheckPostingStoreBackendReadyForConfig()` before the experimental opener is reached.
 Passing this classification gate does not open TreeDB yet: restricted runtime enablement belongs to
 issue #19.
 

@@ -42,6 +42,14 @@ func NormalizePostingStoreBackend(backend string) (string, error) {
 // fails closed for TreeDB until every required Dgraph posting-store capability
 // is supported.
 func CheckPostingStoreBackendReady(backend string) error {
+	return CheckPostingStoreBackendReadyForConfig(backend, false)
+}
+
+// CheckPostingStoreBackendReadyForConfig applies startup requirements that
+// are outside the benchmark-minimal capability tier before selecting TreeDB.
+// Badger remains valid for configurations, such as encryption, that TreeDB
+// explicitly does not support yet.
+func CheckPostingStoreBackendReadyForConfig(backend string, requireEncryption bool) error {
 	normalized, err := NormalizePostingStoreBackend(backend)
 	if err != nil {
 		return err
@@ -51,6 +59,12 @@ func CheckPostingStoreBackendReady(backend string) error {
 	case PostingStoreBackendBadger:
 		return nil
 	case PostingStoreBackendTreeDB:
+		if requireEncryption {
+			if err := treedb.CheckFeatureAvailable(treedb.FeatureEncryptionKeyRegistry); err != nil {
+				return fmt.Errorf("posting-store backend %q cannot satisfy the configured encryption requirement: %w",
+					PostingStoreBackendTreeDB, err)
+			}
+		}
 		if err := treedb.CheckPostingBackendReady(); err != nil {
 			return fmt.Errorf("posting-store backend %q is experimental and not ready: %w",
 				PostingStoreBackendTreeDB, err)

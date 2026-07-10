@@ -134,7 +134,7 @@ func (s *ServerState) InitStorage() {
 			// zero out from memory
 			opt.EncryptionKey = nil
 		case PostingStoreBackendTreeDB:
-			x.Checkf(CheckPostingStoreBackendReady(backend),
+			x.Checkf(CheckPostingStoreBackendReadyForConfig(backend, x.WorkerConfig.EncryptionKey != nil),
 				"Error while creating experimental TreeDB posting store")
 		default:
 			x.Checkf(CheckPostingStoreBackendReady(backend), "Error while selecting posting store")

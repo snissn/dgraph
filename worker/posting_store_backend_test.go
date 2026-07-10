@@ -75,6 +75,16 @@ func TestCheckPostingStoreBackendReadyFailsClosedForTreeDB(t *testing.T) {
 	require.NotEmpty(t, readinessErr.Blockers)
 }
 
+func TestCheckPostingStoreBackendReadyRejectsEncryptedTreeDBStartup(t *testing.T) {
+	require.NoError(t, CheckPostingStoreBackendReadyForConfig(PostingStoreBackendBadger, true))
+
+	err := CheckPostingStoreBackendReadyForConfig(PostingStoreBackendTreeDB, true)
+	require.ErrorIs(t, err, treedb.ErrUnsupportedFeature)
+	require.Contains(t, err.Error(), "cannot satisfy the configured encryption requirement")
+	require.Contains(t, err.Error(), string(treedb.FeatureEncryptionKeyRegistry))
+	require.NotContains(t, err.Error(), string(treedb.FeatureBadgerManagedTransactions))
+}
+
 func TestPostingStoreBackendStatus(t *testing.T) {
 	require.Equal(t, "posting-store backend badger: default production backend",
 		PostingStoreBackendStatus(""))
