@@ -35,11 +35,11 @@ registry entries whose status is not `supported`. Status meanings:
 `RequiredFeaturesForTier(...)`, `CapabilityTierBlockers(...)`, and `CheckCapabilityTier(...)`
 mechanically separate three cumulative gates:
 
-| Tier | Purpose | Required capability families | Current decision |
-| --- | --- | --- | --- |
-| `benchmark_minimal` | Restricted live Alpha A/B benchmark | durable open/lifecycle, point and snapshot primitives, a TreeDBStore implementation, externally assigned timestamps, `UserMeta`/discard markers, and all-version iteration | fail closed until the adapter, managed timestamps, metadata/discard markers, all-version iteration, and lifecycle wiring pass |
-| `operational` | Operational parity after a successful Alpha decision gate | everything above plus nonzero TTL, backup/export/import, subscriptions, Badger protobuf translation, and monitoring/cache status | not ticketed by the Alpha graph; unsupported invocations fail explicitly |
-| `production` | A future production-readiness decision | everything above plus encryption/key-registry integration | unsupported; TreeDB is not a production backend |
+| Tier                | Purpose                                                   | Required capability families                                                                                                                                               | Current decision                                                                                                              |
+| ------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `benchmark_minimal` | Restricted live Alpha A/B benchmark                       | durable open/lifecycle, point and snapshot primitives, a TreeDBStore implementation, externally assigned timestamps, `UserMeta`/discard markers, and all-version iteration | fail closed until the adapter, managed timestamps, metadata/discard markers, all-version iteration, and lifecycle wiring pass |
+| `operational`       | Operational parity after a successful Alpha decision gate | everything above plus nonzero TTL, backup/export/import, subscriptions, Badger protobuf translation, and monitoring/cache status                                           | not ticketed by the Alpha graph; unsupported invocations fail explicitly                                                      |
+| `production`        | A future production-readiness decision                    | everything above plus encryption/key-registry integration                                                                                                                  | unsupported; TreeDB is not a production backend                                                                               |
 
 TreeDB-native conditional transactions and in-memory posting storage are excluded from all three
 tiers. Dgraph owns posting conflict detection, and this integration lane is persistent. Their
