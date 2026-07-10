@@ -592,12 +592,12 @@ func (l *List) AddMutationWithIndex(ctx context.Context, edge *pb.DirectedEdge, 
 		return l.handleDeleteAll(ctx, edge, txn)
 	}
 
-	doUpdateIndex := pstore != nil && schema.State().IsIndexed(ctx, edge.Attr)
+	doUpdateIndex := postingStore != nil && schema.State().IsIndexed(ctx, edge.Attr)
 	hasCountIndex := schema.State().HasCount(ctx, edge.Attr)
 
 	// Add reverse mutation irrespective of hasMutated, server crash can happen after
 	// mutation is synced and before reverse edge is synced
-	if (pstore != nil) && (edge.ValueId != 0) && schema.State().IsReversed(ctx, edge.Attr) {
+	if (postingStore != nil) && (edge.ValueId != 0) && schema.State().IsReversed(ctx, edge.Attr) {
 		if err := txn.addReverseAndCountMutation(ctx, edge); err != nil {
 			return err
 		}
@@ -681,6 +681,9 @@ type rebuilder struct {
 }
 
 func (r *rebuilder) RunWithoutTemp(ctx context.Context) error {
+	if _, err := requireBadgerOperationalStore("index rebuild without temporary store"); err != nil {
+		return err
+	}
 	ResetCache()
 	stream := pstore.NewStreamAt(r.startTs)
 	stream.LogPrefix = fmt.Sprintf("Rebuilding index for predicate %s (1/2):", r.attr)
@@ -873,6 +876,9 @@ func decodeUint64MatrixUnsafe(data []byte, matrix *[][]uint64) error {
 }
 
 func (r *rebuilder) Run(ctx context.Context) error {
+	if _, err := requireBadgerOperationalStore("index rebuild stream"); err != nil {
+		return err
+	}
 	if r.startTs == 0 {
 		glog.Infof("maxassigned is 0, no indexing work for predicate %s", r.attr)
 		return nil
@@ -1175,6 +1181,9 @@ func (rb *IndexRebuild) DropIndexes(ctx context.Context) error {
 	prefixes = append(prefixes, prefixesToDropCountIndex(ctx, rb)...)
 	prefixes = append(prefixes, prefixesToDropVectorIndexEdges(ctx, rb)...)
 	if len(prefixes) > 0 {
+		if _, err := requireBadgerOperationalStore("drop index prefixes"); err != nil {
+			return err
+		}
 		// This trace message now gets logged only if there are any prefixes to
 		// to be deleted
 		glog.Infof("Deleting indexes for %s", rb.Attr)
@@ -1198,6 +1207,9 @@ func (rb *IndexRebuild) NeedIndexRebuild() bool {
 
 // BuildIndexes builds indexes.
 func (rb *IndexRebuild) BuildIndexes(ctx context.Context) error {
+	if _, err := requireBadgerOperationalStore("rebuild indexes"); err != nil {
+		return err
+	}
 	if err := rebuildTokIndex(ctx, rb); err != nil {
 		return err
 	}
@@ -1815,6 +1827,9 @@ func rebuildListType(ctx context.Context, rb *IndexRebuild) error {
 	if needsRebuild, err := rb.needsListTypeRebuild(); !needsRebuild || err != nil {
 		return err
 	}
+	if _, err := requireBadgerOperationalStore("rebuild list data"); err != nil {
+		return err
+	}
 
 	pk := x.ParsedKey{Attr: rb.Attr}
 	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs}
@@ -1862,11 +1877,17 @@ func rebuildListType(ctx context.Context, rb *IndexRebuild) error {
 
 // DeleteAll deletes all entries in the posting list.
 func DeleteAll() error {
+	if _, err := requireBadgerOperationalStore("drop all posting data"); err != nil {
+		return err
+	}
 	ResetCache()
 	return pstore.DropAll()
 }
 
 func DeleteAllForNs(ns uint64) error {
+	if _, err := requireBadgerOperationalStore("drop all namespace data"); err != nil {
+		return err
+	}
 	ResetCache()
 	schema.State().DeletePredsForNs(ns)
 	return DeleteData(ns)
@@ -1874,6 +1895,9 @@ func DeleteAllForNs(ns uint64) error {
 
 // DeleteData deletes all data for the namespace but leaves types and schema intact.
 func DeleteData(ns uint64) error {
+	if _, err := requireBadgerOperationalStore("drop namespace data prefixes"); err != nil {
+		return err
+	}
 	ResetCache()
 	prefix := make([]byte, 9)
 	prefix[0] = x.DefaultPrefix
@@ -1883,6 +1907,9 @@ func DeleteData(ns uint64) error {
 
 // DeletePredicate deletes all entries and indices for a given predicate.
 func DeletePredicate(ctx context.Context, attr string, ts uint64) error {
+	if _, err := requireBadgerOperationalStore("drop predicate prefixes"); err != nil {
+		return err
+	}
 	glog.Infof("Dropping predicate: [%s]", attr)
 	ResetCache()
 	preds := schema.State().PredicatesToDelete(attr)
@@ -1901,6 +1928,9 @@ func DeletePredicate(ctx context.Context, attr string, ts uint64) error {
 
 // DeleteNamespace bans the namespace and deletes its predicates/types from the schema.
 func DeleteNamespace(ns uint64) error {
+	if _, err := requireBadgerOperationalStore("ban namespace"); err != nil {
+		return err
+	}
 	// TODO: We should only delete cache for certain keys, not all the keys.
 	ResetCache()
 	schema.State().DeletePredsForNs(ns)

@@ -29,6 +29,7 @@ const (
 
 var (
 	pstore                *badger.DB
+	postingStore          Store
 	closer                *z.Closer
 	EnableDetailedMetrics bool
 )
@@ -36,6 +37,19 @@ var (
 // Init initializes the posting lists package, the in memory and dirty list hash.
 func Init(ps *badger.DB, cacheSize int64, removeOnUpdate bool) {
 	pstore = ps
+	postingStore = NewBadgerStore(ps)
+	initForStore(cacheSize, removeOnUpdate)
+}
+
+// InitForStore initializes posting reads and writes through an explicit store.
+// Badger-only operational paths remain unavailable unless Init is used.
+func InitForStore(store Store, cacheSize int64, removeOnUpdate bool) {
+	pstore = nil
+	postingStore = store
+	initForStore(cacheSize, removeOnUpdate)
+}
+
+func initForStore(cacheSize int64, removeOnUpdate bool) {
 	closer = z.NewCloser(1)
 	go x.MonitorMemoryMetrics(closer)
 
@@ -54,7 +68,7 @@ func Cleanup() {
 // GetNoStore returns the list stored in the key or creates a new one if it doesn't exist.
 // It does not store the list in any cache.
 func GetNoStore(key []byte, readTs uint64) (rlist *List, err error) {
-	return getNew(key, pstore, readTs, false)
+	return getNewForStore(key, postingStore, readTs, false)
 }
 
 // LocalCache stores a cache of posting lists and deltas.
@@ -151,7 +165,7 @@ func (lc *LocalCache) UpdateCommitTs(commitTs uint64) {
 }
 
 func (lc *LocalCache) Find(pred []byte, filter func([]byte) bool) (uint64, error) {
-	txn := pstore.NewTransactionAt(lc.startTs, false)
+	txn := postingStore.NewReadTxn(lc.startTs)
 	defer txn.Discard()
 
 	attr := string(pred)
@@ -164,10 +178,11 @@ func (lc *LocalCache) Find(pred []byte, filter func([]byte) bool) (uint64, error
 
 	result := &pb.List{}
 	var prevKey []byte
-	itOpt := badger.DefaultIteratorOptions
-	itOpt.PrefetchValues = false
-	itOpt.AllVersions = true
-	itOpt.Prefix = prefix
+	itOpt := IteratorOptions{
+		AllVersions:    true,
+		PrefetchValues: false,
+		Prefix:         prefix,
+	}
 	it := txn.NewIterator(itOpt)
 	defer it.Close()
 
@@ -261,7 +276,7 @@ func (lc *LocalCache) getInternal(key []byte, readFromDisk, readUids bool) (*Lis
 		lc.RLock()
 		defer lc.RUnlock()
 		if lc.plists == nil {
-			return getNew(key, pstore, lc.startTs, readUids)
+			return getNewForStore(key, postingStore, lc.startTs, readUids)
 		}
 		if l, ok := lc.plists[skey]; ok {
 			return l, nil
@@ -276,7 +291,7 @@ func (lc *LocalCache) getInternal(key []byte, readFromDisk, readUids bool) (*Lis
 	var pl *List
 	if readFromDisk {
 		var err error
-		pl, err = getNew(key, pstore, lc.startTs, readUids)
+		pl, err = getNewForStore(key, postingStore, lc.startTs, readUids)
 		if err != nil {
 			return nil, err
 		}
@@ -312,7 +327,7 @@ func (lc *LocalCache) readPostingListAt(key []byte) (*pb.PostingList, error) {
 	}
 
 	pl := &pb.PostingList{}
-	txn := pstore.NewTransactionAt(lc.startTs, false)
+	txn := postingStore.NewReadTxn(lc.startTs)
 	defer txn.Discard()
 
 	item, err := txn.Get(key)

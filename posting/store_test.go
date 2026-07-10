@@ -15,6 +15,8 @@ import (
 	"github.com/dgraph-io/badger/v4"
 	"github.com/dgraph-io/badger/v4/options"
 	bpb "github.com/dgraph-io/badger/v4/pb"
+	"github.com/dgraph-io/dgraph/v25/protos/pb"
+	"github.com/dgraph-io/dgraph/v25/x"
 )
 
 func TestBadgerStorePreservesManagedTimestampsMetadataAndIteration(t *testing.T) {
@@ -50,8 +52,16 @@ func TestBadgerStorePreservesManagedTimestampsMetadataAndIteration(t *testing.T)
 	readAtNine := store.NewReadTxn(9)
 	item, err = readAtNine.Get(key)
 	require.NoError(t, err)
+	require.Equal(t, key, item.Key())
 	require.Equal(t, uint64(9), item.Version())
 	require.Equal(t, BitCompletePosting, item.UserMeta())
+	require.True(t, item.DiscardEarlierVersions())
+	var callbackValue []byte
+	require.NoError(t, item.Value(func(value []byte) error {
+		callbackValue = append(callbackValue, value...)
+		return nil
+	}))
+	require.Equal(t, []byte("at-nine"), callbackValue)
 	value, err = item.ValueCopy(nil)
 	require.NoError(t, err)
 	require.Equal(t, []byte("at-nine"), value)
@@ -92,6 +102,81 @@ func TestBadgerStorePreservesManagedTimestampsMetadataAndIteration(t *testing.T)
 	require.Equal(t, []uint64{8, 3}, gotVersions)
 	require.Equal(t, []byte{BitSchemaPosting, BitDeltaPosting}, gotMetas)
 	require.Equal(t, [][]byte{[]byte("v8"), []byte("v3")}, gotValues)
+
+	keyIter := iterTxn.NewKeyIterator(versionedKey, IteratorOptions{AllVersions: true})
+	defer keyIter.Close()
+	gotVersions = gotVersions[:0]
+	for keyIter.Seek(versionedKey); keyIter.Valid(); keyIter.Next() {
+		require.Equal(t, versionedKey, keyIter.Item().Key())
+		gotVersions = append(gotVersions, keyIter.Item().Version())
+	}
+	require.Equal(t, []uint64{8, 3}, gotVersions)
+	require.False(t, store.IsClosed())
+}
+
+func TestBadgerStorePreservesAtomicDelete(t *testing.T) {
+	db := openPostingStoreTestDB(t)
+	store := NewBadgerStore(db)
+	key := []byte("posting/store/delete")
+	commitStoreEntry(t, store, 4, Entry{Key: key, Value: []byte("before-delete")})
+
+	txn := store.NewWriteTxn()
+	require.NoError(t, txn.Delete(key))
+	done := make(chan error, 1)
+	require.NoError(t, txn.CommitAt(7, func(err error) { done <- err }))
+	require.NoError(t, <-done)
+	txn.Discard()
+
+	readBefore := store.NewReadTxn(6)
+	item, err := readBefore.Get(key)
+	require.NoError(t, err)
+	value, err := item.ValueCopy(nil)
+	require.NoError(t, err)
+	require.Equal(t, []byte("before-delete"), value)
+	readBefore.Discard()
+
+	readAfter := store.NewReadTxn(7)
+	_, err = readAfter.Get(key)
+	require.ErrorIs(t, err, badger.ErrKeyNotFound)
+	readAfter.Discard()
+}
+
+func TestBadgerOperationalPathsFailClosedWithoutBadger(t *testing.T) {
+	original := pstore
+	pstore = nil
+	t.Cleanup(func() { pstore = original })
+
+	err := DeleteAll()
+	require.ErrorIs(t, err, ErrBadgerOperationalPath)
+	require.Contains(t, err.Error(), "drop all posting data")
+
+	noop := &IndexRebuild{
+		Attr:          x.AttrInRootNamespace("store-noop"),
+		CurrentSchema: &pb.SchemaUpdate{},
+	}
+	require.NoError(t, noop.DropIndexes(t.Context()))
+	require.NoError(t, noop.BuildData(t.Context()))
+
+	drop := &IndexRebuild{
+		Attr: x.AttrInRootNamespace("store-drop"),
+		OldSchema: &pb.SchemaUpdate{
+			Directive: pb.SchemaUpdate_INDEX,
+			Tokenizer: []string{"term"},
+		},
+		CurrentSchema: &pb.SchemaUpdate{},
+	}
+	err = drop.DropIndexes(t.Context())
+	require.ErrorIs(t, err, ErrBadgerOperationalPath)
+	require.Contains(t, err.Error(), "drop index prefixes")
+
+	listRebuild := &IndexRebuild{
+		Attr:          x.AttrInRootNamespace("store-list-rebuild"),
+		OldSchema:     &pb.SchemaUpdate{List: false},
+		CurrentSchema: &pb.SchemaUpdate{List: true},
+	}
+	err = listRebuild.BuildData(t.Context())
+	require.ErrorIs(t, err, ErrBadgerOperationalPath)
+	require.Contains(t, err.Error(), "rebuild list data")
 }
 
 func TestTxnWriterForStorePreservesBadgerWriteBehavior(t *testing.T) {
