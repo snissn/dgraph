@@ -28,10 +28,10 @@ const (
 	FeatureCommandWALConditionalTransactions FeatureID = "command_wal_conditional_transactions"
 	FeatureBadgerEntryMetadata               FeatureID = "badger_entry_metadata"
 	FeatureBadgerEntryTTL                    FeatureID = "badger_entry_ttl"
-	// FeatureBadgerEntryMetadataTTL is retained for source compatibility. TTL
-	// now has its own operational-tier feature and this alias gates metadata only.
+	// FeatureBadgerEntryMetadataTTL retains the legacy operator-facing ID and
+	// continues to fail closed for the combined metadata-and-TTL contract.
 	// Deprecated: use FeatureBadgerEntryMetadata and FeatureBadgerEntryTTL.
-	FeatureBadgerEntryMetadataTTL      FeatureID = FeatureBadgerEntryMetadata
+	FeatureBadgerEntryMetadataTTL      FeatureID = "badger_entry_metadata_ttl"
 	FeatureBadgerAllVersionIterators   FeatureID = "badger_all_version_iterators"
 	FeatureBadgerStreamImportExport    FeatureID = "badger_stream_import_export"
 	FeatureBadgerSubscriptions         FeatureID = "badger_subscriptions"
@@ -195,6 +195,15 @@ var featureRegistry = []FeatureRecord{
 		Reason:       "nonzero Badger ExpiresAt values are outside the benchmark-minimal contract and must fail closed until TreeDB has an expiry contract",
 		Evidence: []string{
 			"worker/treedb README compatibility inventory: Entry.ExpiresAt, Item.ExpiresAt",
+		},
+	},
+	{
+		ID:     FeatureBadgerEntryMetadataTTL,
+		Status: StatusUnsupported,
+		Reason: "legacy combined metadata/TTL requests remain blocked unless both split compatibility contracts are supported",
+		Evidence: []string{
+			"FeatureRegistry badger_entry_metadata and badger_entry_ttl split rows",
+			"legacy badger_entry_metadata_ttl invocation gate",
 		},
 	},
 	{

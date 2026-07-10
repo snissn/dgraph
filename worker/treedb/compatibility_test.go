@@ -45,6 +45,10 @@ func TestPostingCompatibilityMatrixClassifiesDgraphBlockers(t *testing.T) {
 	require.Contains(t, byID[CompatibilityEntryMetadata].RequiredAPIs, "(*badger.Entry).WithDiscard")
 	require.Equal(t, StatusUnsupported, byID[CompatibilityEntryTTL].Status)
 	require.Equal(t, TierOperational, byID[CompatibilityEntryTTL].RequiredTier)
+	require.Equal(t, CompatibilityFamilyID("entry_metadata_ttl"), CompatibilityEntryMetadataTTL)
+	require.Equal(t, FeatureBadgerEntryMetadataTTL, byID[CompatibilityEntryMetadataTTL].Feature)
+	require.Equal(t, StatusUnsupported, byID[CompatibilityEntryMetadataTTL].Status)
+	require.Empty(t, byID[CompatibilityEntryMetadataTTL].RequiredTier)
 
 	require.Equal(t, StatusDisabledNeedBlocker, byID[CompatibilityAllVersionIteration].Status)
 	require.Contains(t, byID[CompatibilityAllVersionIteration].RequiredAPIs, "badger.IteratorOptions.AllVersions")

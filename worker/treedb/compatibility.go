@@ -16,10 +16,10 @@ const (
 	CompatibilityCommandWALTransactions       CompatibilityFamilyID = "command_wal_transactions"
 	CompatibilityEntryMetadata                CompatibilityFamilyID = "entry_metadata"
 	CompatibilityEntryTTL                     CompatibilityFamilyID = "entry_ttl"
-	// CompatibilityEntryMetadataTTL is retained for source compatibility and
-	// now aliases the benchmark-minimal metadata row. TTL has its own row.
+	// CompatibilityEntryMetadataTTL retains the legacy operator-facing family
+	// ID while metadata and TTL are modeled by separate tier rows.
 	// Deprecated: use CompatibilityEntryMetadata and CompatibilityEntryTTL.
-	CompatibilityEntryMetadataTTL      CompatibilityFamilyID = CompatibilityEntryMetadata
+	CompatibilityEntryMetadataTTL      CompatibilityFamilyID = "entry_metadata_ttl"
 	CompatibilityAllVersionIteration   CompatibilityFamilyID = "all_version_iteration"
 	CompatibilityStreamImportExport    CompatibilityFamilyID = "stream_import_export"
 	CompatibilitySubscriptions         CompatibilityFamilyID = "subscriptions"
@@ -127,6 +127,28 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		},
 		Evidence: []string{
 			"FeatureRegistry badger_entry_ttl invocation gate",
+		},
+	},
+	{
+		ID:              CompatibilityEntryMetadataTTL,
+		Feature:         FeatureBadgerEntryMetadataTTL,
+		Status:          StatusUnsupported,
+		Decision:        "retain the legacy combined family as a fail-closed compatibility gate while callers migrate to the split metadata and TTL families",
+		OperatorMessage: "TreeDB entry metadata/TTL compatibility remains unavailable; use the split entry_metadata and entry_ttl readiness rows for tier decisions.",
+		RequiredAPIs: []string{
+			"badger.Entry.UserMeta",
+			"(*badger.Item).UserMeta",
+			"badger.Entry.ExpiresAt",
+			"(*badger.Item).ExpiresAt",
+		},
+		DgraphCallSites: []string{
+			"posting.TxnWriter.SetAt",
+			"posting.ReadPostingList",
+			"worker.restore_map.go",
+		},
+		Evidence: []string{
+			"legacy entry_metadata_ttl compatibility family",
+			"FeatureRegistry split metadata and TTL invocation gates",
 		},
 	},
 	{

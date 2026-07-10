@@ -196,6 +196,7 @@ func TestOptionalCapabilityInvocationFailsClosed(t *testing.T) {
 		status  FeatureStatus
 	}{
 		{name: "ttl", feature: FeatureBadgerEntryTTL, status: StatusUnsupported},
+		{name: "legacy metadata and ttl", feature: FeatureBadgerEntryMetadataTTL, status: StatusUnsupported},
 		{name: "stream", feature: FeatureBadgerStreamImportExport, status: StatusDisabledNeedBlocker},
 		{name: "subscriptions", feature: FeatureBadgerSubscriptions, status: StatusDisabledNeedBlocker},
 		{name: "encryption", feature: FeatureEncryptionKeyRegistry, status: StatusUnsupported},
@@ -208,6 +209,16 @@ func TestOptionalCapabilityInvocationFailsClosed(t *testing.T) {
 			require.Contains(t, err.Error(), string(tt.feature)+"="+string(tt.status))
 		})
 	}
+}
+
+func TestLegacyMetadataTTLFeatureIDRemainsFailClosed(t *testing.T) {
+	require.Equal(t, FeatureID("badger_entry_metadata_ttl"), FeatureBadgerEntryMetadataTTL)
+
+	feature, ok := FeatureForID(FeatureID("badger_entry_metadata_ttl"))
+	require.True(t, ok)
+	require.Equal(t, StatusUnsupported, feature.Status)
+	require.Empty(t, feature.RequiredTier)
+	require.ErrorIs(t, CheckRequiredFeatures(FeatureBadgerEntryMetadataTTL), ErrUnsupportedFeature)
 }
 
 func TestCheckRequiredFeaturesFailClosed(t *testing.T) {
