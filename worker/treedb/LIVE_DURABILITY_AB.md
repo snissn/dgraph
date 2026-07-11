@@ -25,11 +25,12 @@ Each cell uses one Zero and one Alpha, the same deterministic schema, leased UID
 reads, 20% one-hop reads, 20% unique writes, fixed operation count, concurrency, seed, and excluded
 warmup. Every timed read is checked against the expected value and cycle edge. Post-run and restart
 checksums include canonical `source value -> target value` topology, so they are UID-independent;
-unique write nodes are expected to have no edge. Raw JSON includes throughput, p50/p95/p99 latency,
-Alpha CPU and RSS/HWM, logical and allocated posting bytes, available write/GC/flush/checkpoint
-counters, recovery time, runtime-observed backend/durability, schema status, posting checksum/count,
-restart parity, unsupported-feature status, SHAs, dirty state, command,
-CPU/RAM/storage/filesystem/environment, and contamination.
+unique write nodes are expected to have no edge. Validation enumerates every node carrying
+`bench.value` and rejects unexpected, duplicate, or omitted UIDs before hashing. Raw JSON includes
+throughput, p50/p95/p99 latency, Alpha CPU and RSS/HWM, logical and allocated posting bytes,
+available write/GC/flush/checkpoint counters, recovery time, runtime-observed backend/durability,
+schema status, posting checksum/count, restart parity, unsupported-feature status, SHAs, dirty
+state, command, CPU/RAM/storage/filesystem/environment, and contamination.
 
 Aggregation fails on an incomplete matrix, wrong backend or durability, workload mismatch, missing
 metric contract, setup/timed overlap, dirty or excluded run, cross-run

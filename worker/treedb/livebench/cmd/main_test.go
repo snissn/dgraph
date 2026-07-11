@@ -52,6 +52,38 @@ func TestCanonicalPostingRowIncludesAndValidatesEdgeTopology(t *testing.T) {
 	}
 }
 
+func TestValidatePostingRowsRejectsUnexpectedDuplicateAndOmittedNodes(t *testing.T) {
+	expected := map[string]expectedNode{
+		"0x1": {Value: "one"},
+		"0x2": {Value: "two"},
+	}
+	valid := []queryNode{{UID: "0x1", Value: "one"}, {UID: "0x2", Value: "two"}}
+	rows, err := validatePostingRows(valid, expected)
+	if err != nil || len(rows) != len(expected) {
+		t.Fatalf("valid rows rejected: rows=%v err=%v", rows, err)
+	}
+
+	tests := []struct {
+		name  string
+		nodes []queryNode
+		want  string
+	}{
+		{"unexpected extra UID", append(append([]queryNode{}, valid...), queryNode{UID: "0x999", Value: "extra"}), "unexpected posting row for 0x999"},
+		{"duplicate expected UID", append(append([]queryNode{}, valid...), valid[0]), "duplicate posting row for 0x1"},
+		{"omitted expected UID", valid[:1], "omitted posting row for 0x2"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := validatePostingRows(tc.nodes, expected); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %q", err, tc.want)
+			}
+		})
+	}
+	if query := postingValidationQuery(len(expected)); !strings.Contains(query, "func: has(bench.value), first: 3") {
+		t.Fatalf("validation query does not enumerate all benchmark nodes plus one: %s", query)
+	}
+}
+
 func TestBadgerFlushMetricIsUnavailable(t *testing.T) {
 	m := metrics("badger", 1, 2, 3, 4,
 		map[string]float64{"badger_write_num_vlog": 1},

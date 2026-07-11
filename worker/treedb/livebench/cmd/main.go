@@ -512,59 +512,60 @@ func validateReadResponse(raw []byte, uid string, expected expectedNode, oneHop 
 }
 
 func validatePosting(ctx context.Context, dg *dgo.Dgraph, expected map[string]expectedNode) (string, int, error) {
-	ids := make([]string, 0, len(expected))
-	for uid := range expected {
-		ids = append(ids, uid)
+	resp, err := dg.NewReadOnlyTxn().Query(ctx, postingValidationQuery(len(expected)))
+	if err != nil {
+		return "", 0, err
 	}
-	sort.Strings(ids)
-	var rows []string
-	seen := make(map[string]struct{}, len(ids))
-	for base := 0; base < len(ids); base += 100 {
-		end := base + 100
-		if end > len(ids) {
-			end = len(ids)
-		}
-		var q strings.Builder
-		q.WriteString("{ q(func: uid(")
-		for i, id := range ids[base:end] {
-			if i > 0 {
-				q.WriteByte(',')
-			}
-			q.WriteString(id)
-		}
-		q.WriteString(")) { uid bench.value bench.next { uid bench.value } } }")
-		resp, err := dg.NewReadOnlyTxn().Query(ctx, q.String())
-		if err != nil {
-			return "", 0, err
-		}
-		var data struct {
-			Q []queryNode `json:"q"`
-		}
-		if err := json.Unmarshal(resp.Json, &data); err != nil {
-			return "", 0, err
-		}
-		for _, n := range data.Q {
-			want, ok := expected[n.UID]
-			if _, duplicate := seen[n.UID]; duplicate {
-				return "", len(rows), fmt.Errorf("duplicate posting row for %s", n.UID)
-			}
-			seen[n.UID] = struct{}{}
-			if !ok {
-				return "", len(rows), fmt.Errorf("unexpected posting row for %s", n.UID)
-			}
-			row, err := canonicalPostingRow(n, want)
-			if err != nil {
-				return "", len(rows), err
-			}
-			rows = append(rows, row)
-		}
+	var data struct {
+		Q []queryNode `json:"q"`
+	}
+	if err := json.Unmarshal(resp.Json, &data); err != nil {
+		return "", 0, err
+	}
+	rows, err := validatePostingRows(data.Q, expected)
+	if err != nil {
+		return "", len(rows), err
 	}
 	sort.Strings(rows)
-	if len(rows) != len(ids) {
-		return "", len(rows), fmt.Errorf("posting validation count=%d want=%d", len(rows), len(ids))
-	}
 	h := sha256.Sum256([]byte(strings.Join(rows, "\n")))
 	return hex.EncodeToString(h[:]), len(rows), nil
+}
+
+func postingValidationQuery(expectedCount int) string {
+	// Asking for one more than the expected cardinality makes any extra
+	// bench.value node observable instead of relying on Dgraph's default limit.
+	return fmt.Sprintf("{ q(func: has(bench.value), first: %d) { uid bench.value bench.next { uid bench.value } } }", expectedCount+1)
+}
+
+func validatePostingRows(nodes []queryNode, expected map[string]expectedNode) ([]string, error) {
+	rows := make([]string, 0, len(nodes))
+	seen := make(map[string]struct{}, len(nodes))
+	for _, node := range nodes {
+		if _, duplicate := seen[node.UID]; duplicate {
+			return rows, fmt.Errorf("duplicate posting row for %s", node.UID)
+		}
+		seen[node.UID] = struct{}{}
+		want, ok := expected[node.UID]
+		if !ok {
+			return rows, fmt.Errorf("unexpected posting row for %s", node.UID)
+		}
+		row, err := canonicalPostingRow(node, want)
+		if err != nil {
+			return rows, err
+		}
+		rows = append(rows, row)
+	}
+	missing := make([]string, 0, len(expected)-len(seen))
+	for uid := range expected {
+		if _, ok := seen[uid]; !ok {
+			missing = append(missing, uid)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return rows, fmt.Errorf("omitted posting row for %s", missing[0])
+	}
+	return rows, nil
 }
 
 func canonicalPostingRow(node queryNode, expected expectedNode) (string, error) {
