@@ -64,15 +64,28 @@ func TestCheckPostingStoreBackendReadyFailsClosedForTreeDB(t *testing.T) {
 	require.ErrorIs(t, err, treedb.ErrUnsupportedFeature)
 	require.Contains(t, err.Error(), "posting-store backend \"treedb\" is experimental and not ready")
 	require.Contains(t, err.Error(), string(treedb.TierBenchmarkMinimal))
-	require.Contains(t, err.Error(), string(treedb.FeatureBadgerManagedTransactions))
-	require.Contains(t, err.Error(), string(treedb.FeatureBadgerEntryMetadata))
-	require.Contains(t, err.Error(), string(treedb.FeatureBadgerAllVersionIterators))
+	require.Contains(t, err.Error(), string(treedb.FeatureLifecycleGCStats))
+	require.NotContains(t, err.Error(), string(treedb.FeatureBadgerManagedTransactions))
+	require.NotContains(t, err.Error(), string(treedb.FeatureBadgerEntryMetadata))
+	require.NotContains(t, err.Error(), string(treedb.FeatureBadgerAllVersionIterators))
 	require.NotContains(t, err.Error(), string(treedb.FeatureBadgerStreamImportExport))
 	require.NotContains(t, err.Error(), string(treedb.FeatureEncryptionKeyRegistry))
 
 	var readinessErr *treedb.FeatureReadinessError
 	require.True(t, errors.As(err, &readinessErr))
-	require.NotEmpty(t, readinessErr.Blockers)
+	require.Equal(t, []treedb.FeatureRecord{
+		{
+			ID:           treedb.FeatureLifecycleGCStats,
+			Status:       treedb.StatusDisabledNeedBlocker,
+			RequiredTier: treedb.TierBenchmarkMinimal,
+			Reason:       "TreeDBStore owns close, status, value-log GC, full compaction, and stats, but the Alpha lifecycle does not invoke that owner surface yet",
+			Evidence: []string{
+				"dgraphTreeDBAPI compile assertion",
+				"TestOpenSmoke",
+				"posting.TestTreeDBStoreLifecycleStatusAndDurabilityModes",
+			},
+		},
+	}, readinessErr.Blockers)
 }
 
 func TestCheckPostingStoreBackendReadyRejectsEncryptedTreeDBStartup(t *testing.T) {
