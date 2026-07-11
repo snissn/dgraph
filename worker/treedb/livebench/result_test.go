@@ -2,6 +2,7 @@
 package livebench
 
 import (
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -9,6 +10,21 @@ import (
 	"testing"
 	"time"
 )
+
+func validSet(repeats int) []Result {
+	set := make([]Result, 0, repeats*4)
+	for _, class := range []string{"relaxed", "durable"} {
+		for _, backend := range []string{"badger", "treedb"} {
+			for repeat := 1; repeat <= repeats; repeat++ {
+				r := validResult(backend, class)
+				r.Repeat = repeat
+				r.RunID = fmt.Sprintf("%s-%s-r%d", backend, class, repeat)
+				set = append(set, r)
+			}
+		}
+	}
+	return set
+}
 
 func validResult(backend, class string) Result {
 	now := time.Now()
@@ -155,6 +171,70 @@ func TestValidateSetRejectsCrossDurabilityChecksumAndCountMismatch(t *testing.T)
 	counts[3].Validation.NodeCount++
 	if err := ValidateSet(counts, 1); err == nil || !strings.Contains(err.Error(), "node-count parity mismatch") {
 		t.Fatalf("count mismatch got %v", err)
+	}
+}
+
+func TestValidateSetRejectsDirtyOrMismatchedReproductionContext(t *testing.T) {
+	tests := []struct {
+		name   string
+		want   string
+		mutate func(*Result)
+	}{
+		{"dirty", "dirty reproduction context", func(r *Result) { r.Context.Dirty = true }},
+		{"Dgraph revision", "DgraphSHA", func(r *Result) { r.Context.DgraphSHA = "different" }},
+		{"gomap revision", "GomapVersion", func(r *Result) { r.Context.GomapVersion = "different" }},
+		{"Go version", "GoVersion", func(r *Result) { r.Context.GoVersion = "different" }},
+		{"host", "Host", func(r *Result) { r.Context.Host = "different" }},
+		{"kernel", "Kernel", func(r *Result) { r.Context.Kernel = "different" }},
+		{"CPU", "CPU", func(r *Result) { r.Context.CPU = "different" }},
+		{"RAM", "TotalRAMBytes", func(r *Result) { r.Context.TotalRAMBytes++ }},
+		{"storage", "storage differs", func(r *Result) { r.Context.Storage.Source = "/dev/different" }},
+		{"environment", "environment differs", func(r *Result) { r.Context.Environment["TMPDIR"] = "/different" }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			set := validSet(1)
+			tc.mutate(&set[1])
+			if err := ValidateSet(set, 1); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want context failure containing %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateSetAllowsPerRunReproductionDetailsToVary(t *testing.T) {
+	set := validSet(1)
+	set[1].Context.ExactCommand = []string{"different", "command"}
+	set[1].Context.RawPath = "/different/result.json"
+	set[1].Context.Profiles = []string{"/different/cpu.pprof"}
+	set[1].Context.Contaminants = []string{}
+	if err := ValidateSet(set, 1); err != nil {
+		t.Fatalf("per-run reproduction details were equality-gated: %v", err)
+	}
+}
+
+func TestValidateSetRejectsInvalidRepeatCoverageAndDuplicateRunID(t *testing.T) {
+	tests := []struct {
+		name   string
+		want   string
+		mutate func([]Result)
+	}{
+		{"repeat above range", "outside 1..1", func(set []Result) { set[0].Repeat = 2 }},
+		{"duplicate repeat", "duplicate repeat ordinal", func(set []Result) { set[1].Repeat = 1 }},
+		{"duplicate run ID", "duplicate run_id", func(set []Result) { set[1].RunID = set[0].RunID }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repeats := 2
+			if tc.name == "repeat above range" {
+				repeats = 1
+			}
+			set := validSet(repeats)
+			tc.mutate(set)
+			if err := ValidateSet(set, repeats); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want repeat/run ID failure containing %q", err, tc.want)
+			}
+		})
 	}
 }
 

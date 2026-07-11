@@ -80,15 +80,28 @@ storage_model=$(lsblk -dn -o MODEL "${storage_device}")
 storage_size_bytes=$(lsblk -dn -b -o SIZE "${storage_device}")
 ram_total_bytes=$(awk '/^MemTotal:/ { print $2 * 1024 }' /proc/meminfo)
 cpu_model=$(awk -F ': ' '/^model name/ { print $2; exit }' /proc/cpuinfo)
+context_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+dgraph_sha=$(git rev-parse HEAD)
+dirty_status=$(git status --porcelain)
+dirty=false
+if [[ -n ${dirty_status} ]]; then
+	dirty=true
+fi
+gomap_version=$(GOWORK=off go list -m github.com/snissn/gomap)
+host=$(hostname)
+kernel=$(uname -srvmo)
+go_version=$(go version)
+construction_audit=$(pgrep -af construction_audit.py || true)
+read -r loadavg </proc/loadavg
 
 {
-	echo "utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-	echo "dgraph_sha=$(git rev-parse HEAD)"
-	echo "dirty=$([[ -n $(git status --porcelain) ]] && echo true || echo false)"
-	echo "gomap=$(GOWORK=off go list -m github.com/snissn/gomap)"
-	echo "host=$(hostname)"
-	echo "kernel=$(uname -srvmo)"
-	echo "go=$(go version)"
+	echo "utc=${context_utc}"
+	echo "dgraph_sha=${dgraph_sha}"
+	echo "dirty=${dirty}"
+	echo "gomap=${gomap_version}"
+	echo "host=${host}"
+	echo "kernel=${kernel}"
+	echo "go=${go_version}"
 	echo "cpu=${cpu_model}"
 	echo "ram_total_bytes=${ram_total_bytes}"
 	echo "storage_scope=artifact_and_posting"
@@ -101,8 +114,8 @@ cpu_model=$(awk -F ': ' '/^model name/ { print $2; exit }' /proc/cpuinfo)
 	echo "environment_TMPDIR=${TMPDIR-}"
 	echo "environment_GOMAXPROCS=${GOMAXPROCS-}"
 	echo "environment_GOFLAGS=${GOFLAGS-}"
-	echo "construction_audit=$(pgrep -af construction_audit.py || true)"
-	echo "loadavg=$(cat /proc/loadavg)"
+	echo "construction_audit=${construction_audit}"
+	echo "loadavg=${loadavg}"
 	echo "micro_command=GOWORK=off ${micro_cmd[*]}"
 	echo "live_shape=repeats=${repeats} dataset=${dataset} warmup=${warmup} timed=${timed} concurrency=${concurrency} seed=20260711 topology=single-zero-single-alpha mix=60-point/20-one-hop/20-write"
 	echo "measurement_boundary=database creation, schema, load, and warmup precede timed operations; restart recovery is measured separately"

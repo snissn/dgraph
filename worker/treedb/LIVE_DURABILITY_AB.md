@@ -31,12 +31,14 @@ restart parity, unsupported-feature status, SHAs, dirty state, command,
 CPU/RAM/storage/filesystem/environment, and contamination.
 
 Aggregation fails on an incomplete matrix, wrong backend or durability, workload mismatch, missing
-metric contract, setup/timed overlap, excluded run, posting mismatch, schema failure, restart
-failure, or unsupported-feature status failure. Start and final samples finding
-`construction_audit.py`, or host load above 75% of logical CPUs, mark a run excluded. Unavailable
-counters are retained with a source and reason; they are never manufactured. Relaxed and durable
-results have separate report headings and separate decisions. Badger remains the production default.
-Badger vlog-write counters are not presented as semantic flush counts.
+metric contract, setup/timed overlap, dirty or excluded run, cross-run
+revision/host/storage/environment mismatch, duplicate run ID, missing or duplicate per-cell repeat
+ordinal, posting mismatch, schema failure, restart failure, or unsupported-feature status failure.
+Start and final samples finding `construction_audit.py`, or host load above 75% of logical CPUs,
+mark a run excluded. Unavailable counters are retained with a source and reason; they are never
+manufactured. Relaxed and durable results have separate report headings and separate decisions.
+Badger remains the production default. Badger vlog-write counters are not presented as semantic
+flush counts.
 
 The issue #17 decision evidence produced from Dgraph commit
 `6ae8d25b27ca6ebf20d8bec4c5de6151aba341a5` is committed under

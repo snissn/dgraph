@@ -115,7 +115,7 @@ func run(o options) (err error) {
 	if err != nil {
 		return err
 	}
-	defer zero.stop()
+	defer stopOnReturn(zero, "zero", &err)
 	if err := waitHTTP(ctx, fmt.Sprintf("http://localhost:%d/health", 6080+o.zeroOffset), 60*time.Second); err != nil {
 		return fmt.Errorf("zero readiness: %w", err)
 	}
@@ -123,16 +123,16 @@ func run(o options) (err error) {
 	if err != nil {
 		return err
 	}
-	defer alpha.stop()
+	defer stopOnReturn(alpha, "alpha", &err)
 	httpBase := fmt.Sprintf("http://localhost:%d", 8080+o.alphaOffset)
 	if err := waitHTTP(ctx, httpBase+"/health", 90*time.Second); err != nil {
 		return fmt.Errorf("alpha readiness: %w", err)
 	}
-	dg, conn, err := client(fmt.Sprintf("localhost:%d", 9080+o.alphaOffset))
+	dg, err := client(fmt.Sprintf("localhost:%d", 9080+o.alphaOffset))
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer dg.Close()
 
 	r.SetupStarted = time.Now().UTC()
 	dataset, err := setup(ctx, dg, o.dataset)
@@ -148,7 +148,7 @@ func run(o options) (err error) {
 	promBefore, _ := prometheus(httpBase + "/debug/prometheus_metrics")
 	cpuBefore, err := procCPU(alpha.cmd.Process.Pid)
 	if err != nil {
-		return fmt.Errorf("collect Alpha CPU before timed phase: %w", err)
+		return fmt.Errorf("collect alpha CPU before timed phase: %w", err)
 	}
 	r.TimedStarted = time.Now().UTC()
 	var profileDone chan error
@@ -172,10 +172,10 @@ func run(o options) (err error) {
 	r.LatencyMS = livebench.Percentiles(latencies)
 	cpuAfter, err := procCPU(alpha.cmd.Process.Pid)
 	if err != nil {
-		return fmt.Errorf("collect Alpha CPU after timed phase: %w", err)
+		return fmt.Errorf("collect alpha CPU after timed phase: %w", err)
 	}
 	if cpuAfter < cpuBefore {
-		return fmt.Errorf("Alpha CPU counter regressed: before=%f after=%f", cpuBefore, cpuAfter)
+		return fmt.Errorf("alpha CPU counter regressed: before=%f after=%f", cpuBefore, cpuAfter)
 	}
 	hwm, err := procHWM(alpha.cmd.Process.Pid)
 	if err != nil {
@@ -203,9 +203,7 @@ func run(o options) (err error) {
 	r.Validation.PostingChecksum = checksum
 	r.Validation.NodeCount = count
 
-	if err := conn.Close(); err != nil {
-		return err
-	}
+	dg.Close()
 	if err := alpha.stop(); err != nil {
 		return fmt.Errorf("stop alpha: %w", err)
 	}
@@ -214,17 +212,17 @@ func run(o options) (err error) {
 	if err != nil {
 		return err
 	}
-	defer alpha.stop()
+	defer stopOnReturn(alpha, "restarted alpha", &err)
 	if err := waitHTTP(ctx, httpBase+"/health", 90*time.Second); err != nil {
 		return fmt.Errorf("alpha restart: %w", err)
 	}
 	recoverySeconds := time.Since(recoveryStart).Seconds()
 	r.Metrics["recovery_seconds"] = livebench.Metric{Available: true, Value: recoverySeconds, Unit: "seconds", Source: "alpha process restart to healthy"}
-	dg, conn, err = client(fmt.Sprintf("localhost:%d", 9080+o.alphaOffset))
+	dg, err = client(fmt.Sprintf("localhost:%d", 9080+o.alphaOffset))
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer dg.Close()
 	restartChecksum, restartCount, err := validatePosting(ctx, dg, expected)
 	r.Validation.RestartOK = err == nil && restartChecksum == checksum && restartCount == count
 	if err != nil {
@@ -298,14 +296,25 @@ func (p *process) stop() error {
 	}
 }
 
+func stopOnReturn(p *process, name string, runErr *error) {
+	if err := p.stop(); err != nil && *runErr == nil {
+		*runErr = fmt.Errorf("stop %s: %w", name, err)
+	}
+}
+
 func waitHTTP(ctx context.Context, url string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err == nil {
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+				_ = resp.Body.Close()
+				return fmt.Errorf("drain readiness response: %w", err)
+			}
+			if err := resp.Body.Close(); err != nil {
+				return fmt.Errorf("close readiness response: %w", err)
+			}
 			if resp.StatusCode == http.StatusOK {
 				return nil
 			}
@@ -318,12 +327,8 @@ func waitHTTP(ctx context.Context, url string, timeout time.Duration) error {
 	}
 	return errors.New("timeout")
 }
-func client(addr string) (*dgo.Dgraph, *grpc.ClientConn, error) {
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, nil, err
-	}
-	return dgo.NewDgraphClient(api.NewDgraphClient(conn)), conn, nil
+func client(addr string) (*dgo.Dgraph, error) {
+	return dgo.NewClient(addr, dgo.WithGrpcOption(grpc.WithTransportCredentials(insecure.NewCredentials())))
 }
 
 func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]expectedNode, error) {
@@ -371,6 +376,7 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNo
 		ms    float64
 		uid   string
 		value string
+		write bool
 		err   error
 	}
 	uids := make([]string, 0, len(dataset))
@@ -406,7 +412,7 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNo
 					resp, mutErr := dg.NewTxn().Mutate(ctx, &api.Mutation{SetNquads: []byte(fmt.Sprintf("_:w <bench.value> %q .", value(writeID))), CommitNow: true})
 					err = mutErr
 					if err == nil {
-						out <- sample{ms: float64(time.Since(start).Microseconds()) / 1000, uid: resp.Uids["w"], value: value(writeID)}
+						out <- sample{ms: float64(time.Since(start).Microseconds()) / 1000, uid: resp.Uids["w"], value: value(writeID), write: true}
 						continue
 					}
 				}
@@ -421,15 +427,28 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNo
 		if s.err != nil {
 			return nil, nil, s.err
 		}
-		if s.uid != "" {
-			if s.value == "" {
-				return nil, nil, errors.New("write result missing value")
+		if s.write {
+			if err := recordExpectedWrite(writes, s.uid, s.value); err != nil {
+				return nil, nil, err
 			}
-			writes[s.uid] = expectedNode{Value: s.value}
 		}
 		values = append(values, s.ms)
 	}
 	return values, writes, nil
+}
+
+func recordExpectedWrite(writes map[string]expectedNode, uid, value string) error {
+	if uid == "" {
+		return errors.New("successful write mutation omitted uid for blank node w")
+	}
+	if value == "" {
+		return errors.New("write result missing value")
+	}
+	if _, duplicate := writes[uid]; duplicate {
+		return fmt.Errorf("duplicate write uid %s", uid)
+	}
+	writes[uid] = expectedNode{Value: value}
+	return nil
 }
 
 func value(i int) string { return fmt.Sprintf("node-%08d-%s", i, strings.Repeat("x", 48)) }
@@ -635,7 +654,25 @@ func unsupportedOK(backend string, status map[string]string) bool {
 	if backend == "badger" {
 		return u == ""
 	}
-	return strings.Contains(u, "backup") && strings.Contains(u, "encryption") && strings.Contains(u, "sort")
+	if backend != "treedb" {
+		return false
+	}
+	want := map[string]struct{}{
+		"backup": {}, "export": {}, "import": {}, "restore": {}, "encryption": {},
+		"in_memory": {}, "ttl": {}, "badger_subscribe": {}, "sort": {}, "count": {}, "inequality": {},
+	}
+	got := make(map[string]struct{}, len(want))
+	for _, token := range strings.Split(u, ",") {
+		token = strings.TrimSpace(token)
+		if _, expected := want[token]; !expected {
+			return false
+		}
+		if _, duplicate := got[token]; duplicate {
+			return false
+		}
+		got[token] = struct{}{}
+	}
+	return len(got) == len(want)
 }
 
 func prometheus(url string) (map[string]float64, error) {

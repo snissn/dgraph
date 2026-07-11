@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"sort"
@@ -276,6 +277,9 @@ func WriteImmutableBytes(path string, value []byte) error {
 }
 
 func ValidateSet(results []Result, repeats int) error {
+	if repeats < 1 {
+		return errors.New("repeats must be positive")
+	}
 	if len(results) != repeats*4 {
 		return fmt.Errorf("incomplete matrix: got %d results, want %d", len(results), repeats*4)
 	}
@@ -283,14 +287,40 @@ func ValidateSet(results []Result, repeats int) error {
 	fingerprint := ""
 	checksum := ""
 	nodeCount := 0
+	seenRunIDs := make(map[string]struct{}, len(results))
+	seenRepeats := make(map[string]map[int]string, 4)
+	var contextIdentity *Context
 	for _, r := range results {
 		if err := r.Validate(); err != nil {
 			return fmt.Errorf("%s: %w", r.RunID, err)
 		}
+		if r.Context.Dirty {
+			return fmt.Errorf("%s has dirty reproduction context", r.RunID)
+		}
 		if r.Context.Excluded {
 			return fmt.Errorf("%s is excluded: %s", r.RunID, r.Context.ExclusionReason)
 		}
+		if _, duplicate := seenRunIDs[r.RunID]; duplicate {
+			return fmt.Errorf("duplicate run_id %q", r.RunID)
+		}
+		seenRunIDs[r.RunID] = struct{}{}
+		if contextIdentity == nil {
+			identity := r.Context
+			contextIdentity = &identity
+		} else if err := sameReproductionContext(*contextIdentity, r.Context); err != nil {
+			return fmt.Errorf("reproduction context mismatch for %s: %w", r.RunID, err)
+		}
 		key := r.Config.Backend + "/" + r.Config.DurabilityClass
+		if r.Repeat < 1 || r.Repeat > repeats {
+			return fmt.Errorf("repeat ordinal %d for %s is outside 1..%d", r.Repeat, key, repeats)
+		}
+		if seenRepeats[key] == nil {
+			seenRepeats[key] = make(map[int]string, repeats)
+		}
+		if firstRunID, duplicate := seenRepeats[key][r.Repeat]; duplicate {
+			return fmt.Errorf("duplicate repeat ordinal %d for %s (%s and %s); matrix is missing another ordinal", r.Repeat, key, firstRunID, r.RunID)
+		}
+		seenRepeats[key][r.Repeat] = r.RunID
 		want[key]--
 		if fingerprint == "" {
 			fingerprint = r.Config.Fingerprint()
@@ -310,6 +340,41 @@ func ValidateSet(results []Result, repeats int) error {
 		if n != 0 {
 			return fmt.Errorf("matrix count mismatch for %s: %d", key, n)
 		}
+		for repeat := 1; repeat <= repeats; repeat++ {
+			if _, ok := seenRepeats[key][repeat]; !ok {
+				return fmt.Errorf("missing repeat ordinal %d for %s", repeat, key)
+			}
+		}
+	}
+	return nil
+}
+
+// sameReproductionContext compares only the matrix-wide identity fields. Per-run
+// commands, paths, profiles, contaminants, and exclusion details intentionally vary.
+func sameReproductionContext(want, got Context) error {
+	for _, field := range []struct {
+		name      string
+		want, got string
+	}{
+		{"DgraphSHA", want.DgraphSHA, got.DgraphSHA},
+		{"GomapVersion", want.GomapVersion, got.GomapVersion},
+		{"GoVersion", want.GoVersion, got.GoVersion},
+		{"Host", want.Host, got.Host},
+		{"Kernel", want.Kernel, got.Kernel},
+		{"CPU", want.CPU, got.CPU},
+	} {
+		if field.want != field.got {
+			return fmt.Errorf("%s differs: got %q, want %q", field.name, field.got, field.want)
+		}
+	}
+	if want.TotalRAMBytes != got.TotalRAMBytes {
+		return fmt.Errorf("TotalRAMBytes differs: got %d, want %d", got.TotalRAMBytes, want.TotalRAMBytes)
+	}
+	if want.Storage != got.Storage {
+		return fmt.Errorf("storage differs: got %+v, want %+v", got.Storage, want.Storage)
+	}
+	if !maps.Equal(want.Environment, got.Environment) {
+		return fmt.Errorf("environment differs: got %v, want %v", got.Environment, want.Environment)
 	}
 	return nil
 }

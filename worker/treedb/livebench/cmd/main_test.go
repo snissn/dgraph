@@ -61,6 +61,48 @@ func TestBadgerFlushMetricIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestUnsupportedOKRequiresExactExpectedTokenSet(t *testing.T) {
+	want := "backup,export,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality"
+	for _, tokens := range []string{want, "inequality,count,sort,badger_subscribe,ttl,in_memory,encryption,restore,import,export,backup"} {
+		if !unsupportedOK("treedb", map[string]string{"unsupported": tokens}) {
+			t.Fatalf("exact TreeDB unsupported set rejected: %q", tokens)
+		}
+	}
+	for name, tokens := range map[string]string{
+		"missing": "backup,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality",
+		"spoofed": "notbackup,export,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality",
+		"extra":   want + ",future",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if unsupportedOK("treedb", map[string]string{"unsupported": tokens}) {
+				t.Fatalf("invalid unsupported set accepted: %q", tokens)
+			}
+		})
+	}
+	if !unsupportedOK("badger", map[string]string{"unsupported": ""}) || unsupportedOK("badger", map[string]string{"unsupported": "backup"}) {
+		t.Fatal("Badger unsupported set must be exactly empty")
+	}
+	if unsupportedOK("other", map[string]string{"unsupported": want}) {
+		t.Fatal("unknown backend accepted")
+	}
+}
+
+func TestRecordExpectedWriteRejectsMissingAndDuplicateUID(t *testing.T) {
+	writes := map[string]expectedNode{}
+	if err := recordExpectedWrite(writes, "", "value"); err == nil || !strings.Contains(err.Error(), "omitted uid") {
+		t.Fatalf("missing UID got %v", err)
+	}
+	if err := recordExpectedWrite(writes, "0x1", "first"); err != nil {
+		t.Fatal(err)
+	}
+	if err := recordExpectedWrite(writes, "0x1", "second"); err == nil || !strings.Contains(err.Error(), "duplicate write uid") {
+		t.Fatalf("duplicate UID got %v", err)
+	}
+	if got := writes["0x1"].Value; got != "first" {
+		t.Fatalf("duplicate overwrote first oracle value: %q", got)
+	}
+}
+
 func TestCoreCollectorsReturnErrorsInsteadOfSyntheticValues(t *testing.T) {
 	if _, err := procCPU(-1); err == nil {
 		t.Fatal("procCPU accepted missing process")
