@@ -33,7 +33,7 @@ const (
 	//       the *Defaults string. Also, since these strings are printed in --help text, avoid line
 	//       breaks.
 	AuditDefaults  = `compress=false; days=10; size=100; dir=; output=; encrypt-file=;`
-	BadgerDefaults = `compression=snappy; numgoroutines=8;`
+	BadgerDefaults = `compression=snappy; numgoroutines=8; syncwrites=false;`
 	RaftDefaults   = `learner=false; snapshot-after-entries=10000; ` +
 		`snapshot-after-duration=30m; pending-proposals=256; idx=; group=;`
 	SecurityDefaults = `token=; whitelist=;`

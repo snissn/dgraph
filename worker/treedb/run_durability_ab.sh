@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 usage() {
-	printf '%s\n' 'usage: worker/treedb/run_durability_ab.sh [--smoke] --artifact-dir NEW_DIR' \
+	printf '%s\n' 'usage: worker/treedb/run_durability_ab.sh [--smoke] --artifact-dir OUTSIDE_REPOSITORY_DIR' \
 		'Runs adapter microbenchmarks and the four-cell live durability matrix.' \
 		'Decision runs also collect separate relaxed/durable TreeDB CPU profiles.' \
 		'Environment overrides: REPEATS DATASET_NODES WARMUP_OPS TIMED_OPS CONCURRENCY COUNT BENCHTIME PROFILE_RELAXED_OPS PROFILE_DURABLE_OPS PROFILE_SECONDS.'
@@ -35,12 +35,18 @@ done
 	usage >&2
 	exit 2
 }
+repo_root=$(git rev-parse --show-toplevel)
+repo_root=$(realpath -e -- "${repo_root}")
+artifact_dir=$(realpath -m -- "${artifact_dir}")
+if [[ ${artifact_dir} == "${repo_root}" || ${artifact_dir} == "${repo_root}/"* ]]; then
+	echo "artifact directory must be outside repository: ${artifact_dir}" >&2
+	exit 2
+fi
 [[ ! -e ${artifact_dir} ]] || {
 	echo "artifact directory already exists: ${artifact_dir}" >&2
 	exit 1
 }
 
-repo_root=$(git rev-parse --show-toplevel)
 cd "${repo_root}"
 mkdir -p "${artifact_dir}/bin" "${artifact_dir}/microbench"
 

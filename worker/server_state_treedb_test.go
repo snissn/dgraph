@@ -142,6 +142,29 @@ func TestServerStateBadgerPreservesConfiguredSyncWrites(t *testing.T) {
 	require.Equal(t, "true", status["durable_commits"])
 }
 
+func TestBadgerSuperFlagDefaultsPreserveRelaxedWritesAndAllowDurableOverride(t *testing.T) {
+	require.Contains(t, BadgerDefaults, "syncwrites=false")
+	defaults := badger.DefaultOptions("").FromSuperFlag(BadgerDefaults)
+	require.False(t, defaults.SyncWrites)
+	require.True(t, defaults.FromSuperFlag("syncwrites=true").SyncWrites)
+}
+
+func TestServerStateBadgerDefaultsStayRelaxed(t *testing.T) {
+	oldConfig, oldBadger := Config, x.WorkerConfig.Badger
+	t.Cleanup(func() { Config, x.WorkerConfig.Badger = oldConfig, oldBadger })
+	Config = Options{
+		PostingDir: t.TempDir(), PostingStoreBackend: PostingStoreBackendBadger,
+		PostingStoreTier: PostingStoreTierProduction, PostingStoreDurability: PostingStoreDurabilityDurable,
+	}
+	x.WorkerConfig.Badger = badger.DefaultOptions("").FromSuperFlag(BadgerDefaults)
+
+	state := &ServerState{}
+	require.NoError(t, state.openPostingStore())
+	defer state.closePostingStore()
+	require.False(t, state.Pstore.Opts().SyncWrites)
+	require.Equal(t, "syncwrites=false", state.PostingStoreRuntimeStatus()["profile"])
+}
+
 func TestTreeDBRestrictedRuntimeMutationQuerySchemaRestart(t *testing.T) {
 	oldConfig, oldState := Config, State
 	oldPstore, oldPostingStore := pstore, postingStore

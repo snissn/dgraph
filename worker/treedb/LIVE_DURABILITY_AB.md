@@ -12,8 +12,9 @@ TMPDIR=/mnt/fast4tb/tmp GOWORK=off \
 ```
 
 Use `--smoke` only to validate construction. A decision run uses three repeats per cell by default.
-The script refuses to reuse an artifact directory, records the exact Git/module/host context, runs
-the existing posting-store adapter microbenchmarks, and then runs four live cells:
+The script requires an artifact directory outside the repository, refuses to reuse it, records the
+exact Git/module/host context, runs the existing posting-store adapter microbenchmarks, and then
+runs four live cells:
 
 | Durability class | Badger                                                   | TreeDB                                                 |
 | ---------------- | -------------------------------------------------------- | ------------------------------------------------------ |

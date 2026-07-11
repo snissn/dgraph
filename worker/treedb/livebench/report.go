@@ -160,7 +160,7 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 		fmt.Fprintf(&b, "- Durable TreeDB: [`%s`](%s) and [`%s`](%s).\n\n", profiles.Durable.PPROF, profiles.Durable.PPROF, profiles.Durable.Top, profiles.Durable.Top)
 		b.WriteString("These artifacts do not by themselves attribute cost between gomap and Dgraph integration, establish I/O wait, or prove a causal explanation for either throughput delta.\n\n")
 	}
-	b.WriteString("## Raw artifacts and reproduction\n\nReproduce from the recorded Dgraph SHA with `TMPDIR=/mnt/fast4tb/tmp GOWORK=off worker/treedb/run_durability_ab.sh --artifact-dir NEW_DIR`. Paths below are relative to the artifact root; each JSON retains its exact original absolute command and raw path.\n\n")
+	b.WriteString("## Raw artifacts and reproduction\n\nReproduce from the recorded Dgraph SHA with `TMPDIR=/mnt/fast4tb/tmp GOWORK=off worker/treedb/run_durability_ab.sh --artifact-dir /absolute/path/outside/repository/NEW_DIR`. Paths below are relative to the artifact root; each JSON retains its exact original absolute command and raw path.\n\n")
 	for _, r := range results {
 		fmt.Fprintf(&b, "- `%s`: `live/%s/result.json`; Dgraph `%s`; gomap `%s`; dirty `%t`\n", r.RunID, r.RunID, r.Context.DgraphSHA, r.Context.GomapVersion, r.Context.Dirty)
 	}
