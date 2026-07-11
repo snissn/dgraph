@@ -42,13 +42,25 @@ func TestCanonicalPostingRowIncludesAndValidatesEdgeTopology(t *testing.T) {
 	if row != "source\x00target" {
 		t.Fatalf("row=%q", row)
 	}
-	for _, node := range []queryNode{
-		{UID: "0x1", Value: "source"},
-		{UID: "0x1", Value: "source", Next: queryNodes{{UID: "0x2", Value: "wrong"}}},
+	for _, tc := range []struct {
+		name     string
+		node     queryNode
+		expected expectedNode
+	}{
+		{"missing expected edge", queryNode{UID: "0x1", Value: "source"}, want},
+		{"wrong expected target", queryNode{UID: "0x1", Value: "source", Next: queryNodes{{UID: "0x2", Value: "wrong"}}}, want},
+		{"multiple expected edges", queryNode{UID: "0x1", Value: "source", Next: queryNodes{{UID: "0x2", Value: "target"}, {UID: "0x3", Value: "other"}}}, want},
+		{"unexpected edge without target value", queryNode{UID: "0x4", Value: "write", Next: queryNodes{{UID: "0x999"}}}, expectedNode{Value: "write"}},
+		{"unexpected edge with target value", queryNode{UID: "0x4", Value: "write", Next: queryNodes{{UID: "0x2", Value: "target"}}}, expectedNode{Value: "write"}},
 	} {
-		if _, err := canonicalPostingRow(node, want); err == nil {
-			t.Fatalf("expected edge failure for %+v", node)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := canonicalPostingRow(tc.node, tc.expected); err == nil {
+				t.Fatalf("expected edge failure for %+v", tc.node)
+			}
+		})
+	}
+	if row, err := canonicalPostingRow(queryNode{UID: "0x4", Value: "write"}, expectedNode{Value: "write"}); err != nil || row != "write\x00" {
+		t.Fatalf("valid edge-free row rejected: row=%q err=%v", row, err)
 	}
 }
 

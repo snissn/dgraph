@@ -572,17 +572,19 @@ func canonicalPostingRow(node queryNode, expected expectedNode) (string, error) 
 	if expected.Value != node.Value {
 		return "", fmt.Errorf("posting value mismatch for %s", node.UID)
 	}
-	nextValue := ""
-	if len(node.Next) > 1 {
+	if expected.NextValue == "" {
+		if len(node.Next) != 0 {
+			return "", fmt.Errorf("unexpected posting edge for %s", node.UID)
+		}
+		return node.Value + "\x00", nil
+	}
+	if len(node.Next) != 1 {
 		return "", fmt.Errorf("posting edge count mismatch for %s", node.UID)
 	}
-	if len(node.Next) == 1 {
-		nextValue = node.Next[0].Value
-	}
-	if nextValue != expected.NextValue {
+	if node.Next[0].Value != expected.NextValue {
 		return "", fmt.Errorf("posting edge mismatch for source value %q", node.Value)
 	}
-	return node.Value + "\x00" + nextValue, nil
+	return node.Value + "\x00" + node.Next[0].Value, nil
 }
 func schemaOK(ctx context.Context, dg *dgo.Dgraph) bool {
 	resp, err := dg.NewReadOnlyTxn().Query(ctx, "schema(pred: [bench.value, bench.next]) { predicate type }")
