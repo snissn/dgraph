@@ -87,10 +87,6 @@ func TestCapabilityTierRequirementsAndBlockers(t *testing.T) {
 				FeatureLifecycleGCStats,
 			},
 			wantBlockers: []FeatureID{
-				FeatureTreeDBStoreImplementation,
-				FeatureBadgerManagedTransactions,
-				FeatureBadgerEntryMetadata,
-				FeatureBadgerAllVersionIterators,
 				FeatureLifecycleGCStats,
 			},
 			wantExcludedFeature: []FeatureID{
@@ -114,11 +110,7 @@ func TestCapabilityTierRequirementsAndBlockers(t *testing.T) {
 				FeatureMetricsCacheAPIs,
 			},
 			wantBlockers: []FeatureID{
-				FeatureTreeDBStoreImplementation,
-				FeatureBadgerManagedTransactions,
-				FeatureBadgerEntryMetadata,
 				FeatureBadgerEntryTTL,
-				FeatureBadgerAllVersionIterators,
 				FeatureBadgerStreamImportExport,
 				FeatureBadgerSubscriptions,
 				FeatureBadgerProtobufCompatibility,
@@ -140,11 +132,7 @@ func TestCapabilityTierRequirementsAndBlockers(t *testing.T) {
 				FeatureEncryptionKeyRegistry,
 			},
 			wantBlockers: []FeatureID{
-				FeatureTreeDBStoreImplementation,
-				FeatureBadgerManagedTransactions,
-				FeatureBadgerEntryMetadata,
 				FeatureBadgerEntryTTL,
-				FeatureBadgerAllVersionIterators,
 				FeatureBadgerStreamImportExport,
 				FeatureBadgerSubscriptions,
 				FeatureEncryptionKeyRegistry,
@@ -230,7 +218,7 @@ func TestCheckRequiredFeaturesFailClosed(t *testing.T) {
 
 	required := []FeatureID{
 		FeatureMetricsCacheAPIs,
-		FeatureBadgerManagedTransactions,
+		FeatureLifecycleGCStats,
 		FeatureEncryptionKeyRegistry,
 		FeatureID("future_feature"),
 	}
@@ -238,7 +226,7 @@ func TestCheckRequiredFeaturesFailClosed(t *testing.T) {
 	require.Len(t, blockers, 4)
 	require.Equal(t, FeatureMetricsCacheAPIs, blockers[0].ID)
 	require.Equal(t, StatusDisabledWant, blockers[0].Status)
-	require.Equal(t, FeatureBadgerManagedTransactions, blockers[1].ID)
+	require.Equal(t, FeatureLifecycleGCStats, blockers[1].ID)
 	require.Equal(t, StatusDisabledNeedBlocker, blockers[1].Status)
 	require.Equal(t, FeatureEncryptionKeyRegistry, blockers[2].ID)
 	require.Equal(t, StatusUnsupported, blockers[2].Status)
@@ -250,8 +238,8 @@ func TestCheckRequiredFeaturesFailClosed(t *testing.T) {
 	require.EqualError(t, err, "dgraph treedb integration: unsupported feature: required feature set is not ready: "+
 		"metrics_cache_apis=disabled_want (Badger cache sizing and metrics are desirable "+
 		"for Dgraph monitoring but are not wired for TreeDB yet); "+
-		"badger_managed_transactions=disabled_need_blocker (Dgraph posting store relies on externally "+
-		"managed Badger timestamps that are not mapped to TreeDB yet); "+
+		"lifecycle_gc_stats=disabled_need_blocker (TreeDBStore owns close, status, value-log GC, full compaction, "+
+		"and stats, but the Alpha lifecycle does not invoke that owner surface yet); "+
 		"encryption_key_registry=unsupported (TreeDB does not expose a Dgraph-compatible encrypted-at-rest/"+
 		"key-registry contract in this integration lane); "+
 		"future_feature=unsupported (unknown TreeDB feature id)")
@@ -274,8 +262,7 @@ func TestUnsupportedFeaturesCompatibilityViewUsesRegistry(t *testing.T) {
 	require.Len(t, unsupported, wantUnsupported)
 
 	joined := strings.Join(unsupported, "\n")
-	require.Contains(t, joined, "badger_managed_transactions: Dgraph posting store relies on externally "+
-		"managed Badger timestamps")
+	require.Contains(t, joined, "lifecycle_gc_stats: TreeDBStore owns close, status, value-log GC, full compaction")
 	require.Contains(t, joined, "status: disabled_need_blocker")
 	require.Contains(t, joined, "encryption_key_registry: TreeDB does not expose a Dgraph-compatible")
 	require.Contains(t, joined, "status: unsupported")

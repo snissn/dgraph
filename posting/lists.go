@@ -239,6 +239,9 @@ func (lc *LocalCache) Find(pred []byte, filter func([]byte) bool) (uint64, error
 			continue
 		}
 	}
+	if err := it.Error(); err != nil {
+		return 0, err
+	}
 
 	if len(result.Uids) > 0 {
 		return result.Uids[0], nil

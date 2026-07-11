@@ -6,10 +6,10 @@
 // Package treedb contains the Dgraph-side TreeDB integration scaffold.
 //
 // It intentionally does not replace the Alpha posting store yet. Dgraph's
-// current posting-store contract exposes Badger-specific managed transactions,
-// protobuf values, streams, subscriptions, encryption, and cache metrics across
-// package boundaries. This package pins and compile-tests the TreeDB entry point
-// that a future runtime backend switch can build on.
+// operational paths still expose Badger-specific protobuf values, streams,
+// subscriptions, encryption, and cache metrics across package boundaries. The
+// benchmark-minimal posting contract has a TreeDBStore implementation, while
+// this package keeps runtime selection fail-closed until Alpha lifecycle wiring.
 package treedb
 
 import (
@@ -29,8 +29,8 @@ const (
 	DefaultProfile = td.ProfileCommandWALDurable
 
 	// DefaultKeepRecent leaves TreeDB's profile default in place. Dgraph's
-	// Badger managed timestamp reads are not implemented for TreeDB yet, so this
-	// scaffold must not retain an unbounded TreeDB generation window by default.
+	// Gomap external MVCC owns historical retention and pruning, so this scaffold
+	// leaves the physical TreeDB generation-retention profile unchanged.
 	DefaultKeepRecent uint64 = 0
 )
 

@@ -81,6 +81,7 @@ type Iterator interface {
 	ValidForPrefix(prefix []byte) bool
 	Item() Item
 	Next()
+	Error() error
 	Close()
 }
 
@@ -203,6 +204,13 @@ func (it badgerIterator) Item() Item {
 
 func (it badgerIterator) Next() {
 	it.itr.Next()
+}
+
+// Error is part of the backend-neutral iterator seam. Badger does not expose
+// iterator errors on its public iterator type; errors are reported while
+// materializing values instead.
+func (it badgerIterator) Error() error {
+	return nil
 }
 
 func (it badgerIterator) Close() {

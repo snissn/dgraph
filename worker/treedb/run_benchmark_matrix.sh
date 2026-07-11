@@ -183,9 +183,7 @@ set -e
 	echo
 	echo "| Row | Status | Reason |"
 	echo "| --- | --- | --- |"
-	echo "| ${bt}Blocked/ManagedTimestampTransactions${bt} | skipped | TreeDB does not expose Badger-compatible OpenManaged/NewTransactionAt/CommitAt/SetEntryAt semantics required by Dgraph posting stores. |"
-	echo "| ${bt}Blocked/EntryMetadataAndTTL${bt} | skipped | TreeDB primitives do not yet provide Badger Entry.UserMeta/Item.UserMeta/Entry.ExpiresAt compatibility for Dgraph posting metadata. |"
-	echo "| ${bt}Blocked/AllVersionKeyIterator${bt} | skipped | TreeDB native revisions are not a Badger IteratorOptions.AllVersions/NewKeyIterator substitute for Dgraph posting-list version scans. |"
+	echo "| ${bt}Blocked/EntryTTL${bt} | skipped | TreeDBStore rejects nonzero Badger Entry.ExpiresAt values until an operational-tier expiry contract exists. |"
 	echo "| ${bt}Blocked/StreamBackupExport${bt} | skipped | TreeDB does not yet provide Dgraph's Badger NewStreamAt/Stream.Orchestrate backup-export contract. |"
 	echo "| ${bt}Blocked/StreamWriterImport${bt} | skipped | TreeDB does not yet provide Dgraph's Badger NewStreamWriter import/restore contract. |"
 	echo "| ${bt}Blocked/Subscriptions${bt} | skipped | TreeDB does not yet provide the Badger Subscribe API used by worker.SubscribeForUpdates. |"

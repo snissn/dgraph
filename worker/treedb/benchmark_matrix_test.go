@@ -35,16 +35,8 @@ type dgraphTreeDBBlockerRow struct {
 
 var dgraphTreeDBBlockerRows = []dgraphTreeDBBlockerRow{
 	{
-		name:   "ManagedTimestampTransactions",
-		reason: "TreeDB does not expose Badger-compatible OpenManaged/NewTransactionAt/CommitAt/SetEntryAt semantics required by Dgraph posting stores.",
-	},
-	{
-		name:   "EntryMetadataAndTTL",
-		reason: "TreeDB primitives do not yet provide Badger Entry.UserMeta/Item.UserMeta/Entry.ExpiresAt compatibility for Dgraph posting metadata.",
-	},
-	{
-		name:   "AllVersionKeyIterator",
-		reason: "TreeDB native revisions are not a Badger IteratorOptions.AllVersions/NewKeyIterator substitute for Dgraph posting-list version scans.",
+		name:   "EntryTTL",
+		reason: "TreeDBStore intentionally rejects nonzero Badger Entry.ExpiresAt values until an operational-tier expiry contract exists.",
 	},
 	{
 		name:   "StreamBackupExport",

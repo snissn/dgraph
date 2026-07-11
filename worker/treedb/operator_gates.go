@@ -64,13 +64,14 @@ var operatorGateReport = []OperatorGate{
 		ID:       GateBenchmarkMinimalTier,
 		Status:   GateStatusFailClosed,
 		Decision: "TreeDB may run the restricted Alpha benchmark only after the benchmark-minimal capability tier passes.",
-		Summary:  "TreeDBStore, managed timestamps, posting metadata/discard markers, all-version iteration, and backend lifecycle wiring still block the benchmark-minimal tier.",
+		Summary:  "TreeDBStore managed timestamps, posting metadata/discard markers, and all-version iteration pass; backend lifecycle wiring still blocks the benchmark-minimal tier.",
 		Evidence: []string{
 			"CheckCapabilityTier(benchmark_minimal)",
 			"TestCapabilityTierRequirementsAndBlockers/benchmark_minimal",
+			"posting.TestTreeDBStoreMatchesBadgerGoldenIteratorTrace",
 		},
 		FollowUps: []string{
-			"Implement the gomap MVCC substrate and the Dgraph TreeDBStore adapter before changing this gate.",
+			"Wire TreeDBStore into the restricted Alpha lifecycle in issue #19 before changing this gate.",
 		},
 	},
 	{
@@ -102,11 +103,12 @@ var operatorGateReport = []OperatorGate{
 	{
 		ID:       GateTreeDBPrimitiveDurability,
 		Status:   GateStatusEvidence,
-		Decision: "TreeDB primitives can open, write, close, and reopen in the scaffold, but this is not a Dgraph posting-store backend.",
-		Summary:  "The TreeDB scaffold validates primitive durability only; it does not satisfy Badger posting semantics.",
+		Decision: "TreeDB primitives and the posting adapter can open, write, close, and reopen, without enabling Alpha runtime selection.",
+		Summary:  "TreeDBStore satisfies benchmark-minimal posting semantics; restricted Alpha lifecycle wiring remains separate.",
 		Evidence: []string{
 			"TestOpenSmoke",
 			"TestOpenReopenDurability",
+			"posting.TestTreeDBStoreDiscardFloorPruneAndReopen",
 		},
 	},
 	{
@@ -119,22 +121,21 @@ var operatorGateReport = []OperatorGate{
 			"CheckPostingBackendReady",
 		},
 		FollowUps: []string{
-			"Resolve managed timestamp transactions before opening TreeDB as a posting store.",
-			"Resolve posting metadata and all-version iteration before enabling benchmark-minimal runtime TreeDB.",
+			"Wire the proven TreeDBStore adapter into the restricted Alpha lifecycle in issue #19.",
 		},
 	},
 	{
 		ID:       GatePostingSchemaWorkflows,
 		Status:   GateStatusFailClosed,
-		Decision: "Dgraph posting/schema workflows remain Badger-only until the adapter satisfies metadata and all-version semantics.",
-		Summary:  "Posting writes/reads and schema scans require Badger UserMeta, discard markers, and all-version iterators.",
+		Decision: "TreeDBStore satisfies benchmark-minimal posting semantics, but runtime posting/schema workflows remain Badger-only until issue #19.",
+		Summary:  "Posting writes/reads now have TreeDB UserMeta, discard-marker, managed-timestamp, and all-version iterator evidence; runtime wiring is still fail-closed.",
 		Evidence: []string{
 			"posting.TestBadgerStorePreservesManagedTimestampsMetadataAndIteration",
-			"posting.TestTxnWriterForStorePreservesBadgerWriteBehavior",
-			"PostingCompatibilityMatrix entry_metadata_ttl and all_version_iteration rows",
+			"posting.TestTreeDBStoreMatchesBadgerGoldenIteratorTrace",
+			"PostingCompatibilityMatrix managed_timestamp_transactions, entry_metadata, and all_version_iteration rows",
 		},
 		FollowUps: []string{
-			"Implement TreeDB adapter tests for posting list write/read and schema load/delete before changing this gate.",
+			"Exercise posting/schema workflows through the restricted runtime in issue #19 before changing this gate.",
 		},
 	},
 	{
@@ -181,7 +182,7 @@ var operatorGateReport = []OperatorGate{
 		ID:       GateBenchmarkMatrix,
 		Status:   GateStatusPass,
 		Decision: "The Dgraph Badger-vs-TreeDB benchmark matrix is available for final and future before/after evidence.",
-		Summary:  "Current TreeDB rows are primitive evidence; blocked rows explicitly document Dgraph-required contracts that cannot run yet.",
+		Summary:  "Current TreeDB rows are primitive evidence; posting adapter benchmarks live in posting, and blocked rows document later-tier contracts.",
 		Evidence: []string{
 			"BenchmarkDgraphTreeDBMatrix",
 			"worker/treedb/run_benchmark_matrix.sh",

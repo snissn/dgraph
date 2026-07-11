@@ -46,10 +46,10 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 	{
 		ID:              CompatibilityManagedTimestampTransactions,
 		Feature:         FeatureBadgerManagedTransactions,
-		Status:          StatusDisabledNeedBlocker,
+		Status:          StatusSupported,
 		RequiredTier:    TierBenchmarkMinimal,
-		Decision:        "fail closed until a TreeDB adapter can preserve externally managed read/write timestamps and commit-at semantics",
-		OperatorMessage: "TreeDB posting-store backend is disabled because Dgraph requires Badger managed transactions: OpenManaged, NewTransactionAt, CommitAt, NewManagedWriteBatch, and SetEntryAt.",
+		Decision:        "TreeDBStore preserves caller-assigned read/write timestamps and atomic commit-at semantics through gomap external MVCC",
+		OperatorMessage: "TreeDB managed timestamp compatibility is available through posting.TreeDBStore.",
 		RequiredAPIs: []string{
 			"badger.OpenManaged",
 			"(*badger.DB).NewTransactionAt",
@@ -65,8 +65,8 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 			"worker/sort.go rollup paths",
 		},
 		Evidence: []string{
-			"posting.Store adapter contract requires managed read and write transactions",
-			"posting.TestBadgerStorePreservesManagedTimestampsMetadataAndIteration",
+			"posting.TestTreeDBStoreWriteSemanticsTTLAndCallbacks",
+			"posting.TestTreeDBStoreReadTxnTimestampVisibilityMatchesBadger",
 		},
 	},
 	{
@@ -90,10 +90,10 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 	{
 		ID:              CompatibilityEntryMetadata,
 		Feature:         FeatureBadgerEntryMetadata,
-		Status:          StatusDisabledNeedBlocker,
+		Status:          StatusSupported,
 		RequiredTier:    TierBenchmarkMinimal,
-		Decision:        "fail closed until UserMeta and discard markers survive TreeDB writes, reads, and iteration",
-		OperatorMessage: "TreeDB benchmark-minimal posting storage is disabled because Dgraph posting lists require Badger UserMeta and discard markers.",
+		Decision:        "the Dgraph-owned TreeDB value envelope preserves UserMeta and discard markers across writes, reads, reopen, and iteration",
+		OperatorMessage: "TreeDB posting metadata and discard-marker compatibility is available through posting.TreeDBStore.",
 		RequiredAPIs: []string{
 			"badger.Entry.UserMeta",
 			"(*badger.Item).UserMeta",
@@ -106,8 +106,8 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 			"worker.export.go",
 		},
 		Evidence: []string{
-			"posting.Store Entry and Item interfaces include UserMeta, ExpiresAt, and DiscardEarlierVersions",
-			"posting.TestBadgerStorePreservesManagedTimestampsMetadataAndIteration",
+			"posting.TestTreeDBEnvelopeRoundTripAndCorruption",
+			"posting.TestTreeDBStoreMatchesBadgerGoldenIteratorTrace",
 		},
 	},
 	{
@@ -154,10 +154,10 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 	{
 		ID:              CompatibilityAllVersionIteration,
 		Feature:         FeatureBadgerAllVersionIterators,
-		Status:          StatusDisabledNeedBlocker,
+		Status:          StatusSupported,
 		RequiredTier:    TierBenchmarkMinimal,
-		Decision:        "fail closed until prefix, reverse, all-version, prefetch, and key-iterator behavior matches Dgraph posting-list expectations",
-		OperatorMessage: "TreeDB posting-store backend is disabled because Dgraph reconstructs posting lists with Badger all-version iterators.",
+		Decision:        "TreeDBStore matches prefix, reverse, all-version, seek, and exact-key iterator behavior needed for posting reconstruction",
+		OperatorMessage: "TreeDB all-version posting iteration is available through posting.TreeDBStore.",
 		RequiredAPIs: []string{
 			"badger.IteratorOptions.Prefix",
 			"badger.IteratorOptions.Reverse",
@@ -173,8 +173,8 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 			"worker/export.go",
 		},
 		Evidence: []string{
-			"posting.Store IteratorOptions includes Prefix, Reverse, AllVersions, and PrefetchValues",
-			"posting.TestBadgerStorePreservesManagedTimestampsMetadataAndIteration",
+			"posting.TestTreeDBStoreMatchesBadgerGoldenIteratorTrace",
+			"posting.TestTreeDBStoreIteratorStartsInvalidAndKeyIteratorForcesAllVersions",
 		},
 	},
 	{

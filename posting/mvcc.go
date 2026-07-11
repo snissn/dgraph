@@ -501,6 +501,9 @@ func (ml *MemoryLayer) IterateDisk(ctx context.Context, f IterateDiskArgs) error
 			}
 		}
 	}
+	if err := it.Error(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -738,6 +741,9 @@ func readPostingList(key []byte, it Iterator) (*List, error) {
 			break
 		}
 		it.Next()
+	}
+	if err := it.Error(); err != nil {
+		return nil, err
 	}
 
 	return l, nil

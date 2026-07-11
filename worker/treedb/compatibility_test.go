@@ -35,11 +35,11 @@ func TestPostingCompatibilityMatrixClassifiesDgraphBlockers(t *testing.T) {
 		byID[record.ID] = record
 	}
 
-	require.Equal(t, StatusDisabledNeedBlocker, byID[CompatibilityManagedTimestampTransactions].Status)
+	require.Equal(t, StatusSupported, byID[CompatibilityManagedTimestampTransactions].Status)
 	require.Contains(t, byID[CompatibilityManagedTimestampTransactions].RequiredAPIs, "(*badger.Txn).CommitAt")
 	require.Contains(t, byID[CompatibilityManagedTimestampTransactions].DgraphCallSites, "posting.TxnWriter.SetAt")
 
-	require.Equal(t, StatusDisabledNeedBlocker, byID[CompatibilityEntryMetadata].Status)
+	require.Equal(t, StatusSupported, byID[CompatibilityEntryMetadata].Status)
 	require.Equal(t, TierBenchmarkMinimal, byID[CompatibilityEntryMetadata].RequiredTier)
 	require.Contains(t, byID[CompatibilityEntryMetadata].RequiredAPIs, "badger.Entry.UserMeta")
 	require.Contains(t, byID[CompatibilityEntryMetadata].RequiredAPIs, "(*badger.Entry).WithDiscard")
@@ -50,7 +50,7 @@ func TestPostingCompatibilityMatrixClassifiesDgraphBlockers(t *testing.T) {
 	require.Equal(t, StatusUnsupported, byID[CompatibilityEntryMetadataTTL].Status)
 	require.Empty(t, byID[CompatibilityEntryMetadataTTL].RequiredTier)
 
-	require.Equal(t, StatusDisabledNeedBlocker, byID[CompatibilityAllVersionIteration].Status)
+	require.Equal(t, StatusSupported, byID[CompatibilityAllVersionIteration].Status)
 	require.Contains(t, byID[CompatibilityAllVersionIteration].RequiredAPIs, "badger.IteratorOptions.AllVersions")
 
 	require.Equal(t, StatusDisabledNeedBlocker, byID[CompatibilityStreamImportExport].Status)
@@ -72,16 +72,16 @@ func TestPostingBackendRequiredFeaturesFailClosed(t *testing.T) {
 	require.NotContains(t, required, FeatureCommandWALConditionalTransactions)
 
 	blockers := PostingBackendBlockers()
-	require.NotEmpty(t, blockers)
+	require.Empty(t, blockers)
 	blockerIDs := make([]CompatibilityFamilyID, 0, len(blockers))
 	for _, blocker := range blockers {
 		blockerIDs = append(blockerIDs, blocker.ID)
 		require.NotEqual(t, StatusSupported, blocker.Status)
 		require.NotEmpty(t, blocker.OperatorMessage)
 	}
-	require.Contains(t, blockerIDs, CompatibilityManagedTimestampTransactions)
-	require.Contains(t, blockerIDs, CompatibilityEntryMetadata)
-	require.Contains(t, blockerIDs, CompatibilityAllVersionIteration)
+	require.NotContains(t, blockerIDs, CompatibilityManagedTimestampTransactions)
+	require.NotContains(t, blockerIDs, CompatibilityEntryMetadata)
+	require.NotContains(t, blockerIDs, CompatibilityAllVersionIteration)
 	require.NotContains(t, blockerIDs, CompatibilityEntryTTL)
 	require.NotContains(t, blockerIDs, CompatibilityStreamImportExport)
 	require.NotContains(t, blockerIDs, CompatibilitySubscriptions)
@@ -91,7 +91,7 @@ func TestPostingBackendRequiredFeaturesFailClosed(t *testing.T) {
 	err := CheckPostingBackendReady()
 	require.ErrorIs(t, err, ErrUnsupportedFeature)
 	require.Contains(t, err.Error(), "TreeDB posting-store backend is not ready")
-	require.Contains(t, err.Error(), string(FeatureBadgerManagedTransactions))
+	require.Contains(t, err.Error(), string(FeatureLifecycleGCStats))
 	require.NotContains(t, err.Error(), string(FeatureBadgerStreamImportExport))
 	require.NotContains(t, err.Error(), string(FeatureEncryptionKeyRegistry))
 
@@ -103,7 +103,7 @@ func TestPostingBackendRequiredFeaturesFailClosed(t *testing.T) {
 func TestPostingBackendBlockersForTier(t *testing.T) {
 	benchmark, err := PostingBackendBlockersForTier(TierBenchmarkMinimal)
 	require.NoError(t, err)
-	require.Len(t, benchmark, 3)
+	require.Empty(t, benchmark)
 
 	operational, err := PostingBackendBlockersForTier(TierOperational)
 	require.NoError(t, err)

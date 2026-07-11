@@ -153,22 +153,22 @@ var featureRegistry = []FeatureRecord{
 	},
 	{
 		ID:           FeatureTreeDBStoreImplementation,
-		Status:       StatusDisabledNeedBlocker,
+		Status:       StatusSupported,
 		RequiredTier: TierBenchmarkMinimal,
-		Reason:       "the posting.Store seam exists, but no TreeDBStore implementation satisfies it yet",
+		Reason:       "posting.TreeDBStore implements the benchmark-minimal store seam over gomap external MVCC",
 		Evidence: []string{
-			"posting.NewBadgerStore is the only posting.Store implementation",
-			"Dgraph issue #21",
+			"posting.TestTreeDBStoreMatchesBadgerGoldenIteratorTrace",
+			"posting.TestTreeDBStoreRandomizedPointTraceMatchesBadger",
 		},
 	},
 	{
 		ID:           FeatureBadgerManagedTransactions,
-		Status:       StatusDisabledNeedBlocker,
+		Status:       StatusSupported,
 		RequiredTier: TierBenchmarkMinimal,
-		Reason:       "Dgraph posting store relies on externally managed Badger timestamps that are not mapped to TreeDB yet",
+		Reason:       "TreeDBStore maps caller-assigned read and commit timestamps to gomap external MVCC with atomic batches",
 		Evidence: []string{
-			"worker/treedb README compatibility inventory: OpenManaged, NewTransactionAt, CommitAt",
-			"worker/treedb README compatibility inventory: NewManagedWriteBatch, SetEntryAt",
+			"posting.TestTreeDBStoreWriteSemanticsTTLAndCallbacks",
+			"posting.TestTreeDBStoreReadTxnTimestampVisibilityMatchesBadger",
 		},
 	},
 	{
@@ -181,11 +181,12 @@ var featureRegistry = []FeatureRecord{
 	},
 	{
 		ID:           FeatureBadgerEntryMetadata,
-		Status:       StatusDisabledNeedBlocker,
+		Status:       StatusSupported,
 		RequiredTier: TierBenchmarkMinimal,
-		Reason:       "Dgraph posting values require UserMeta and discard-earlier-version markers that do not have a TreeDB compatibility contract yet",
+		Reason:       "the versioned Dgraph TreeDB envelope preserves UserMeta, discard markers, payloads, and native tombstones",
 		Evidence: []string{
-			"worker/treedb README compatibility inventory: Entry.UserMeta, Item.UserMeta, Entry.WithDiscard",
+			"posting.TestTreeDBEnvelopeRoundTripAndCorruption",
+			"posting.TestTreeDBStoreMatchesBadgerGoldenIteratorTrace",
 		},
 	},
 	{
@@ -208,11 +209,12 @@ var featureRegistry = []FeatureRecord{
 	},
 	{
 		ID:           FeatureBadgerAllVersionIterators,
-		Status:       StatusDisabledNeedBlocker,
+		Status:       StatusSupported,
 		RequiredTier: TierBenchmarkMinimal,
-		Reason:       "Dgraph relies on Badger key/all-version iterator options that are not mapped to TreeDB iterators yet",
+		Reason:       "TreeDBStore maps forward, reverse, prefix, seek, exact-key, and all-version iteration onto snapshot-bound gomap MVCC iterators",
 		Evidence: []string{
-			"worker/treedb README compatibility inventory: NewKeyIterator, IteratorOptions.AllVersions, Prefix, PrefetchValues",
+			"posting.TestTreeDBStoreMatchesBadgerGoldenIteratorTrace",
+			"posting.TestTreeDBStoreIteratorStartsInvalidAndKeyIteratorForcesAllVersions",
 		},
 	},
 	{
@@ -265,10 +267,11 @@ var featureRegistry = []FeatureRecord{
 		ID:           FeatureLifecycleGCStats,
 		Status:       StatusDisabledNeedBlocker,
 		RequiredTier: TierBenchmarkMinimal,
-		Reason:       "TreeDB close, value-log GC, full compaction, and stats APIs compile, but the Alpha lifecycle does not invoke them through a backend-neutral contract yet",
+		Reason:       "TreeDBStore owns close, status, value-log GC, full compaction, and stats, but the Alpha lifecycle does not invoke that owner surface yet",
 		Evidence: []string{
 			"dgraphTreeDBAPI compile assertion",
 			"TestOpenSmoke",
+			"posting.TestTreeDBStoreLifecycleStatusAndDurabilityModes",
 		},
 	},
 	{

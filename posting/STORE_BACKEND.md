@@ -5,13 +5,18 @@ SPDX-License-Identifier: Apache-2.0
 
 # Posting store boundary
 
-The benchmark-minimal posting path uses `Store` for timestamp-bound read snapshots, prefix/reverse
-iteration, exact-key all-version reconstruction, point reads, and atomic externally timestamped
-writes and deletes. A read transaction owns the snapshot lifetime; `IteratorOptions.Prefix` plus
-`Seek` bounds range iteration. Exact-key reconstruction has a separate `NewKeyIterator` operation so
-Badger retains its exact-key bloom-filter optimization. `BadgerStore` is the production
-implementation and preserves the existing zero-copy value callback used while decoding posting
-lists.
+The benchmark-minimal posting path uses `Store` for timestamp-bound reads, prefix/reverse iteration,
+exact-key all-version reconstruction, point reads, and atomic externally timestamped writes and
+deletes. A read transaction supplies a common visibility timestamp while each iterator owns one
+physical snapshot; `Rewind` refreshes that snapshot and ordinary `Seek` positions within it. This is
+conformant for Dgraph's watermarked commit histories, where a commit below an executing read
+timestamp cannot publish late. Point reads and newly created iterators at the same timestamp can
+observe newly published state, matching managed Badger. `IteratorOptions.Prefix` plus `Seek` bounds
+range iteration. Exact-key reconstruction has a separate `NewKeyIterator` operation so Badger
+retains its exact-key bloom-filter optimization. `BadgerStore` is the production implementation and
+preserves the existing zero-copy value callback used while decoding posting lists. Iterators match
+Badger's single-goroutine contract: callers must not concurrently invoke an iterator or discard its
+owning transaction while it is in use.
 
 Schema has a matching, smaller local contract for live point reads and atomic deletes. It cannot
 import `posting.Store` because posting imports schema. A future backend adapter therefore implements
