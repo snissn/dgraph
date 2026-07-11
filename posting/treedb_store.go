@@ -271,6 +271,10 @@ type treeDBWriteTxn struct {
 type treeDBMutationBatch struct {
 	mutations []mvcc.Mutation
 	arena     []byte
+	// chunks retains every previous arena backing array after growth. Staged
+	// mutations still point into those arrays, and release must scrub all of
+	// them rather than only the final arena.
+	chunks [][]byte
 }
 
 type treeDBCommitRequest struct {
@@ -314,8 +318,22 @@ func (t *treeDBWriteTxn) Delete(key []byte) error {
 }
 
 func (b *treeDBMutationBatch) ownBytes(size int) []byte {
+	if size > cap(b.arena)-len(b.arena) {
+		if len(b.arena) != 0 {
+			b.chunks = append(b.chunks, b.arena)
+		}
+		capacity := cap(b.arena) * 2
+		if capacity < 4<<10 {
+			capacity = 4 << 10
+		}
+		if capacity < size {
+			capacity = size
+		}
+		b.arena = make([]byte, size, capacity)
+		return b.arena
+	}
 	start := len(b.arena)
-	b.arena = append(b.arena, make([]byte, size)...)
+	b.arena = b.arena[:start+size]
 	return b.arena[start:]
 }
 
@@ -376,10 +394,16 @@ func (s *TreeDBStore) releaseMutationBatch(batch *treeDBMutationBatch) {
 	for i := range batch.mutations {
 		batch.mutations[i] = mvcc.Mutation{}
 	}
-	if cap(batch.mutations) <= 64 && cap(batch.arena) <= 64<<10 {
+	for i := range batch.chunks {
+		clear(batch.chunks[i])
+		batch.chunks[i] = nil
+	}
+	clear(batch.arena)
+	poolable := cap(batch.mutations) <= 64 && cap(batch.arena) <= 64<<10 && cap(batch.chunks) <= 16
+	if poolable {
 		batch.mutations = batch.mutations[:0]
-		clear(batch.arena)
 		batch.arena = batch.arena[:0]
+		batch.chunks = batch.chunks[:0]
 		s.mutationPool.Put(batch)
 	}
 }

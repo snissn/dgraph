@@ -326,19 +326,22 @@ func TestTreeDBStoreCallbackQueueIsBoundedAndFIFO(t *testing.T) {
 func TestTreeDBMutationBatchReleaseScrubsOwnedBytes(t *testing.T) {
 	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
 	batch := &treeDBMutationBatch{
-		mutations: make([]mvcc.Mutation, 0, 1),
-		arena:     make([]byte, 0, 64),
+		mutations: make([]mvcc.Mutation, 0, 2),
+		arena:     make([]byte, 0, 8),
 	}
-	owned := batch.ownBytes(len("secret-keysecret-value"))
-	copy(owned, "secret-keysecret-value")
+	first := batch.ownBytes(8)
+	copy(first, "secret-1")
+	second := batch.ownBytes(8 << 10)
+	copy(second, "secret-2")
 	batch.mutations = append(batch.mutations, mvcc.Mutation{
-		Key: owned[:len("secret-key")], Value: owned[len("secret-key"):],
+		Key: first,
+	}, mvcc.Mutation{
+		Key: second,
 	})
 
 	store.releaseMutationBatch(batch)
-	require.Equal(t, make([]byte, len(owned)), owned, "pooled arena must not retain caller data")
-	require.Empty(t, batch.mutations)
-	require.Empty(t, batch.arena)
+	require.Equal(t, make([]byte, len(first)), first, "grown-away arena must not retain caller data")
+	require.Equal(t, make([]byte, len(second)), second, "oversized final arena must not retain caller data")
 	require.NoError(t, store.Close())
 }
 
