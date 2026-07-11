@@ -133,15 +133,19 @@ func RunServer(bindall bool) {
 
 // StoreStats returns stats for data store.
 func StoreStats() string {
+	status := State.PostingStoreRuntimeStatus()
 	if State.TreeDBStore != nil {
-		status := State.PostingStoreRuntimeStatus()
 		stats, err := State.PostingStoreStats()
 		if err != nil {
 			return fmt.Sprintf("TreeDB posting-store status=%v stats_error=%v", status, err)
 		}
 		return fmt.Sprintf("TreeDB posting-store status=%v stats=%v", status, stats)
 	}
-	return "Currently no stats for badger"
+	stats, err := State.PostingStoreStats()
+	if err != nil {
+		return fmt.Sprintf("Badger posting-store status=%v stats_error=%v", status, err)
+	}
+	return fmt.Sprintf("Badger posting-store status=%v stats=%v", status, stats)
 }
 
 // BlockingStop stops all the nodes, server between other workers and syncs all marks.
