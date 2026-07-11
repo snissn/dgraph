@@ -323,6 +323,25 @@ func TestTreeDBStoreCallbackQueueIsBoundedAndFIFO(t *testing.T) {
 	})
 }
 
+func TestTreeDBMutationBatchReleaseScrubsOwnedBytes(t *testing.T) {
+	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+	batch := &treeDBMutationBatch{
+		mutations: make([]mvcc.Mutation, 0, 1),
+		arena:     make([]byte, 0, 64),
+	}
+	owned := batch.ownBytes(len("secret-keysecret-value"))
+	copy(owned, "secret-keysecret-value")
+	batch.mutations = append(batch.mutations, mvcc.Mutation{
+		Key: owned[:len("secret-key")], Value: owned[len("secret-key"):],
+	})
+
+	store.releaseMutationBatch(batch)
+	require.Equal(t, make([]byte, len(owned)), owned, "pooled arena must not retain caller data")
+	require.Empty(t, batch.mutations)
+	require.Empty(t, batch.arena)
+	require.NoError(t, store.Close())
+}
+
 func TestTreeDBStorePointErrorMappingAndCorruption(t *testing.T) {
 	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
 	require.NoError(t, commitTreeDBMutations(store, 2, mvcc.Mutation{Key: []byte("deleted"), Delete: true}))

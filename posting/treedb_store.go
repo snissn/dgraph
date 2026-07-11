@@ -378,6 +378,7 @@ func (s *TreeDBStore) releaseMutationBatch(batch *treeDBMutationBatch) {
 	}
 	if cap(batch.mutations) <= 64 && cap(batch.arena) <= 64<<10 {
 		batch.mutations = batch.mutations[:0]
+		clear(batch.arena)
 		batch.arena = batch.arena[:0]
 		s.mutationPool.Put(batch)
 	}

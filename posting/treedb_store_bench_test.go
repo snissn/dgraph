@@ -13,6 +13,7 @@ import (
 	"math"
 	"path/filepath"
 	"testing"
+	"time"
 
 	treedb "github.com/snissn/gomap/TreeDB"
 	"github.com/snissn/gomap/TreeDB/mvcc"
@@ -329,7 +330,7 @@ func benchmarkTreeDBStoreExactKey(b *testing.B, store *TreeDBStore) {
 
 func benchmarkTreeDBStoreReopen(b *testing.B) {
 	b.Helper()
-	b.Run("Reopen/DirectMVCC", func(b *testing.B) {
+	direct := func(b *testing.B) {
 		opts := treeDBAdapterBenchOptions(b.TempDir())
 		db, err := treedb.Open(opts)
 		if err != nil {
@@ -354,8 +355,8 @@ func benchmarkTreeDBStoreReopen(b *testing.B) {
 		if err := db.Close(); err != nil {
 			b.Fatal(err)
 		}
-	})
-	b.Run("Reopen/TreeDBStore", func(b *testing.B) {
+	}
+	adapter := func(b *testing.B) {
 		opts := treeDBAdapterBenchOptions(b.TempDir())
 		store, err := OpenTreeDBStore(opts, TreeDBCommitRelaxed)
 		if err != nil {
@@ -380,6 +381,78 @@ func benchmarkTreeDBStoreReopen(b *testing.B) {
 			}
 		}
 		b.StopTimer()
+		if err := store.Close(); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.Run("Reopen/DirectMVCC", direct)
+	b.Run("Reopen/TreeDBStore", adapter)
+	b.Run("Reopen/PairedLatency", func(b *testing.B) {
+		directOpts := treeDBAdapterBenchOptions(b.TempDir())
+		directDB, err := treedb.Open(directOpts)
+		if err != nil {
+			b.Fatal(err)
+		}
+		directOwner := mvcc.New(directDB)
+		if err := directOwner.CommitAt(1, []mvcc.Mutation{{Key: []byte("reopen"), Value: []byte("value")}},
+			mvcc.CommitRelaxed); err != nil {
+			b.Fatal(err)
+		}
+
+		adapterOpts := treeDBAdapterBenchOptions(b.TempDir())
+		store, err := OpenTreeDBStore(adapterOpts, TreeDBCommitRelaxed)
+		if err != nil {
+			b.Fatal(err)
+		}
+		txn := store.NewWriteTxn()
+		if err := txn.SetEntry(Entry{Key: []byte("reopen"), Value: []byte("value")}); err != nil {
+			b.Fatal(err)
+		}
+		if err := txn.CommitAt(1, nil); err != nil {
+			b.Fatal(err)
+		}
+
+		var directNanos, adapterNanos int64
+		runDirect := func() {
+			start := time.Now()
+			if err := directDB.Close(); err != nil {
+				b.Fatal(err)
+			}
+			directDB, err = treedb.Open(directOpts)
+			if err != nil {
+				b.Fatal(err)
+			}
+			directNanos += time.Since(start).Nanoseconds()
+		}
+		runAdapter := func() {
+			start := time.Now()
+			if err := store.Close(); err != nil {
+				b.Fatal(err)
+			}
+			store, err = OpenTreeDBStore(adapterOpts, TreeDBCommitRelaxed)
+			if err != nil {
+				b.Fatal(err)
+			}
+			adapterNanos += time.Since(start).Nanoseconds()
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if i%2 == 0 {
+				runDirect()
+				runAdapter()
+				continue
+			}
+			runAdapter()
+			runDirect()
+		}
+		b.StopTimer()
+		b.ReportMetric(float64(directNanos)/float64(b.N), "direct-ns/op")
+		b.ReportMetric(float64(adapterNanos)/float64(b.N), "adapter-ns/op")
+		b.ReportMetric(100*(float64(adapterNanos)/float64(directNanos)-1), "adapter-overhead-%")
+		if err := directDB.Close(); err != nil {
+			b.Fatal(err)
+		}
 		if err := store.Close(); err != nil {
 			b.Fatal(err)
 		}
