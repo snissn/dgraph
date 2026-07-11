@@ -33,7 +33,7 @@ const (
 	//       the *Defaults string. Also, since these strings are printed in --help text, avoid line
 	//       breaks.
 	AuditDefaults  = `compress=false; days=10; size=100; dir=; output=; encrypt-file=;`
-	BadgerDefaults = `compression=snappy; numgoroutines=8;`
+	BadgerDefaults = `compression=snappy; numgoroutines=8; syncwrites=false;`
 	RaftDefaults   = `learner=false; snapshot-after-entries=10000; ` +
 		`snapshot-after-duration=30m; pending-proposals=256; idx=; group=;`
 	SecurityDefaults = `token=; whitelist=;`
@@ -87,8 +87,7 @@ func InitServerState() {
 }
 
 func setBadgerOptions(opt badger.Options) badger.Options {
-	opt = opt.WithSyncWrites(false).
-		WithLogger(&x.ToGlog{}).
+	opt = opt.WithLogger(&x.ToGlog{}).
 		WithEncryptionKey(x.WorkerConfig.EncryptionKey)
 
 	// Disable conflict detection in badger. Alpha runs in managed mode and
@@ -238,6 +237,10 @@ func (s *ServerState) PostingStoreRuntimeStatus() map[string]string {
 		status["durable_commits"] = fmt.Sprint(treeStatus.DurableCommits)
 		status["closed"] = fmt.Sprint(treeStatus.Closed)
 		status["unsupported"] = "backup,export,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality"
+	} else if s.Pstore != nil {
+		status["profile"] = fmt.Sprintf("syncwrites=%t", s.Pstore.Opts().SyncWrites)
+		status["durable_commits"] = fmt.Sprint(s.Pstore.Opts().SyncWrites)
+		status["closed"] = "false"
 	}
 	return status
 }

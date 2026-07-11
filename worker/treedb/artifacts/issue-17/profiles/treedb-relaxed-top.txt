@@ -1,0 +1,34 @@
+File: dgraph
+Build ID: 4c0d32ed478e050cf105d51ec4dd1eb6c52208f0
+Type: cpu
+Time: 2026-07-11 09:10:50 HST
+Duration: 5s, Total samples = 14.84s (296.79%)
+Showing nodes accounting for 6.22s, 41.91% of 14.84s total
+Dropped 1151 nodes (cum <= 0.07s)
+Showing top 25 nodes out of 400
+      flat  flat%   sum%        cum   cum%
+     2.59s 17.45% 17.45%      2.59s 17.45%  internal/runtime/syscall/linux.Syscall6
+     0.44s  2.96% 20.42%      0.44s  2.96%  runtime.memclrNoHeapPointers
+     0.33s  2.22% 22.64%      0.33s  2.22%  runtime.futex
+     0.32s  2.16% 24.80%      0.32s  2.16%  runtime.nextFreeFast (inline)
+     0.27s  1.82% 26.62%      0.27s  1.82%  runtime.usleep
+     0.21s  1.42% 28.03%      1.81s 12.20%  runtime.mallocgc
+     0.21s  1.42% 29.45%      0.51s  3.44%  runtime.selectgo
+     0.18s  1.21% 30.66%      1.14s  7.68%  runtime.mallocgcSmallScanNoHeader
+     0.16s  1.08% 31.74%      0.16s  1.08%  runtime.memmove
+     0.14s  0.94% 32.68%      0.16s  1.08%  internal/sync.(*Mutex).Lock
+     0.12s  0.81% 33.49%      0.17s  1.15%  runtime.lock2
+     0.11s  0.74% 34.23%      0.15s  1.01%  internal/runtime/maps.(*Iter).Next
+     0.11s  0.74% 34.97%      0.15s  1.01%  runtime.(*mspan).writeHeapBitsSmall
+     0.11s  0.74% 35.71%      0.53s  3.57%  runtime.stealWork
+     0.11s  0.74% 36.46%      0.11s  0.74%  sync/atomic.(*Int32).Add
+     0.10s  0.67% 37.13%      0.10s  0.67%  internal/runtime/atomic.(*Uint32).CompareAndSwap
+     0.10s  0.67% 37.80%      0.79s  5.32%  runtime.newobject
+     0.09s  0.61% 38.41%      0.09s  0.61%  aeshashbody
+     0.08s  0.54% 38.95%      0.08s  0.54%  cmpbody
+     0.08s  0.54% 39.49%      0.10s  0.67%  github.com/pierrec/lz4/v4/internal/lz4block.(*Compressor).CompressBlock
+     0.08s  0.54% 40.03%      0.08s  0.54%  runtime.unlock2
+     0.08s  0.54% 40.57%      0.08s  0.54%  time.runtimeNow
+     0.07s  0.47% 41.04%      0.44s  2.96%  runtime.netpoll
+     0.07s  0.47% 41.51%      0.08s  0.54%  runtime.step
+     0.06s   0.4% 41.91%      0.15s  1.01%  google.golang.org/protobuf/internal/impl.(*MessageInfo).sizePointerSlow

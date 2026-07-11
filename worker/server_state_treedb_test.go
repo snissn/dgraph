@@ -11,6 +11,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/dgraph-io/badger/v4"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -120,6 +121,48 @@ func TestServerStateTreeDBRejectsInMemoryStartup(t *testing.T) {
 	require.Contains(t, err.Error(), "in_memory_posting_store=unsupported")
 	require.Nil(t, state.TreeDBStore)
 	require.Nil(t, state.PostingStore)
+}
+
+func TestServerStateBadgerPreservesConfiguredSyncWrites(t *testing.T) {
+	oldConfig, oldBadger := Config, x.WorkerConfig.Badger
+	t.Cleanup(func() { Config, x.WorkerConfig.Badger = oldConfig, oldBadger })
+	Config = Options{
+		PostingDir: t.TempDir(), PostingStoreBackend: PostingStoreBackendBadger,
+		PostingStoreTier: PostingStoreTierProduction, PostingStoreDurability: PostingStoreDurabilityDurable,
+	}
+	x.WorkerConfig.Badger = badger.DefaultOptions("").WithSyncWrites(true)
+
+	state := &ServerState{}
+	require.NoError(t, state.openPostingStore())
+	defer state.closePostingStore()
+	require.True(t, state.Pstore.Opts().SyncWrites)
+	status := state.PostingStoreRuntimeStatus()
+	require.Equal(t, "badger", status["backend"])
+	require.Equal(t, "syncwrites=true", status["profile"])
+	require.Equal(t, "true", status["durable_commits"])
+}
+
+func TestBadgerSuperFlagDefaultsPreserveRelaxedWritesAndAllowDurableOverride(t *testing.T) {
+	require.Contains(t, BadgerDefaults, "syncwrites=false")
+	defaults := badger.DefaultOptions("").FromSuperFlag(BadgerDefaults)
+	require.False(t, defaults.SyncWrites)
+	require.True(t, defaults.FromSuperFlag("syncwrites=true").SyncWrites)
+}
+
+func TestServerStateBadgerDefaultsStayRelaxed(t *testing.T) {
+	oldConfig, oldBadger := Config, x.WorkerConfig.Badger
+	t.Cleanup(func() { Config, x.WorkerConfig.Badger = oldConfig, oldBadger })
+	Config = Options{
+		PostingDir: t.TempDir(), PostingStoreBackend: PostingStoreBackendBadger,
+		PostingStoreTier: PostingStoreTierProduction, PostingStoreDurability: PostingStoreDurabilityDurable,
+	}
+	x.WorkerConfig.Badger = badger.DefaultOptions("").FromSuperFlag(BadgerDefaults)
+
+	state := &ServerState{}
+	require.NoError(t, state.openPostingStore())
+	defer state.closePostingStore()
+	require.False(t, state.Pstore.Opts().SyncWrites)
+	require.Equal(t, "syncwrites=false", state.PostingStoreRuntimeStatus()["profile"])
 }
 
 func TestTreeDBRestrictedRuntimeMutationQuerySchemaRestart(t *testing.T) {
