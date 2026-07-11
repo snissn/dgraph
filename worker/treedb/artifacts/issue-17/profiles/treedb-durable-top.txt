@@ -1,0 +1,33 @@
+File: dgraph
+Build ID: 4c0d32ed478e050cf105d51ec4dd1eb6c52208f0
+Type: cpu
+Time: 2026-07-11 08:46:22 HST
+Duration: 5s, Total samples = 850ms (17.00%)
+Showing nodes accounting for 490ms, 57.65% of 850ms total
+Showing top 25 nodes out of 402
+      flat  flat%   sum%        cum   cum%
+     100ms 11.76% 11.76%      100ms 11.76%  internal/runtime/syscall/linux.Syscall6
+      40ms  4.71% 16.47%       40ms  4.71%  runtime.futex
+      30ms  3.53% 20.00%       30ms  3.53%  runtime.(*mspan).writeHeapBitsSmall
+      30ms  3.53% 23.53%       30ms  3.53%  runtime.memmove
+      20ms  2.35% 25.88%       30ms  3.53%  fmt.(*pp).doPrintf
+      20ms  2.35% 28.24%       20ms  2.35%  github.com/snissn/gomap/TreeDB/tree.(*Tree).acquireIterator
+      20ms  2.35% 30.59%       20ms  2.35%  internal/runtime/maps.(*Iter).Next
+      20ms  2.35% 32.94%       20ms  2.35%  internal/sync.(*Mutex).Lock
+      20ms  2.35% 35.29%       20ms  2.35%  runtime.memclrNoHeapPointers
+      20ms  2.35% 37.65%       20ms  2.35%  runtime.nextFreeFast
+      20ms  2.35% 40.00%       20ms  2.35%  runtime.procyieldAsm
+      20ms  2.35% 42.35%       20ms  2.35%  runtime.usleep
+      10ms  1.18% 43.53%       10ms  1.18%  aeshashbody
+      10ms  1.18% 44.71%       10ms  1.18%  github.com/dgraph-io/dgraph/v25/chunker.ParseRDF
+      10ms  1.18% 45.88%       10ms  1.18%  github.com/dgraph-io/dgraph/v25/edgraph.authorizeQuery
+      10ms  1.18% 47.06%       50ms  5.88%  github.com/dgraph-io/dgraph/v25/edgraph.processQuery
+      10ms  1.18% 48.24%       20ms  2.35%  github.com/dgraph-io/dgraph/v25/posting.(*MemoryLayer).readFromDisk
+      10ms  1.18% 49.41%       10ms  1.18%  github.com/dgraph-io/dgraph/v25/query.(*encoder).addChildren (inline)
+      10ms  1.18% 50.59%       30ms  3.53%  github.com/dgraph-io/dgraph/v25/query.ProcessGraph
+      10ms  1.18% 51.76%       10ms  1.18%  github.com/dgraph-io/dgraph/v25/x.AttachJWTNamespace
+      10ms  1.18% 52.94%       10ms  1.18%  github.com/dgraph-io/ristretto/v2.(*ringStripe).Push
+      10ms  1.18% 54.12%       20ms  2.35%  github.com/snissn/compress/zstd.(*fastEncoderDict).Reset
+      10ms  1.18% 55.29%       10ms  1.18%  github.com/snissn/gomap/TreeDB.(*commandWALPublicBatch).resetPayloadForReuse
+      10ms  1.18% 56.47%       10ms  1.18%  github.com/snissn/gomap/TreeDB/node.compareSmallBigEndian (inline)
+      10ms  1.18% 57.65%       10ms  1.18%  github.com/snissn/gomap/TreeDB/tree.(*Tree).loadChildRefView

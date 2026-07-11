@@ -34,6 +34,11 @@ failure, or unsupported-feature status failure. Start and final samples finding
 counters are retained with a source and reason; they are never manufactured. Relaxed and durable
 results have separate report headings and separate decisions. Badger remains the production default.
 
+The issue #17 decision evidence produced from Dgraph commit
+`0d7d559c9ec4cae14c16b9990c41f206e2602862` is committed under
+[`artifacts/issue-17`](artifacts/issue-17/README.md). The committed report uses paths relative to
+that directory; each raw result retains the original absolute command and scratch path for audit.
+
 When a TreeDB cell materially misses its durability-matched baseline, capture a separate CPU profile
 without treating the profiled throughput as benchmark evidence. Reuse the committed runner binary
 produced in the artifact root and raise `--timed-ops` enough to cover `--profile-seconds`:

@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "run_id": "badger-durable-r2",
+  "repeat": 2,
+  "config": {
+    "backend": "badger",
+    "durability_class": "durable",
+    "posting_store": "backend=badger; tier=production; durability=durable; events=false",
+    "badger": "syncwrites=true",
+    "dataset_nodes": 500,
+    "concurrency": 4,
+    "warmup_ops": 100,
+    "timed_ops": 2000,
+    "query_mix_percent": {
+      "one_hop_read": 20,
+      "point_read": 60,
+      "write": 20
+    },
+    "topology": "single-zero-single-alpha",
+    "seed": 20260711
+  },
+  "context": {
+    "dgraph_sha": "0d7d559c9ec4cae14c16b9990c41f206e2602862",
+    "gomap_version": "v0.6.2-0.20260711114710-3a3e3c72a1a8",
+    "dirty": false,
+    "go_version": "go1.26.4",
+    "host": "mikers-B560-DS3H-AC-Y1",
+    "kernel": "Linux 6.8.0-124-generic #124~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 21:05:19 UTC  x86_64 GNU/Linux",
+    "cpu": "11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz",
+    "exact_command": [
+      "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/bin/livebench",
+      "--dgraph-bin",
+      "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/bin/dgraph",
+      "--artifact-dir",
+      "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/live/badger-durable-r2",
+      "--backend",
+      "badger",
+      "--durability",
+      "durable",
+      "--repeat",
+      "2",
+      "--dataset-nodes",
+      "500",
+      "--warmup-ops",
+      "100",
+      "--timed-ops",
+      "2000",
+      "--concurrency",
+      "4",
+      "--zero-port-offset",
+      "23204",
+      "--alpha-port-offset",
+      "23244"
+    ],
+    "raw_path": "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/live/badger-durable-r2/result.json",
+    "contaminants": null,
+    "excluded": false
+  },
+  "setup_started": "2026-07-11T18:43:31.477915662Z",
+  "setup_finished": "2026-07-11T18:43:33.206522557Z",
+  "timed_started": "2026-07-11T18:43:33.210295529Z",
+  "timed_finished": "2026-07-11T18:43:36.33364868Z",
+  "throughput_ops_s": 640.3374525098651,
+  "latency_ms": {
+    "p50": 4.106,
+    "p95": 19.123,
+    "p99": 24.455
+  },
+  "metrics": {
+    "checkpoints": {
+      "available": false,
+      "unit": "count",
+      "source": "backend diagnostics",
+      "reason": "counter unavailable for selected backend"
+    },
+    "cpu_seconds": {
+      "available": true,
+      "value": 1.01,
+      "unit": "seconds",
+      "source": "/proc alpha utime+stime"
+    },
+    "disk_allocated_bytes": {
+      "available": true,
+      "value": 368640,
+      "unit": "bytes",
+      "source": "posting directory stat blocks"
+    },
+    "disk_logical_bytes": {
+      "available": true,
+      "value": 2282750002,
+      "unit": "bytes",
+      "source": "posting directory walk"
+    },
+    "flushes": {
+      "available": true,
+      "unit": "count",
+      "source": "Badger Prometheus vlog writes (proxy; no flush counter)"
+    },
+    "gc_cycles": {
+      "available": true,
+      "value": 1,
+      "unit": "count",
+      "source": "Prometheus Go runtime GC"
+    },
+    "recovery_seconds": {
+      "available": true,
+      "value": 1.5054893520000001,
+      "unit": "seconds",
+      "source": "alpha process restart to healthy"
+    },
+    "rss_peak_bytes": {
+      "available": true,
+      "value": 963125248,
+      "unit": "bytes",
+      "source": "/proc alpha VmHWM"
+    },
+    "write_amplification": {
+      "available": false,
+      "unit": "ratio",
+      "source": "backend diagnostics",
+      "reason": "equivalent physical write-byte counter unavailable or logical write bytes zero"
+    },
+    "write_bytes": {
+      "available": true,
+      "value": 141833,
+      "unit": "bytes",
+      "source": "Badger Prometheus badger_write_bytes_user"
+    }
+  },
+  "validation": {
+    "backend_observed": "badger",
+    "durability_observed": "syncwrites=true",
+    "schema_ok": true,
+    "posting_checksum": "c77aa709f0e4024559b345021b8e245fcdab55aa11b71b58c37f98002cc54e91",
+    "node_count": 920,
+    "restart_ok": true,
+    "unsupported_ok": true
+  }
+}
