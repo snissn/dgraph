@@ -22,7 +22,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/dgraph-io/badger/v4"
 	"github.com/dgraph-io/badger/v4/y"
 	"github.com/dgraph-io/dgo/v250"
 	"github.com/dgraph-io/dgo/v250/protos/api"
@@ -282,16 +281,17 @@ func runSchemaMutation(ctx context.Context, updates []*pb.SchemaUpdate, startTs 
 func updateSchema(s *pb.SchemaUpdate, ts uint64) error {
 	schema.State().Set(s.Predicate, s)
 	schema.State().DeleteMutSchema(s.Predicate)
-	txn := pstore.NewTransactionAt(ts, true)
+	txn := postingStore.NewWriteTxn()
 	defer txn.Discard()
 	data, err := proto.Marshal(s)
 	x.Check(err)
-	e := &badger.Entry{
+	e := posting.Entry{
 		Key:      x.SchemaKey(s.Predicate),
 		Value:    data,
 		UserMeta: posting.BitSchemaPosting,
 	}
-	if err = txn.SetEntry(e.WithDiscard()); err != nil {
+	e.DiscardEarlierVersions = true
+	if err = txn.SetEntry(e); err != nil {
 		return err
 	}
 	return txn.CommitAt(ts, nil)
@@ -337,16 +337,17 @@ func runTypeMutation(ctx context.Context, update *pb.TypeUpdate, ts uint64) erro
 // only during schema mutations or we see a new predicate.
 func updateType(typeName string, t *pb.TypeUpdate, ts uint64) error {
 	schema.State().SetType(typeName, t)
-	txn := pstore.NewTransactionAt(ts, true)
+	txn := postingStore.NewWriteTxn()
 	defer txn.Discard()
 	data, err := proto.Marshal(t)
 	x.Check(err)
-	e := &badger.Entry{
+	e := posting.Entry{
 		Key:      x.TypeKey(typeName),
 		Value:    data,
 		UserMeta: posting.BitSchemaPosting,
 	}
-	if err := txn.SetEntry(e.WithDiscard()); err != nil {
+	e.DiscardEarlierVersions = true
+	if err := txn.SetEntry(e); err != nil {
 		return err
 	}
 	return txn.CommitAt(ts, nil)
@@ -354,17 +355,16 @@ func updateType(typeName string, t *pb.TypeUpdate, ts uint64) error {
 
 func hasEdges(attr string, startTs uint64) bool {
 	pk := x.ParsedKey{Attr: attr}
-	iterOpt := badger.DefaultIteratorOptions
-	iterOpt.PrefetchValues = false
-	iterOpt.Prefix = pk.DataPrefix()
+	prefix := pk.DataPrefix()
+	iterOpt := posting.IteratorOptions{Prefix: prefix, PrefetchValues: false}
 
-	txn := pstore.NewTransactionAt(startTs, false)
+	txn := postingStore.NewReadTxn(startTs)
 	defer txn.Discard()
 
 	it := txn.NewIterator(iterOpt)
 	defer it.Close()
 
-	for it.Rewind(); it.Valid(); it.Next() {
+	for it.Rewind(); it.ValidForPrefix(prefix); it.Next() {
 		// NOTE: This is NOT correct.
 		// An incorrect, but efficient way to quickly check if we have at least one non-empty
 		// posting. This does NOT consider those posting lists which can have multiple deltas

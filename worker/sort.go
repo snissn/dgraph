@@ -187,6 +187,9 @@ func sortWithoutIndex(ctx context.Context, ts *pb.SortMessage) *sortresult {
 }
 
 func sortWithIndex(ctx context.Context, ts *pb.SortMessage) *sortresult {
+	if _, err := requireBadgerPostingStore("indexed sort"); err != nil {
+		return resultWithError(err)
+	}
 	if ctx.Err() != nil {
 		return resultWithError(ctx.Err())
 	}

@@ -33,6 +33,15 @@ type Options struct {
 	// PostingStoreBackend selects the Alpha posting-store backend. Badger is the default;
 	// TreeDB is experimental and fail-closed until readiness gates pass.
 	PostingStoreBackend string
+	// PostingStoreTier must be benchmark_minimal for the restricted TreeDB runtime.
+	PostingStoreTier string
+	// PostingStoreDurability selects durable or relaxed TreeDB acknowledgement.
+	PostingStoreDurability string
+	// PostingStoreEvents enables Dgraph-owned in-process post-commit events.
+	PostingStoreEvents bool
+	// PostingStoreEventsSet distinguishes an explicit events=false selector from
+	// the backend-specific default. TreeDB defaults on; Badger defaults off.
+	PostingStoreEventsSet bool
 	// MutationsMode is the mode used to handle mutation requests.
 	MutationsMode int
 	// AuthToken is the token to be passed for Alter HTTP requests.
@@ -93,6 +102,19 @@ func (opt *Options) validate() {
 	backend, err := NormalizePostingStoreBackend(opt.PostingStoreBackend)
 	x.Checkf(err, "Invalid posting-store backend")
 	opt.PostingStoreBackend = backend
+	if opt.PostingStoreTier == "" {
+		if backend == PostingStoreBackendTreeDB {
+			opt.PostingStoreTier = PostingStoreTierBenchmarkMinimal
+		} else {
+			opt.PostingStoreTier = PostingStoreTierProduction
+		}
+	}
+	if opt.PostingStoreDurability == "" {
+		opt.PostingStoreDurability = PostingStoreDurabilityDurable
+	}
+	if !opt.PostingStoreEventsSet && !opt.PostingStoreEvents {
+		opt.PostingStoreEvents = backend == PostingStoreBackendTreeDB
+	}
 
 	pd, err := filepath.Abs(opt.PostingDir)
 	x.Check(err)
@@ -120,11 +142,13 @@ func (opt *Options) validate() {
 
 // String implements the Stringer interface to redact sensitive fields when logging.
 func (opt Options) String() string {
-	return fmt.Sprintf("{PostingDir:%s WALDir:%s PostingStoreBackend:%s MutationsMode:%d "+
+	return fmt.Sprintf("{PostingDir:%s WALDir:%s PostingStoreBackend:%s PostingStoreTier:%s "+
+		"PostingStoreDurability:%s PostingStoreEvents:%v MutationsMode:%d "+
 		"AuthToken:**** AclJwtAlg:%v AclSecretKey:**** AclSecretKeyBytes:**** AccessJwtTtl:%v "+
 		"RefreshJwtTtl:%v CachePercentage:%s CacheMb:%d RemoveOnUpdate:%v Audit:%v "+
 		"ChangeDataConf:%s TypeFilterUidLimit:%d}",
-		opt.PostingDir, opt.WALDir, opt.PostingStoreBackend, opt.MutationsMode, opt.AclJwtAlg,
+		opt.PostingDir, opt.WALDir, opt.PostingStoreBackend, opt.PostingStoreTier,
+		opt.PostingStoreDurability, opt.PostingStoreEvents, opt.MutationsMode, opt.AclJwtAlg,
 		opt.AccessJwtTtl, opt.RefreshJwtTtl, opt.CachePercentage, opt.CacheMb,
 		opt.RemoveOnUpdate, opt.Audit, opt.ChangeDataConf, opt.TypeFilterUidLimit)
 }

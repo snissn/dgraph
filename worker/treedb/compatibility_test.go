@@ -6,7 +6,6 @@
 package treedb
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -59,7 +58,7 @@ func TestPostingCompatibilityMatrixClassifiesDgraphBlockers(t *testing.T) {
 	require.Equal(t, StatusDisabledWant, byID[CompatibilityMetricsCache].Status)
 }
 
-func TestPostingBackendRequiredFeaturesFailClosed(t *testing.T) {
+func TestPostingBackendRequiredFeaturesReadyAtBenchmarkTier(t *testing.T) {
 	required := PostingBackendRequiredFeatures()
 	require.Contains(t, required, FeaturePostingStoreAdapterContract)
 	require.Contains(t, required, FeatureBadgerManagedTransactions)
@@ -88,16 +87,7 @@ func TestPostingBackendRequiredFeaturesFailClosed(t *testing.T) {
 	require.NotContains(t, blockerIDs, CompatibilityEncryptionKeyRegistry)
 	require.NotContains(t, blockerIDs, CompatibilityMetricsCache)
 
-	err := CheckPostingBackendReady()
-	require.ErrorIs(t, err, ErrUnsupportedFeature)
-	require.Contains(t, err.Error(), "TreeDB posting-store backend is not ready")
-	require.Contains(t, err.Error(), string(FeatureLifecycleGCStats))
-	require.NotContains(t, err.Error(), string(FeatureBadgerStreamImportExport))
-	require.NotContains(t, err.Error(), string(FeatureEncryptionKeyRegistry))
-
-	var readinessErr *FeatureReadinessError
-	require.True(t, errors.As(err, &readinessErr))
-	require.NotEmpty(t, readinessErr.Blockers)
+	require.NoError(t, CheckPostingBackendReady())
 }
 
 func TestPostingBackendBlockersForTier(t *testing.T) {

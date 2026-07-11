@@ -169,11 +169,17 @@ func StoreExport(request *pb.ExportRequest, dir string, key x.Sensitive) error {
 
 // Backup handles a request coming from another node.
 func (w *grpcWorker) Backup(ctx context.Context, req *pb.BackupRequest) (*pb.BackupResponse, error) {
+	if _, err := requireBadgerPostingStore("backup"); err != nil {
+		return nil, err
+	}
 	glog.V(2).Infof("Received backup request via Grpc: %+v", req)
 	return backupCurrentGroup(ctx, req)
 }
 
 func backupCurrentGroup(ctx context.Context, req *pb.BackupRequest) (*pb.BackupResponse, error) {
+	if _, err := requireBadgerPostingStore("backup"); err != nil {
+		return nil, err
+	}
 	glog.Infof("Backup request: group %d at %d", req.GroupId, req.ReadTs)
 	if err := ctx.Err(); err != nil {
 		glog.Errorf("Context error during backup: %v\n", err)

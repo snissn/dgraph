@@ -23,6 +23,7 @@ type Store interface {
 // ReadTxn is a timestamp-bound schema read snapshot.
 type ReadTxn interface {
 	Get(key []byte) (Item, error)
+	NewIterator(prefix []byte) Iterator
 	Discard()
 }
 
@@ -36,7 +37,17 @@ type WriteTxn interface {
 // Item exposes the value callback needed to decode schema records without an
 // additional copy on Badger.
 type Item interface {
+	Key() []byte
 	Value(func([]byte) error) error
+}
+
+type Iterator interface {
+	Rewind()
+	ValidForPrefix(prefix []byte) bool
+	Item() Item
+	Next()
+	Error() error
+	Close()
 }
 
 type badgerStore struct {
@@ -67,6 +78,12 @@ func (t badgerReadTxn) Get(key []byte) (Item, error) {
 	return badgerItem{item: item}, nil
 }
 
+func (t badgerReadTxn) NewIterator(prefix []byte) Iterator {
+	opts := badger.DefaultIteratorOptions
+	opts.Prefix = prefix
+	return badgerIterator{iterator: t.txn.NewIterator(opts)}
+}
+
 func (t badgerReadTxn) Discard() {
 	t.txn.Discard()
 }
@@ -91,13 +108,25 @@ type badgerItem struct {
 	item *badger.Item
 }
 
+func (i badgerItem) Key() []byte { return i.item.Key() }
+
 func (i badgerItem) Value(fn func([]byte) error) error {
 	return i.item.Value(fn)
 }
+
+type badgerIterator struct{ iterator *badger.Iterator }
+
+func (i badgerIterator) Rewind()                           { i.iterator.Rewind() }
+func (i badgerIterator) ValidForPrefix(prefix []byte) bool { return i.iterator.ValidForPrefix(prefix) }
+func (i badgerIterator) Item() Item                        { return badgerItem{item: i.iterator.Item()} }
+func (i badgerIterator) Next()                             { i.iterator.Next() }
+func (i badgerIterator) Error() error                      { return nil }
+func (i badgerIterator) Close()                            { i.iterator.Close() }
 
 var (
 	_ Store    = badgerStore{}
 	_ ReadTxn  = badgerReadTxn{}
 	_ WriteTxn = badgerWriteTxn{}
 	_ Item     = badgerItem{}
+	_ Iterator = badgerIterator{}
 )

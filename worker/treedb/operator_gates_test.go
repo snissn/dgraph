@@ -28,20 +28,20 @@ func TestOperatorGateReportDocumentsFinalTreeDBState(t *testing.T) {
 
 	require.Equal(t, GateStatusPass, byID[GateBadgerDefault].Status)
 	require.Contains(t, byID[GateBadgerDefault].Decision, "Badger remains the default")
-	require.Equal(t, GateStatusFailClosed, byID[GateBenchmarkMinimalTier].Status)
-	require.Contains(t, byID[GateBenchmarkMinimalTier].Summary, "lifecycle wiring")
+	require.Equal(t, GateStatusPass, byID[GateBenchmarkMinimalTier].Status)
+	require.Contains(t, byID[GateBenchmarkMinimalTier].Summary, "lifecycle")
 	require.Equal(t, GateStatusFailClosed, byID[GateOperationalTier].Status)
 	require.Contains(t, byID[GateOperationalTier].Summary, "do not block benchmark-minimal startup")
 	require.Equal(t, GateStatusUnsupported, byID[GateProductionTier].Status)
 	require.Contains(t, byID[GateProductionTier].Summary, "future tier")
 
-	require.Equal(t, GateStatusEvidence, byID[GateTreeDBPrimitiveDurability].Status)
+	require.Equal(t, GateStatusPass, byID[GateTreeDBPrimitiveDurability].Status)
 	require.Contains(t, byID[GateTreeDBPrimitiveDurability].Summary, "satisfies benchmark-minimal posting semantics")
 
-	require.Equal(t, GateStatusFailClosed, byID[GateTreeDBSelector].Status)
-	require.Contains(t, byID[GateTreeDBSelector].Summary, "no silent fallback")
+	require.Equal(t, GateStatusPass, byID[GateTreeDBSelector].Status)
+	require.Contains(t, byID[GateTreeDBSelector].Summary, "never silently falls back")
 
-	require.Equal(t, GateStatusFailClosed, byID[GatePostingSchemaWorkflows].Status)
+	require.Equal(t, GateStatusPass, byID[GatePostingSchemaWorkflows].Status)
 	require.Equal(t, GateStatusFailClosed, byID[GateBackupRestoreExport].Status)
 	require.Equal(t, GateStatusFailClosed, byID[GateSubscriptions].Status)
 	require.Equal(t, GateStatusUnsupported, byID[GateEncryptionKeyRegistry].Status)

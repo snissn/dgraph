@@ -783,7 +783,13 @@ func (n *node) applyCommitted(proposal *pb.Proposal, key uint64) error {
 			glog.Warningf("Error while calling CreateSnapshot: %v. Retrying...", err)
 		}
 		// We can now discard all invalid versions of keys below this ts.
-		pstore.SetDiscardTs(snap.ReadTs)
+		if pstore != nil {
+			pstore.SetDiscardTs(snap.ReadTs)
+		} else if State.TreeDBStore != nil {
+			if err := State.TreeDBStore.AdvanceDiscardFloor(snap.ReadTs); err != nil {
+				return errors.Wrap(err, "advance TreeDB discard floor")
+			}
+		}
 		return nil
 	case proposal.Restore != nil:
 		// Enable draining mode for the duration of the restore processing.
@@ -966,7 +972,7 @@ func (n *node) processApplyCh() {
 func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
 	x.PrintOracleDelta(delta)
 	// First let's commit all mutations to disk.
-	writer := posting.NewTxnWriter(pstore)
+	writer := posting.NewTxnWriterForStore(postingStore)
 	toDisk := func(start, commit uint64) {
 		txn := posting.Oracle().GetTxn(start)
 		if txn == nil || commit == 0 {
@@ -1002,7 +1008,7 @@ func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
 		return errors.Wrapf(err, "while flushing to disk")
 	}
 
-	if x.WorkerConfig.HardSync {
+	if x.WorkerConfig.HardSync && pstore != nil {
 		if err := pstore.Sync(); err != nil {
 			glog.Errorf("Error while calling Sync while commitOrAbort: %v", err)
 		}
@@ -1323,10 +1329,16 @@ func (n *node) Run() {
 	go n.ReportRaftComms()
 
 	if !x.WorkerConfig.HardSync {
-		closer := z.NewCloser(2)
+		closerCount := 1
+		if pstore != nil {
+			closerCount = 2
+		}
+		closer := z.NewCloser(closerCount)
 		defer closer.SignalAndWait()
 		go x.StoreSync(n.Store, closer)
-		go x.StoreSync(pstore, closer)
+		if pstore != nil {
+			go x.StoreSync(pstore, closer)
+		}
 	}
 
 	applied, err := n.Store.Checkpoint()
@@ -1601,6 +1613,10 @@ func listWrap(kv *bpb.KV) *bpb.KVList {
 func (n *node) calculateTabletSizes() {
 	if !n.AmLeader() {
 		// Only leader sends the tablet size updates to Zero. No one else does.
+		return
+	}
+	if pstore == nil {
+		glog.V(2).Info("TreeDB benchmark-minimal runtime does not expose Badger table-size metadata")
 		return
 	}
 	var total int64

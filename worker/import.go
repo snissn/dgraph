@@ -338,6 +338,9 @@ func ProposeDrain(ctx context.Context, drainMode *api.UpdateExtSnapshotStreaming
 // there are any issues in the process, such as a broken connection or failure to establish
 // a stream with the leader.
 func InStream(stream api.Dgraph_StreamExtSnapshotServer) error {
+	if _, err := requireBadgerPostingStore("snapshot import"); err != nil {
+		return err
+	}
 	// Reject the stream unless an authorized UpdateExtSnapshotStreamingState(Start) has armed
 	// import mode. This is the control that holds even when no auth is configured (both auth
 	// gates fail open in that case). The wait absorbs a follower's brief Raft apply lag; a stream
@@ -474,6 +477,9 @@ func (w *grpcWorker) UpdateExtSnapshotStreamingState(ctx context.Context,
 // If the node is the leader (Forward is true), it streams the data to its followers.
 // Otherwise, it simply writes the data to BadgerDB and flushes it.
 func (w *grpcWorker) StreamExtSnapshot(stream pb.Worker_StreamExtSnapshotServer) error {
+	if _, err := requireBadgerPostingStore("snapshot import"); err != nil {
+		return err
+	}
 	glog.Info("[import] trying to update the import mode to false")
 	defer x.ExtSnapshotStreamingState(false)
 

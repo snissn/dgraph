@@ -230,9 +230,10 @@ var featureRegistry = []FeatureRecord{
 		ID:           FeatureBadgerSubscriptions,
 		Status:       StatusDisabledNeedBlocker,
 		RequiredTier: TierOperational,
-		Reason:       "worker.SubscribeForUpdates depends on Badger subscription semantics not exposed by TreeDB here",
+		Reason:       "the restricted runtime bridges future successful commits for Dgraph's internal worker watchers, but does not expose the full Badger DB.Subscribe contract",
 		Evidence: []string{
-			"worker/treedb README compatibility inventory: worker.SubscribeForUpdates",
+			"worker.TestTreeDBCommitEventSubscriptionStreamsFutureCommitsAndCancels",
+			"worker.TestTreeDBDisabledSubscriptionsExitWithoutRetryOrStateAccess",
 		},
 	},
 	{
@@ -265,13 +266,14 @@ var featureRegistry = []FeatureRecord{
 	},
 	{
 		ID:           FeatureLifecycleGCStats,
-		Status:       StatusDisabledNeedBlocker,
+		Status:       StatusSupported,
 		RequiredTier: TierBenchmarkMinimal,
-		Reason:       "TreeDBStore owns close, status, value-log GC, full compaction, and stats, but the Alpha lifecycle does not invoke that owner surface yet",
+		Reason:       "the restricted Alpha owner invokes TreeDBStore close, status, value-log GC, and stats without a hidden Badger handle",
 		Evidence: []string{
 			"dgraphTreeDBAPI compile assertion",
 			"TestOpenSmoke",
 			"posting.TestTreeDBStoreLifecycleStatusAndDurabilityModes",
+			"worker.TestServerStateTreeDBLifecycle",
 		},
 	},
 	{

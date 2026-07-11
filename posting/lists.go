@@ -62,7 +62,11 @@ func SetEnabledDetailedMetrics(enableMetrics bool) {
 
 // Cleanup waits until the closer has finished processing.
 func Cleanup() {
+	if closer == nil {
+		return
+	}
 	closer.SignalAndWait()
+	closer = nil
 }
 
 // GetNoStore returns the list stored in the key or creates a new one if it doesn't exist.

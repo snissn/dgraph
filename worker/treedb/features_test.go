@@ -86,9 +86,7 @@ func TestCapabilityTierRequirementsAndBlockers(t *testing.T) {
 				FeatureBadgerAllVersionIterators,
 				FeatureLifecycleGCStats,
 			},
-			wantBlockers: []FeatureID{
-				FeatureLifecycleGCStats,
-			},
+			wantBlockers: []FeatureID{},
 			wantExcludedFeature: []FeatureID{
 				FeatureBadgerEntryTTL,
 				FeatureBadgerStreamImportExport,
@@ -115,7 +113,6 @@ func TestCapabilityTierRequirementsAndBlockers(t *testing.T) {
 				FeatureBadgerSubscriptions,
 				FeatureBadgerProtobufCompatibility,
 				FeatureMetricsCacheAPIs,
-				FeatureLifecycleGCStats,
 			},
 			wantExcludedFeature: []FeatureID{
 				FeatureEncryptionKeyRegistry,
@@ -138,7 +135,6 @@ func TestCapabilityTierRequirementsAndBlockers(t *testing.T) {
 				FeatureEncryptionKeyRegistry,
 				FeatureBadgerProtobufCompatibility,
 				FeatureMetricsCacheAPIs,
-				FeatureLifecycleGCStats,
 			},
 			wantExcludedFeature: []FeatureID{
 				FeatureCommandWALConditionalTransactions,
@@ -167,8 +163,12 @@ func TestCapabilityTierRequirementsAndBlockers(t *testing.T) {
 			require.ElementsMatch(t, tt.wantBlockers, blockerIDs)
 
 			err = CheckCapabilityTier(tt.tier)
-			require.ErrorIs(t, err, ErrUnsupportedFeature)
-			require.Contains(t, err.Error(), "capability tier "+string(tt.tier)+" is not ready")
+			if len(tt.wantBlockers) == 0 {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, ErrUnsupportedFeature)
+				require.Contains(t, err.Error(), "capability tier "+string(tt.tier)+" is not ready")
+			}
 		})
 	}
 
@@ -218,35 +218,30 @@ func TestCheckRequiredFeaturesFailClosed(t *testing.T) {
 
 	required := []FeatureID{
 		FeatureMetricsCacheAPIs,
-		FeatureLifecycleGCStats,
 		FeatureEncryptionKeyRegistry,
 		FeatureID("future_feature"),
 	}
 	blockers := RequiredFeatureBlockers(required...)
-	require.Len(t, blockers, 4)
+	require.Len(t, blockers, 3)
 	require.Equal(t, FeatureMetricsCacheAPIs, blockers[0].ID)
 	require.Equal(t, StatusDisabledWant, blockers[0].Status)
-	require.Equal(t, FeatureLifecycleGCStats, blockers[1].ID)
-	require.Equal(t, StatusDisabledNeedBlocker, blockers[1].Status)
-	require.Equal(t, FeatureEncryptionKeyRegistry, blockers[2].ID)
+	require.Equal(t, FeatureEncryptionKeyRegistry, blockers[1].ID)
+	require.Equal(t, StatusUnsupported, blockers[1].Status)
+	require.Equal(t, FeatureID("future_feature"), blockers[2].ID)
 	require.Equal(t, StatusUnsupported, blockers[2].Status)
-	require.Equal(t, FeatureID("future_feature"), blockers[3].ID)
-	require.Equal(t, StatusUnsupported, blockers[3].Status)
 
 	err := CheckRequiredFeatures(required...)
 	require.ErrorIs(t, err, ErrUnsupportedFeature)
 	require.EqualError(t, err, "dgraph treedb integration: unsupported feature: required feature set is not ready: "+
 		"metrics_cache_apis=disabled_want (Badger cache sizing and metrics are desirable "+
 		"for Dgraph monitoring but are not wired for TreeDB yet); "+
-		"lifecycle_gc_stats=disabled_need_blocker (TreeDBStore owns close, status, value-log GC, full compaction, "+
-		"and stats, but the Alpha lifecycle does not invoke that owner surface yet); "+
 		"encryption_key_registry=unsupported (TreeDB does not expose a Dgraph-compatible encrypted-at-rest/"+
 		"key-registry contract in this integration lane); "+
 		"future_feature=unsupported (unknown TreeDB feature id)")
 
 	var readinessErr *FeatureReadinessError
 	require.True(t, errors.As(err, &readinessErr))
-	require.Len(t, readinessErr.Blockers, 4)
+	require.Len(t, readinessErr.Blockers, 3)
 }
 
 func TestUnsupportedFeaturesCompatibilityViewUsesRegistry(t *testing.T) {
@@ -262,7 +257,7 @@ func TestUnsupportedFeaturesCompatibilityViewUsesRegistry(t *testing.T) {
 	require.Len(t, unsupported, wantUnsupported)
 
 	joined := strings.Join(unsupported, "\n")
-	require.Contains(t, joined, "lifecycle_gc_stats: TreeDBStore owns close, status, value-log GC, full compaction")
+	require.NotContains(t, joined, "lifecycle_gc_stats:")
 	require.Contains(t, joined, "status: disabled_need_blocker")
 	require.Contains(t, joined, "encryption_key_registry: TreeDB does not expose a Dgraph-compatible")
 	require.Contains(t, joined, "status: unsupported")

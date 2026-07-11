@@ -176,6 +176,9 @@ func proposeRestoreOrSend(ctx context.Context, req *pb.RestoreRequest) error {
 // Restore implements the Worker interface.
 func (w *grpcWorker) Restore(ctx context.Context, req *pb.RestoreRequest) (*pb.Status, error) {
 	var emptyRes pb.Status
+	if _, err := requireBadgerPostingStore("restore"); err != nil {
+		return &emptyRes, err
+	}
 	if !groups().ServesGroup(req.GroupId) {
 		return &emptyRes, errors.Errorf("this server doesn't serve group id: %v", req.GroupId)
 	}
