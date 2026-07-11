@@ -13,10 +13,12 @@ the runtime default.
 
 `treedb_store_test.go` runs golden and randomized managed-timestamp histories against both
 BadgerStore and TreeDBStore, including metadata, discard markers, tombstones, binary keys/values,
-point reads, forward/reverse/prefix/exact-key iteration, callback errors, atomic batches, pruning,
-concurrent readers, and sticky iterator errors. `TestTreeDBStoreDurableCrashReopen` commits a
-versioned envelope in a subprocess using the durable command-WAL profile, exits without `Close`, and
-verifies its timestamp, metadata, discard marker, payload, and digest after reopen.
+point reads, forward/reverse/prefix/exact-key iteration (including a codec-maximum logical key),
+callback errors, true callback-path commit pipelining, close-versus-in-flight-commit ordering,
+atomic batches, pruning, concurrent readers, and sticky iterator errors.
+`TestTreeDBStoreDurableCrashReopen` commits a versioned envelope in a subprocess using the durable
+command-WAL profile, exits without `Close`, and verifies its timestamp, metadata, discard marker,
+payload, and digest after reopen.
 
 Lower-level gomap recovery remains authoritative for storage faults. The pinned module includes
 `mvcc.TestCommitAtDurableProcessCrashRecovery` (including a truncated WAL tail) and
@@ -29,7 +31,7 @@ GOWORK=off go test ./posting ./worker/treedb -count=1
 GOWORK=off go test -race ./posting ./worker/treedb -count=1
 ```
 
-The race run passed (`posting` 226.092s, `worker/treedb` 1.417s).
+The exact-head race run passed (`posting` 230.428s, `worker/treedb` 1.423s).
 
 ## Adapter microbenchmarks
 
@@ -47,35 +49,56 @@ it behind fsync. Durable acknowledgement is covered by the subprocess recovery t
 compared end-to-end in issue #17. Values are consumed through `Item.Value`, matching the zero-copy
 posting-list decode path. Results are five-sample medians:
 
-| Operation                                            |      Direct MVCC |      TreeDBStore |  Delta | Direct allocs | Adapter allocs |
-| ---------------------------------------------------- | ---------------: | ---------------: | -----: | ------------: | -------------: |
-| Point get                                            |      4,011 ns/op |      4,085 ns/op |  +1.8% |            56 |             58 |
-| All-version scan (256 items)                         |     99,683 ns/op |    107,192 ns/op |  +7.5% |           583 |            586 |
-| Grouped random seek                                  |      2,068 ns/op |      2,110 ns/op |  +2.0% |             4 |              4 |
-| Single write                                         |      4,569 ns/op |      5,212 ns/op | +14.1% |            14 |             21 |
-| 16-key atomic batch                                  |     18,695 ns/op |     22,371 ns/op | +19.7% |            64 |            121 |
-| Exact-key eight-version scan with 32 prefix siblings |      3,822 ns/op |      4,302 ns/op | +12.6% |            30 |             33 |
-| Close/reopen                                         | 25,559,172 ns/op | 24,687,304 ns/op |  -3.4% |         2,401 |          2,399 |
+| Operation                                            | Direct ns/op | Adapter ns/op | Latency delta | Direct B/op | Adapter B/op | B/op delta | Direct allocs | Adapter allocs |
+| ---------------------------------------------------- | -----------: | ------------: | ------------: | ----------: | -----------: | ---------: | ------------: | -------------: |
+| Point get                                            |        4,016 |         4,030 |         +0.3% |       5,462 |        5,566 |      +1.9% |            56 |             58 |
+| All-version scan (256 items)                         |       99,625 |       106,653 |         +7.1% |      51,599 |       51,839 |      +0.5% |           583 |            586 |
+| Grouped random seek                                  |        2,084 |         2,132 |         +2.3% |         383 |          383 |       0.0% |             4 |              4 |
+| Single write                                         |        4,689 |         4,913 |         +4.8% |       4,568 |        4,752 |      +4.0% |            14 |             16 |
+| 16-key atomic batch                                  |       18,685 |        20,503 |         +9.7% |      17,847 |       20,480 |     +14.8% |            64 |             81 |
+| Exact-key eight-version scan with 32 prefix siblings |        3,802 |         4,415 |        +16.1% |       1,448 |        1,688 |     +16.6% |            30 |             33 |
+| Close/reopen                                         |   21,356,208 |    25,054,475 |        +17.3% |  42,915,626 |   42,858,942 |      -0.1% |         2,389 |          2,395 |
 
-The worst median adapter delta is +19.7%, within the 20% gate. A separate five-sample write run
-reports post-close file-size deltas with fixture setup excluded: single-write medians are 12.68
-direct versus 12.66 adapter disk bytes/item; 16-key batch medians are 10.25 direct versus 10.15
-adapter disk bytes/item. These are logical file-size deltas, not physical-device write
-amplification.
+The worst median latency delta is +17.3% and the worst median byte-allocation delta is +16.6%, both
+within the 20% gate. Profiling the prior write staging identified avoidable map/string,
+envelope-copy, and mutation-slice costs. The adapter now combines each owned key and envelope in one
+allocation and reuses scrubbed mutation buffers. Allocation _counts_ remain +2 for a single write
+and +17 for a 16-key batch because the adapter contract must deep-own caller key/value bytes; the
+generic MVCC fixture supplies already-owned mutations. Those counts are reported rather than treated
+as zero-cost translation.
+
+Post-close file-size medians with fixture setup excluded are 12.69 direct versus 12.69 adapter disk
+bytes/item for single writes and 10.25 versus 10.20 for 16-key batches. These are logical file-size
+deltas, not physical-device write amplification.
+
+The callback path has its own five-sample depth-16 benchmark:
+
+```sh
+GOWORK=off go test ./posting -run '^$' \
+  -bench '^BenchmarkTreeDBStoreCallbackPipeline$' \
+  -benchtime=300ms -count=5 -benchmem
+```
+
+The synchronous one-at-a-time median was 74.4 us per 16 commits; `TxnWriter` callback pipelining was
+88.6 us (+19.1%), with 71.08 versus 74.20 KiB/op and 288 versus 323 allocs/op. The callback samples
+ranged from 87.4 to 99.1 us. This benchmark reports the bounded scheduling cost; the correctness
+claim does not depend on timing. A deterministic test holds an admitted storage commit, proves
+`TxnWriter.SetAt` has already returned, and proves `Close` does not return until the storage commit
+finishes.
 
 A resource-envelope smoke command used `/usr/bin/time -v` around the benchmark process
-(`-benchtime=100ms -count=1`). It reported 4.49s user CPU, 1.18s system CPU, 109% CPU, 5.17s wall
-time, and 584,960 KiB maximum RSS. This process-level RSS includes the Go test binary and all
+(`-benchtime=100ms -count=1`). It reported 5.20s user CPU, 1.36s system CPU, 95% CPU, 6.85s wall
+time, and 570,488 KiB maximum RSS. This process-level RSS includes the Go test binary and all
 sequential fixtures; per-operation heap cost is the `B/op` metric above.
 
 Local raw evidence and SHA-256 digests:
 
-| Artifact                                             | SHA-256                                                            |
-| ---------------------------------------------------- | ------------------------------------------------------------------ |
-| `/tmp/dgraph-21-bench/adapter-full-final.txt`        | `6efe3f034bd901ea8ce1fa92d3c1b2310ba3d79d8817748447c990f52e991ba4` |
-| `/tmp/dgraph-21-bench/adapter-write-disk-final.txt`  | `e6ce404f4a71af156f03a315f0be418aef86482134fbc2a66e32bcaaa8014811` |
-| `/tmp/dgraph-21-bench/adapter-resource-smoke.txt`    | `931138356ccdaeb687dd4e47881d9db49a157ece4def7b9eff2bddeabcc788cc` |
-| `/tmp/dgraph-21-bench/adapter-resource-envelope.txt` | `f0600d0b6d7cccd5206293014fea076565f8af61fca43daa21f51c00a6567a6f` |
+| Artifact                                                 | SHA-256                                                            |
+| -------------------------------------------------------- | ------------------------------------------------------------------ |
+| `/tmp/dgraph-21-bench-fix/adapter-full-final.txt`        | `30c2339e1446d7e1ceca459bf23af0c2fbaaae3d0c3dd0c4a4f8f10ef8e5dd64` |
+| `/tmp/dgraph-21-bench-fix/callback-pipeline-final.txt`   | `4b5fa4c6dcf6c6cbd025f853d157a0a81e4ee7a340b2c3f0b2760ce2d9d5aad0` |
+| `/tmp/dgraph-21-bench-fix/adapter-resource-smoke.txt`    | `2f81e009ef383696562a53d606137121d66eaf0d3a9481ecd32c1d90f7c0979f` |
+| `/tmp/dgraph-21-bench-fix/adapter-resource-envelope.txt` | `d1eed10d446cd3a63c535282512e604aae57e08cceb2c4f8ae8a9dcbaa092ce0` |
 
 ## Shared Badger seam regression guard
 

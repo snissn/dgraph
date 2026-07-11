@@ -177,6 +177,62 @@ func TestTreeDBStoreCommitCallbackIsAsyncAndReentrant(t *testing.T) {
 	require.NoError(t, writable.Close())
 	require.NoError(t, writer.SetAt([]byte("wait-error"), []byte("value"), BitDeltaPosting, 9))
 	require.ErrorIs(t, writer.Wait(), treedb.ErrClosed)
+
+	closingStore, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
+	closingTxn := closingStore.NewWriteTxn()
+	require.NoError(t, closingTxn.SetEntry(Entry{Key: []byte("callback-close"), Value: []byte("value")}))
+	closeFromCallback := make(chan error, 1)
+	require.NoError(t, closingTxn.CommitAt(10, func(err error) {
+		if err != nil {
+			closeFromCallback <- err
+			return
+		}
+		closeFromCallback <- closingStore.Close()
+	}))
+	select {
+	case err := <-closeFromCallback:
+		require.NoError(t, err, "callback must be able to close the store without waiting on itself")
+	case <-time.After(5 * time.Second):
+		t.Fatal("callback deadlocked while closing its store")
+	}
+}
+
+func TestTreeDBStoreTxnWriterPipelinesAndCloseWaitsForAdmittedCommit(t *testing.T) {
+	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
+	commitStarted := make(chan struct{})
+	releaseCommit := make(chan struct{})
+	store.beforeCommitForTest = func() {
+		close(commitStarted)
+		<-releaseCommit
+	}
+
+	writer := NewTxnWriterForStore(store)
+	setDone := make(chan error, 1)
+	go func() {
+		setDone <- writer.SetAt([]byte("pipelined"), []byte("value"), BitDeltaPosting, 1)
+	}()
+	select {
+	case <-commitStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("admitted commit did not start")
+	}
+	select {
+	case err := <-setDone:
+		require.NoError(t, err, "TxnWriter.SetAt must return while the admitted commit is in flight")
+	case <-time.After(5 * time.Second):
+		t.Fatal("TxnWriter.SetAt blocked on storage commit")
+	}
+
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- store.Close() }()
+	select {
+	case err := <-closeDone:
+		t.Fatalf("Close returned before its admitted commit completed: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseCommit)
+	require.NoError(t, writer.Wait())
+	require.NoError(t, <-closeDone)
 }
 
 func TestTreeDBStorePointErrorMappingAndCorruption(t *testing.T) {
@@ -346,6 +402,21 @@ func TestTreeDBStoreExactKeyAndSeekMatchBadger(t *testing.T) {
 			)
 		}
 	}
+}
+
+func TestTreeDBStoreExactKeyIteratorAcceptsCodecMaximumKey(t *testing.T) {
+	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
+	// Gomap's v1 MVCC codec uses a 9-byte namespace, a 2-byte terminator, and
+	// an 8-byte timestamp. A nonzero logical key of this length fills its uint16
+	// envelope exactly; appending a synthetic NUL upper bound would be invalid.
+	maxLogicalKey := bytes.Repeat([]byte{'x'}, (1<<16)-1-(9+2+8))
+	read := store.NewReadTxn(1)
+	defer read.Discard()
+	it := read.NewKeyIterator(maxLogicalKey, IteratorOptions{})
+	defer it.Close()
+	it.Rewind()
+	require.False(t, it.Valid())
+	require.NoError(t, it.Error())
 }
 
 func TestTreeDBStoreIteratorErrorIsSticky(t *testing.T) {

@@ -7,6 +7,7 @@ package posting
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io/fs"
 	"math"
@@ -158,6 +159,55 @@ func BenchmarkTreeDBStoreAdapterOverhead(b *testing.B) {
 	benchmarkTreeDBStoreReopen(b)
 }
 
+// BenchmarkTreeDBStoreCallbackPipeline compares synchronous one-at-a-time
+// commits with the callback path used by TxnWriter at a bounded pipeline depth.
+// It is separate from the adapter-overhead matrix so its concurrent write load
+// cannot perturb read/iterator samples.
+func BenchmarkTreeDBStoreCallbackPipeline(b *testing.B) {
+	const depth = 16
+
+	b.Run("SyncDepth16", func(b *testing.B) {
+		store := openTreeDBAdapterBenchStore(b)
+		b.ReportAllocs()
+		b.ResetTimer()
+		for operation := 0; operation < b.N; operation++ {
+			for item := 0; item < depth; item++ {
+				var key [16]byte
+				binary.LittleEndian.PutUint64(key[:8], uint64(operation))
+				binary.LittleEndian.PutUint64(key[8:], uint64(item))
+				txn := store.NewWriteTxn()
+				if err := txn.SetEntry(Entry{Key: key[:], Value: []byte("value")}); err != nil {
+					b.Fatal(err)
+				}
+				timestamp := uint64(operation*depth + item + 1)
+				if err := txn.CommitAt(timestamp, nil); err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+	})
+	b.Run("TxnWriterDepth16", func(b *testing.B) {
+		store := openTreeDBAdapterBenchStore(b)
+		b.ReportAllocs()
+		b.ResetTimer()
+		for operation := 0; operation < b.N; operation++ {
+			writer := NewTxnWriterForStore(store)
+			for item := 0; item < depth; item++ {
+				var key [16]byte
+				binary.LittleEndian.PutUint64(key[:8], uint64(operation))
+				binary.LittleEndian.PutUint64(key[8:], uint64(item))
+				timestamp := uint64(operation*depth + item + 1)
+				if err := writer.SetAt(key[:], []byte("value"), BitDeltaPosting, timestamp); err != nil {
+					b.Fatal(err)
+				}
+			}
+			if err := writer.Wait(); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
 func benchmarkTreeDBStoreWrites(b *testing.B, batchSize int) {
 	b.Helper()
 	name := fmt.Sprintf("WriteBatch%d", batchSize)
@@ -299,7 +349,6 @@ func benchmarkTreeDBStoreReopen(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			owner = mvcc.New(db)
 		}
 		b.StopTimer()
 		if err := db.Close(); err != nil {

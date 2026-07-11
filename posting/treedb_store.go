@@ -60,10 +60,16 @@ type TreeDBStore struct {
 	mode       TreeDBCommitMode
 	durability string
 
-	lifecycleMu sync.Mutex
-	closeOnce   sync.Once
-	closeErr    error
-	closed      atomic.Bool
+	lifecycleMu  sync.Mutex
+	commitWG     sync.WaitGroup
+	mutationPool sync.Pool
+	closeOnce    sync.Once
+	closeErr     error
+	closed       atomic.Bool
+
+	// beforeCommitForTest lets adapter tests hold an admitted commit without
+	// depending on storage timing. Production stores leave it nil.
+	beforeCommitForTest func()
 }
 
 // OpenTreeDBStore opens and owns a TreeDB posting store. opts.Durability must
@@ -81,6 +87,9 @@ func OpenTreeDBStore(opts treedb.Options, mode TreeDBCommitMode) (*TreeDBStore, 
 	store := &TreeDBStore{
 		db: db, mvcc: mvcc.New(db), commitMode: commitMode, mode: mode,
 		durability: db.DurabilityMode(),
+	}
+	store.mutationPool.New = func() any {
+		return &treeDBMutationBatch{mutations: make([]mvcc.Mutation, 0, 16)}
 	}
 	if commitMode == mvcc.CommitDurable && db.DurabilityMode() != "wal_on_sync" &&
 		!bytes.HasPrefix([]byte(db.DurabilityMode()), []byte("wal_on_sync+")) {
@@ -106,7 +115,8 @@ func (s *TreeDBStore) NewReadTxn(readTs uint64) ReadTxn {
 }
 
 func (s *TreeDBStore) NewWriteTxn() WriteTxn {
-	return &treeDBWriteTxn{store: s, mutations: make(map[string]mvcc.Mutation)}
+	batch := s.mutationPool.Get().(*treeDBMutationBatch)
+	return &treeDBWriteTxn{store: s, batch: batch}
 }
 
 func (s *TreeDBStore) IsClosed() bool {
@@ -119,10 +129,17 @@ func (s *TreeDBStore) Close() error {
 	if s == nil {
 		return nil
 	}
-	s.lifecycleMu.Lock()
-	defer s.lifecycleMu.Unlock()
 	s.closeOnce.Do(func() {
+		s.lifecycleMu.Lock()
 		s.closed.Store(true)
+		s.lifecycleMu.Unlock()
+
+		// No new commit can be admitted after closed is published. Wait for every
+		// commit accepted before that boundary before closing the owned DB.
+		s.commitWG.Wait()
+
+		s.lifecycleMu.Lock()
+		defer s.lifecycleMu.Unlock()
 		if s.db != nil {
 			s.closeErr = s.db.Close()
 		}
@@ -231,9 +248,13 @@ func (s *TreeDBStore) PruneVersions(batchSize int) (mvcc.PruneStats, error) {
 type treeDBWriteTxn struct {
 	mu        sync.Mutex
 	store     *TreeDBStore
-	mutations map[string]mvcc.Mutation
+	batch     *treeDBMutationBatch
 	stickyErr error
 	closed    bool
+}
+
+type treeDBMutationBatch struct {
+	mutations []mvcc.Mutation
 }
 
 func (t *treeDBWriteTxn) SetEntry(entry Entry) error {
@@ -246,9 +267,15 @@ func (t *treeDBWriteTxn) SetEntry(entry Entry) error {
 		t.stickyErr = fmt.Errorf("%w: key %x expires at %d", ErrTreeDBTTLUnsupported, entry.Key, entry.ExpiresAt)
 		return t.stickyErr
 	}
-	key := append([]byte(nil), entry.Key...)
-	value := encodeTreeDBEnvelope(entry)
-	t.mutations[string(key)] = mvcc.Mutation{Key: key, Value: value}
+	// One allocation owns both the key and envelope while preserving the
+	// caller-copy boundary. This avoids the map/string/copy staging overhead on
+	// Dgraph's common one-entry managed transactions.
+	owned := make([]byte, len(entry.Key)+treeDBEnvelopeHeader+len(entry.Value))
+	key := owned[:len(entry.Key)]
+	copy(key, entry.Key)
+	value := owned[len(entry.Key):]
+	encodeTreeDBEnvelopeInto(value, entry)
+	t.setMutation(mvcc.Mutation{Key: key, Value: value})
 	return nil
 }
 
@@ -259,42 +286,108 @@ func (t *treeDBWriteTxn) Delete(key []byte) error {
 		return ErrTreeDBTxnClosed
 	}
 	owned := append([]byte(nil), key...)
-	t.mutations[string(owned)] = mvcc.Mutation{Key: owned, Delete: true}
+	t.setMutation(mvcc.Mutation{Key: owned, Delete: true})
 	return nil
 }
 
-func (t *treeDBWriteTxn) CommitAt(commitTs uint64, cb func(error)) (err error) {
-	err = t.commitAt(commitTs)
-	if cb == nil {
-		return err
+func (t *treeDBWriteTxn) setMutation(mutation mvcc.Mutation) {
+	// Dgraph batches are small and overwhelmingly unique. A reverse linear
+	// search preserves last-operation-wins without allocating a map or strings.
+	for i := len(t.batch.mutations) - 1; i >= 0; i-- {
+		if bytes.Equal(t.batch.mutations[i].Key, mutation.Key) {
+			t.batch.mutations[i] = mutation
+			return
+		}
 	}
-	// Match Badger's callback form: acceptance is reported synchronously, while
-	// the commit/preflight outcome is delivered exactly once off-stack.
-	go cb(err)
+	t.batch.mutations = append(t.batch.mutations, mutation)
+}
+
+func (t *treeDBWriteTxn) CommitAt(commitTs uint64, cb func(error)) error {
+	batch, err := t.prepareCommit()
+	if cb == nil {
+		defer t.store.releaseMutationBatch(batch)
+		if err != nil {
+			return err
+		}
+		return t.store.commitAt(commitTs, batch.mutations)
+	}
+	if err != nil {
+		t.store.releaseMutationBatch(batch)
+		go cb(err)
+		return nil
+	}
+	if err := t.store.admitCommit(); err != nil {
+		t.store.releaseMutationBatch(batch)
+		go cb(err)
+		return nil
+	}
+	// Match Badger's callback form: an admitted commit runs behind the callback
+	// boundary, permitting TxnWriter to pipeline commits. The store lifecycle
+	// gate keeps the DB open through the storage commit. Complete that gate
+	// before invoking the callback so a callback may itself call Close.
+	go func() {
+		err := t.store.commitAtAdmitted(commitTs, batch.mutations)
+		t.store.releaseMutationBatch(batch)
+		t.store.commitWG.Done()
+		cb(err)
+	}()
 	return nil
 }
 
-func (t *treeDBWriteTxn) commitAt(commitTs uint64) error {
+func (t *treeDBWriteTxn) prepareCommit() (*treeDBMutationBatch, error) {
 	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.closed {
-		t.mu.Unlock()
-		return ErrTreeDBTxnClosed
+		return nil, ErrTreeDBTxnClosed
 	}
 	t.closed = true
+	batch := t.batch
+	t.batch = nil
 	if t.stickyErr != nil {
-		err := t.stickyErr
-		t.mu.Unlock()
-		return err
+		return batch, t.stickyErr
 	}
-	mutations := make([]mvcc.Mutation, 0, len(t.mutations))
-	for _, mutation := range t.mutations {
-		mutations = append(mutations, mutation)
+	return batch, nil
+}
+
+func (s *TreeDBStore) releaseMutationBatch(batch *treeDBMutationBatch) {
+	if s == nil || batch == nil {
+		return
 	}
-	t.mu.Unlock()
-	if t.store == nil || t.store.IsClosed() {
+	for i := range batch.mutations {
+		batch.mutations[i] = mvcc.Mutation{}
+	}
+	if cap(batch.mutations) <= 64 {
+		batch.mutations = batch.mutations[:0]
+		s.mutationPool.Put(batch)
+	}
+}
+
+func (s *TreeDBStore) admitCommit() error {
+	if s == nil {
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
 	}
-	if err := t.store.mvcc.CommitAt(commitTs, mutations, t.store.commitMode); err != nil {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.closed.Load() || s.db == nil {
+		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
+	}
+	s.commitWG.Add(1)
+	return nil
+}
+
+func (s *TreeDBStore) commitAt(commitTs uint64, mutations []mvcc.Mutation) error {
+	if err := s.admitCommit(); err != nil {
+		return err
+	}
+	defer s.commitWG.Done()
+	return s.commitAtAdmitted(commitTs, mutations)
+}
+
+func (s *TreeDBStore) commitAtAdmitted(commitTs uint64, mutations []mvcc.Mutation) error {
+	if s.beforeCommitForTest != nil {
+		s.beforeCommitForTest()
+	}
+	if err := s.mvcc.CommitAt(commitTs, mutations, s.commitMode); err != nil {
 		return fmt.Errorf("commit posting TreeDB transaction: %w", err)
 	}
 	return nil
@@ -306,12 +399,19 @@ func (t *treeDBWriteTxn) Discard() {
 	}
 	t.mu.Lock()
 	t.closed = true
-	t.mutations = nil
+	batch := t.batch
+	t.batch = nil
 	t.mu.Unlock()
+	t.store.releaseMutationBatch(batch)
 }
 
 func encodeTreeDBEnvelope(entry Entry) []byte {
 	encoded := make([]byte, treeDBEnvelopeHeader+len(entry.Value))
+	encodeTreeDBEnvelopeInto(encoded, entry)
+	return encoded
+}
+
+func encodeTreeDBEnvelopeInto(encoded []byte, entry Entry) {
 	encoded[0] = treeDBEnvelopeMagic0
 	encoded[1] = treeDBEnvelopeMagic1
 	encoded[2] = treeDBEnvelopeVersion
@@ -320,7 +420,6 @@ func encodeTreeDBEnvelope(entry Entry) []byte {
 	}
 	encoded[4] = entry.UserMeta
 	copy(encoded[treeDBEnvelopeHeader:], entry.Value)
-	return encoded
 }
 
 func decodeTreeDBEnvelope(encoded []byte) (value []byte, userMeta byte, discard bool, err error) {
@@ -554,6 +653,15 @@ func (it *treeDBIterator) openRawLocked() bool {
 		options.UpperBound = append(append([]byte(nil), it.exactKey...), 0)
 	}
 	raw, err := it.store.mvcc.IterateVersions(options)
+	if it.hasExactKey && errors.Is(err, mvcc.ErrInvalidKey) {
+		// A codec-maximum logical key cannot be extended with the synthetic NUL
+		// upper bound. Fall back to the codec's prefix bounds; the adapter's exact
+		// key filter below excludes longer logical siblings.
+		options.Prefix = append([]byte(nil), it.exactKey...)
+		options.LowerBound = append([]byte(nil), it.exactKey...)
+		options.UpperBound = nil
+		raw, err = it.store.mvcc.IterateVersions(options)
+	}
 	if err != nil {
 		it.err = fmt.Errorf("open posting TreeDB iterator: %w", err)
 		return false
