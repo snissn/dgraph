@@ -22,10 +22,13 @@ the existing posting-store adapter microbenchmarks, and then runs four live cell
 
 Each cell uses one Zero and one Alpha, the same deterministic schema, leased UID dataset, 60% point
 reads, 20% one-hop reads, 20% unique writes, fixed operation count, concurrency, seed, and excluded
-warmup. Raw JSON includes throughput, p50/p95/p99 latency, Alpha CPU and RSS/HWM, logical and
-allocated posting bytes, available write/GC/flush/checkpoint counters, recovery time,
-runtime-observed backend/durability, schema status, posting checksum/count, restart parity,
-unsupported-feature status, SHAs, dirty state, command, host, and contamination.
+warmup. Every timed read is checked against the expected value and cycle edge. Post-run and restart
+checksums include canonical `source value -> target value` topology, so they are UID-independent;
+unique write nodes are expected to have no edge. Raw JSON includes throughput, p50/p95/p99 latency,
+Alpha CPU and RSS/HWM, logical and allocated posting bytes, available write/GC/flush/checkpoint
+counters, recovery time, runtime-observed backend/durability, schema status, posting checksum/count,
+restart parity, unsupported-feature status, SHAs, dirty state, command,
+CPU/RAM/storage/filesystem/environment, and contamination.
 
 Aggregation fails on an incomplete matrix, wrong backend or durability, workload mismatch, missing
 metric contract, setup/timed overlap, excluded run, posting mismatch, schema failure, restart
@@ -33,6 +36,7 @@ failure, or unsupported-feature status failure. Start and final samples finding
 `construction_audit.py`, or host load above 75% of logical CPUs, mark a run excluded. Unavailable
 counters are retained with a source and reason; they are never manufactured. Relaxed and durable
 results have separate report headings and separate decisions. Badger remains the production default.
+Badger vlog-write counters are not presented as semantic flush counts.
 
 The issue #17 decision evidence produced from Dgraph commit
 `0d7d559c9ec4cae14c16b9990c41f206e2602862` is committed under

@@ -10,13 +10,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strings"
 	"time"
 )
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 type Config struct {
 	Backend         string         `json:"backend"`
@@ -40,20 +41,32 @@ type Metric struct {
 	Reason    string  `json:"reason,omitempty"`
 }
 
+type StorageContext struct {
+	Scope      string `json:"scope"`
+	Source     string `json:"source"`
+	Model      string `json:"model"`
+	SizeBytes  uint64 `json:"size_bytes"`
+	Filesystem string `json:"filesystem"`
+	Mountpoint string `json:"mountpoint"`
+}
+
 type Context struct {
-	DgraphSHA       string   `json:"dgraph_sha"`
-	GomapVersion    string   `json:"gomap_version"`
-	Dirty           bool     `json:"dirty"`
-	GoVersion       string   `json:"go_version"`
-	Host            string   `json:"host"`
-	Kernel          string   `json:"kernel"`
-	CPU             string   `json:"cpu"`
-	ExactCommand    []string `json:"exact_command"`
-	RawPath         string   `json:"raw_path"`
-	Profiles        []string `json:"profiles,omitempty"`
-	Contaminants    []string `json:"contaminants"`
-	Excluded        bool     `json:"excluded"`
-	ExclusionReason string   `json:"exclusion_reason,omitempty"`
+	DgraphSHA       string            `json:"dgraph_sha"`
+	GomapVersion    string            `json:"gomap_version"`
+	Dirty           bool              `json:"dirty"`
+	GoVersion       string            `json:"go_version"`
+	Host            string            `json:"host"`
+	Kernel          string            `json:"kernel"`
+	CPU             string            `json:"cpu"`
+	TotalRAMBytes   uint64            `json:"total_ram_bytes"`
+	Storage         StorageContext    `json:"storage"`
+	Environment     map[string]string `json:"environment"`
+	ExactCommand    []string          `json:"exact_command"`
+	RawPath         string            `json:"raw_path"`
+	Profiles        []string          `json:"profiles,omitempty"`
+	Contaminants    []string          `json:"contaminants"`
+	Excluded        bool              `json:"excluded"`
+	ExclusionReason string            `json:"exclusion_reason,omitempty"`
 }
 
 type Validation struct {
@@ -119,12 +132,16 @@ func (r Result) Validate() error {
 	if !r.SetupStarted.Before(r.SetupFinished) || r.SetupFinished.After(r.TimedStarted) || !r.TimedStarted.Before(r.TimedFinished) {
 		errs = append(errs, errors.New("setup leaked into or overlapped timed phase"))
 	}
-	wantBackend, wantDurability := expectedObserved(r.Config)
-	if r.Validation.BackendObserved != wantBackend {
-		errs = append(errs, fmt.Errorf("wrong backend: observed %q want %q", r.Validation.BackendObserved, wantBackend))
-	}
-	if !durabilityMatches(r.Config.Backend, r.Validation.DurabilityObserved, wantDurability) {
-		errs = append(errs, fmt.Errorf("wrong durability: observed %q want %q", r.Validation.DurabilityObserved, wantDurability))
+	wantBackend, wantDurability, configErr := expectedObserved(r.Config)
+	if configErr != nil {
+		errs = append(errs, fmt.Errorf("invalid config: %w", configErr))
+	} else {
+		if r.Validation.BackendObserved != wantBackend {
+			errs = append(errs, fmt.Errorf("wrong backend: observed %q want %q", r.Validation.BackendObserved, wantBackend))
+		}
+		if r.Validation.DurabilityObserved != wantDurability {
+			errs = append(errs, fmt.Errorf("wrong durability: observed %q want %q", r.Validation.DurabilityObserved, wantDurability))
+		}
 	}
 	if !r.Validation.SchemaOK || r.Validation.PostingChecksum == "" || r.Validation.NodeCount < r.Config.DatasetNodes || !r.Validation.RestartOK || !r.Validation.UnsupportedOK {
 		errs = append(errs, errors.New("logical, schema, posting, restart, or unsupported-feature validation incomplete"))
@@ -146,9 +163,30 @@ func (r Result) Validate() error {
 		if m.Unit == "" || m.Source == "" || (!m.Available && m.Reason == "") {
 			errs = append(errs, fmt.Errorf("metric %q lacks unit/source or unavailable reason", name))
 		}
+		if m.Available && (math.IsNaN(m.Value) || math.IsInf(m.Value, 0) || m.Value < 0) {
+			errs = append(errs, fmt.Errorf("metric %q has invalid available value %v", name, m.Value))
+		}
 	}
-	if r.Context.DgraphSHA == "" || r.Context.GomapVersion == "" || r.Context.GoVersion == "" || r.Context.Host == "" || len(r.Context.ExactCommand) == 0 || r.Context.RawPath == "" {
+	for _, name := range []string{"cpu_seconds", "rss_peak_bytes", "disk_logical_bytes", "disk_allocated_bytes", "recovery_seconds"} {
+		m, ok := r.Metrics[name]
+		invalidZero := name != "cpu_seconds" && m.Value <= 0
+		if name == "cpu_seconds" && r.Config.TimedOps >= 1000 && m.Value <= 0 {
+			invalidZero = true
+		}
+		if !ok || !m.Available || math.IsNaN(m.Value) || math.IsInf(m.Value, 0) || m.Value < 0 || invalidZero {
+			errs = append(errs, fmt.Errorf("core metric %q must be available and valid", name))
+		}
+	}
+	if r.Context.DgraphSHA == "" || r.Context.GomapVersion == "" || r.Context.GoVersion == "" || r.Context.Host == "" || r.Context.Kernel == "" || r.Context.CPU == "" || r.Context.TotalRAMBytes == 0 || len(r.Context.ExactCommand) == 0 || r.Context.RawPath == "" {
 		errs = append(errs, errors.New("reproduction context incomplete"))
+	}
+	if r.Context.Storage.Scope != "artifact_and_posting" || r.Context.Storage.Source == "" || r.Context.Storage.Model == "" || r.Context.Storage.SizeBytes == 0 || r.Context.Storage.Filesystem == "" || r.Context.Storage.Mountpoint == "" {
+		errs = append(errs, errors.New("reproduction storage context incomplete"))
+	}
+	for _, name := range []string{"GOWORK", "TMPDIR", "GOMAXPROCS", "GOFLAGS"} {
+		if _, ok := r.Context.Environment[name]; !ok {
+			errs = append(errs, fmt.Errorf("reproduction environment missing %s", name))
+		}
 	}
 	if r.Context.Excluded && r.Context.ExclusionReason == "" {
 		errs = append(errs, errors.New("excluded result lacks reason"))
@@ -156,26 +194,59 @@ func (r Result) Validate() error {
 	return errors.Join(errs...)
 }
 
-func expectedObserved(c Config) (string, string) {
-	switch {
-	case c.Backend == "badger" && c.DurabilityClass == "relaxed" && strings.Contains(c.Badger, "syncwrites=false"):
-		return "badger", "syncwrites=false"
-	case c.Backend == "badger" && c.DurabilityClass == "durable" && strings.Contains(c.Badger, "syncwrites=true"):
-		return "badger", "syncwrites=true"
-	case c.Backend == "treedb" && c.DurabilityClass == "relaxed" && strings.Contains(c.PostingStore, "durability=relaxed"):
-		return "treedb", "wal_on_relaxed_sync"
-	case c.Backend == "treedb" && c.DurabilityClass == "durable" && strings.Contains(c.PostingStore, "durability=durable"):
-		return "treedb", "wal_on_sync"
+func expectedObserved(c Config) (string, string, error) {
+	if c.DurabilityClass != "relaxed" && c.DurabilityClass != "durable" {
+		return "", "", fmt.Errorf("unknown durability class %q", c.DurabilityClass)
+	}
+	badgerSync := "false"
+	if c.Backend == "badger" && c.DurabilityClass == "durable" {
+		badgerSync = "true"
+	}
+	if err := requireExactSelector(c.Badger, map[string]string{"syncwrites": badgerSync}); err != nil {
+		return "", "", fmt.Errorf("badger selector: %w", err)
+	}
+	switch c.Backend {
+	case "badger":
+		if err := requireExactSelector(c.PostingStore, map[string]string{"backend": "badger", "tier": "production", "durability": "durable", "events": "false"}); err != nil {
+			return "", "", fmt.Errorf("posting-store selector: %w", err)
+		}
+		return "badger", "syncwrites=" + badgerSync, nil
+	case "treedb":
+		if err := requireExactSelector(c.PostingStore, map[string]string{"backend": "treedb", "tier": "benchmark_minimal", "durability": c.DurabilityClass, "events": "true"}); err != nil {
+			return "", "", fmt.Errorf("posting-store selector: %w", err)
+		}
+		if c.DurabilityClass == "relaxed" {
+			return "treedb", "wal_on_relaxed_sync+no_read_checksum", nil
+		}
+		return "treedb", "wal_on_sync", nil
 	default:
-		return "invalid-config", "invalid-config"
+		return "", "", fmt.Errorf("unknown backend %q", c.Backend)
 	}
 }
 
-func durabilityMatches(backend, observed, expected string) bool {
-	if backend == "treedb" {
-		return strings.HasPrefix(observed, expected)
+func requireExactSelector(raw string, expected map[string]string) error {
+	actual := map[string]string{}
+	for _, token := range strings.Split(raw, ";") {
+		token = strings.TrimSpace(token)
+		parts := strings.Split(token, "=")
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+			return fmt.Errorf("malformed token %q", token)
+		}
+		key, value := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+		if _, duplicate := actual[key]; duplicate {
+			return fmt.Errorf("duplicate token %q", key)
+		}
+		actual[key] = value
 	}
-	return observed == expected
+	if len(actual) != len(expected) {
+		return fmt.Errorf("got %d tokens, want %d", len(actual), len(expected))
+	}
+	for key, want := range expected {
+		if got, ok := actual[key]; !ok || got != want {
+			return fmt.Errorf("%s=%q, want %q", key, got, want)
+		}
+	}
+	return nil
 }
 
 func WriteImmutable(path string, value any) error {
@@ -210,7 +281,8 @@ func ValidateSet(results []Result, repeats int) error {
 	}
 	want := map[string]int{"badger/relaxed": repeats, "badger/durable": repeats, "treedb/relaxed": repeats, "treedb/durable": repeats}
 	fingerprint := ""
-	checksums := map[string]string{}
+	checksum := ""
+	nodeCount := 0
 	for _, r := range results {
 		if err := r.Validate(); err != nil {
 			return fmt.Errorf("%s: %w", r.RunID, err)
@@ -225,10 +297,14 @@ func ValidateSet(results []Result, repeats int) error {
 		} else if fingerprint != r.Config.Fingerprint() {
 			return fmt.Errorf("workload mismatch for %s", r.RunID)
 		}
-		if old := checksums[r.Config.DurabilityClass]; old != "" && old != r.Validation.PostingChecksum {
-			return fmt.Errorf("logical parity mismatch in %s class", r.Config.DurabilityClass)
+		if checksum != "" && checksum != r.Validation.PostingChecksum {
+			return fmt.Errorf("logical parity mismatch across matrix")
 		}
-		checksums[r.Config.DurabilityClass] = r.Validation.PostingChecksum
+		checksum = r.Validation.PostingChecksum
+		if nodeCount != 0 && nodeCount != r.Validation.NodeCount {
+			return fmt.Errorf("node-count parity mismatch across matrix")
+		}
+		nodeCount = r.Validation.NodeCount
 	}
 	for key, n := range want {
 		if n != 0 {

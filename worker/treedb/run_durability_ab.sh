@@ -67,6 +67,19 @@ GOWORK=off go build -o "${artifact_dir}/bin/report" ./worker/treedb/livebench/re
 micro_cmd=(go test ./posting -run '^$' -bench 'Benchmark(BadgerStoreSeam|TreeDBStoreAdapterOverhead|CommitEventDisabledAndUnsubscribed)$' -benchmem -benchtime "${benchtime}" -count "${count}")
 GOWORK=off "${micro_cmd[@]}" 2>&1 | tee "${artifact_dir}/microbench/raw.txt"
 
+storage_source=$(findmnt -no SOURCE -T "${artifact_dir}")
+storage_filesystem=$(findmnt -no FSTYPE -T "${artifact_dir}")
+storage_mountpoint=$(findmnt -no TARGET -T "${artifact_dir}")
+storage_device=${storage_source%%\[*}
+storage_parent=$(lsblk -ndo PKNAME "${storage_device}" 2>/dev/null || true)
+if [[ -n ${storage_parent} ]]; then
+	storage_device="/dev/${storage_parent%%$'\n'*}"
+fi
+storage_model=$(lsblk -dn -o MODEL "${storage_device}")
+storage_size_bytes=$(lsblk -dn -b -o SIZE "${storage_device}")
+ram_total_bytes=$(awk '/^MemTotal:/ { print $2 * 1024 }' /proc/meminfo)
+cpu_model=$(awk -F ': ' '/^model name/ { print $2; exit }' /proc/cpuinfo)
+
 {
 	echo "utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 	echo "dgraph_sha=$(git rev-parse HEAD)"
@@ -75,6 +88,18 @@ GOWORK=off "${micro_cmd[@]}" 2>&1 | tee "${artifact_dir}/microbench/raw.txt"
 	echo "host=$(hostname)"
 	echo "kernel=$(uname -srvmo)"
 	echo "go=$(go version)"
+	echo "cpu=${cpu_model}"
+	echo "ram_total_bytes=${ram_total_bytes}"
+	echo "storage_scope=artifact_and_posting"
+	echo "storage_source=${storage_source}"
+	echo "storage_model=${storage_model}"
+	echo "storage_size_bytes=${storage_size_bytes}"
+	echo "storage_filesystem=${storage_filesystem}"
+	echo "storage_mountpoint=${storage_mountpoint}"
+	echo "environment_GOWORK=${GOWORK-}"
+	echo "environment_TMPDIR=${TMPDIR-}"
+	echo "environment_GOMAXPROCS=${GOMAXPROCS-}"
+	echo "environment_GOFLAGS=${GOFLAGS-}"
 	echo "construction_audit=$(pgrep -af construction_audit.py || true)"
 	echo "loadavg=$(cat /proc/loadavg)"
 	echo "micro_command=GOWORK=off ${micro_cmd[*]}"

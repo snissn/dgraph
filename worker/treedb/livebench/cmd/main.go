@@ -44,6 +44,11 @@ type process struct {
 	log *os.File
 }
 
+type expectedNode struct {
+	Value     string
+	NextValue string
+}
+
 func main() {
 	var o options
 	flag.StringVar(&o.dgraphBin, "dgraph-bin", "", "path to the dgraph binary")
@@ -87,7 +92,10 @@ func run(o options) (err error) {
 	posting, badger := selectors(o.backend, o.class)
 	config := livebench.Config{Backend: o.backend, DurabilityClass: o.class, PostingStore: posting, Badger: badger, DatasetNodes: o.dataset, Concurrency: o.concurrency, WarmupOps: o.warmup, TimedOps: o.timed, QueryMix: map[string]int{"point_read": 60, "one_hop_read": 20, "write": 20}, Topology: "single-zero-single-alpha", Seed: o.seed}
 	r := livebench.Result{SchemaVersion: livebench.SchemaVersion, RunID: fmt.Sprintf("%s-%s-r%d", o.backend, o.class, o.repeat), Repeat: o.repeat, Config: config, LatencyMS: map[string]float64{}, Metrics: map[string]livebench.Metric{}}
-	r.Context = collectContext(o)
+	r.Context, err = collectContext(o)
+	if err != nil {
+		return fmt.Errorf("collect reproduction context: %w", err)
+	}
 	initialContaminants := contaminants(o.maxLoad)
 	r.Context.Contaminants = initialContaminants
 	if len(initialContaminants) > 0 {
@@ -132,7 +140,10 @@ func run(o options) (err error) {
 	r.SetupFinished = time.Now().UTC()
 	_, storeBefore, _ := storeStatus(httpBase)
 	promBefore, _ := prometheus(httpBase + "/debug/prometheus_metrics")
-	cpuBefore, _ := procCPU(alpha.cmd.Process.Pid)
+	cpuBefore, err := procCPU(alpha.cmd.Process.Pid)
+	if err != nil {
+		return fmt.Errorf("collect Alpha CPU before timed phase: %w", err)
+	}
 	r.TimedStarted = time.Now().UTC()
 	var profileDone chan error
 	if o.cpuProfile != "" {
@@ -153,11 +164,26 @@ func run(o options) (err error) {
 	}
 	r.Throughput = float64(o.timed) / r.TimedFinished.Sub(r.TimedStarted).Seconds()
 	r.LatencyMS = livebench.Percentiles(latencies)
-	cpuAfter, _ := procCPU(alpha.cmd.Process.Pid)
-	hwm, _ := procHWM(alpha.cmd.Process.Pid)
-	diskLogical, diskAllocated, _ := diskUsage(filepath.Join(runDir, "p"))
+	cpuAfter, err := procCPU(alpha.cmd.Process.Pid)
+	if err != nil {
+		return fmt.Errorf("collect Alpha CPU after timed phase: %w", err)
+	}
+	if cpuAfter < cpuBefore {
+		return fmt.Errorf("Alpha CPU counter regressed: before=%f after=%f", cpuBefore, cpuAfter)
+	}
+	hwm, err := procHWM(alpha.cmd.Process.Pid)
+	if err != nil {
+		return fmt.Errorf("collect Alpha RSS HWM: %w", err)
+	}
+	diskLogical, diskAllocated, err := diskUsage(filepath.Join(runDir, "p"))
+	if err != nil {
+		return fmt.Errorf("collect posting disk usage: %w", err)
+	}
 	promAfter, _ := prometheus(httpBase + "/debug/prometheus_metrics")
-	statusAfter, storeAfter, _ := storeStatus(httpBase)
+	statusAfter, storeAfter, err := storeStatus(httpBase)
+	if err != nil {
+		return fmt.Errorf("collect posting-store status: %w", err)
+	}
 	r.Metrics = metrics(o.backend, cpuAfter-cpuBefore, hwm, diskLogical, diskAllocated, promBefore, promAfter, storeBefore, storeAfter)
 	r.Validation.BackendObserved = statusAfter["backend"]
 	r.Validation.DurabilityObserved = statusAfter["profile"]
@@ -294,12 +320,12 @@ func client(addr string) (*dgo.Dgraph, *grpc.ClientConn, error) {
 	return dgo.NewDgraphClient(api.NewDgraphClient(conn)), conn, nil
 }
 
-func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]string, error) {
+func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]expectedNode, error) {
 	if err := dg.Alter(ctx, &api.Operation{Schema: "bench.value: string .\nbench.next: uid .\n"}); err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, n)
-	expected := make(map[string]string, n)
+	expected := make(map[string]expectedNode, n)
 	for base := 1; base <= n; base += 100 {
 		end := base + 100
 		if end > n+1 {
@@ -319,7 +345,6 @@ func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]string, error
 				return nil, fmt.Errorf("setup mutation omitted uid for n%d", i)
 			}
 			ids = append(ids, uid)
-			expected[uid] = value(i)
 		}
 	}
 	var edges strings.Builder
@@ -329,10 +354,13 @@ func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]string, error
 	if _, err := dg.NewTxn().Mutate(ctx, &api.Mutation{SetNquads: []byte(edges.String()), CommitNow: true}); err != nil {
 		return nil, err
 	}
+	for i, uid := range ids {
+		expected[uid] = expectedNode{Value: value(i + 1), NextValue: value((i+1)%len(ids) + 1)}
+	}
 	return expected, nil
 }
 
-func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]string, ops, concurrency int, seed int64, writeBase int) ([]float64, map[string]string, error) {
+func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNode, ops, concurrency int, seed int64, writeBase int) ([]float64, map[string]expectedNode, error) {
 	type sample struct {
 		ms    float64
 		uid   string
@@ -356,9 +384,17 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]string, op
 				uid := uids[(int(seed)+i*17)%len(uids)]
 				var err error
 				if kind < 60 {
-					_, err = dg.NewReadOnlyTxn().QueryWithVars(ctx, "query q($u: string) { q(func: uid($u)) { uid bench.value } }", map[string]string{"$u": uid})
+					var resp *api.Response
+					resp, err = dg.NewReadOnlyTxn().QueryWithVars(ctx, "query q($u: string) { q(func: uid($u)) { uid bench.value } }", map[string]string{"$u": uid})
+					if err == nil {
+						err = validateReadResponse(resp.Json, uid, dataset[uid], false)
+					}
 				} else if kind < 80 {
-					_, err = dg.NewReadOnlyTxn().QueryWithVars(ctx, "query q($u: string) { q(func: uid($u)) { uid bench.value bench.next { uid bench.value } } }", map[string]string{"$u": uid})
+					var resp *api.Response
+					resp, err = dg.NewReadOnlyTxn().QueryWithVars(ctx, "query q($u: string) { q(func: uid($u)) { uid bench.value bench.next { uid bench.value } } }", map[string]string{"$u": uid})
+					if err == nil {
+						err = validateReadResponse(resp.Json, uid, dataset[uid], true)
+					}
 				} else {
 					writeID := writeBase + i
 					resp, mutErr := dg.NewTxn().Mutate(ctx, &api.Mutation{SetNquads: []byte(fmt.Sprintf("_:w <bench.value> %q .", value(writeID))), CommitNow: true})
@@ -374,7 +410,7 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]string, op
 	}
 	go func() { wg.Wait(); close(out) }()
 	values := make([]float64, 0, ops)
-	writes := map[string]string{}
+	writes := map[string]expectedNode{}
 	for s := range out {
 		if s.err != nil {
 			return nil, nil, s.err
@@ -383,7 +419,7 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]string, op
 			if s.value == "" {
 				return nil, nil, errors.New("write result missing value")
 			}
-			writes[s.uid] = s.value
+			writes[s.uid] = expectedNode{Value: s.value}
 		}
 		values = append(values, s.ms)
 	}
@@ -391,26 +427,73 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]string, op
 }
 
 func value(i int) string { return fmt.Sprintf("node-%08d-%s", i, strings.Repeat("x", 48)) }
-func mergeExpected(parts ...map[string]string) map[string]string {
-	out := map[string]string{}
+func mergeExpected(parts ...map[string]expectedNode) map[string]expectedNode {
+	out := map[string]expectedNode{}
 	for _, part := range parts {
-		for uid, value := range part {
-			out[uid] = value
+		for uid, node := range part {
+			out[uid] = node
 		}
 	}
 	return out
 }
-func validatePosting(ctx context.Context, dg *dgo.Dgraph, expected map[string]string) (string, int, error) {
+
+type queryNode struct {
+	UID   string     `json:"uid"`
+	Value string     `json:"bench.value"`
+	Next  queryNodes `json:"bench.next"`
+}
+
+type queryNodes []queryNode
+
+func (nodes *queryNodes) UnmarshalJSON(raw []byte) error {
+	if string(raw) == "null" {
+		*nodes = nil
+		return nil
+	}
+	if len(raw) > 0 && raw[0] == '[' {
+		return json.Unmarshal(raw, (*[]queryNode)(nodes))
+	}
+	var node queryNode
+	if err := json.Unmarshal(raw, &node); err != nil {
+		return err
+	}
+	*nodes = []queryNode{node}
+	return nil
+}
+
+func validateReadResponse(raw []byte, uid string, expected expectedNode, oneHop bool) error {
+	var data struct {
+		Q []queryNode `json:"q"`
+	}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return fmt.Errorf("decode read response: %w", err)
+	}
+	if len(data.Q) != 1 || data.Q[0].UID != uid || data.Q[0].Value != expected.Value {
+		return fmt.Errorf("point read mismatch for %s", uid)
+	}
+	if !oneHop {
+		return nil
+	}
+	if expected.NextValue == "" {
+		if len(data.Q[0].Next) != 0 {
+			return fmt.Errorf("unexpected one-hop result for %s", uid)
+		}
+		return nil
+	}
+	if len(data.Q[0].Next) != 1 || data.Q[0].Next[0].Value != expected.NextValue {
+		return fmt.Errorf("one-hop read mismatch for %s", uid)
+	}
+	return nil
+}
+
+func validatePosting(ctx context.Context, dg *dgo.Dgraph, expected map[string]expectedNode) (string, int, error) {
 	ids := make([]string, 0, len(expected))
 	for uid := range expected {
 		ids = append(ids, uid)
 	}
 	sort.Strings(ids)
-	type node struct {
-		UID   string `json:"uid"`
-		Value string `json:"bench.value"`
-	}
 	var rows []string
+	seen := make(map[string]struct{}, len(ids))
 	for base := 0; base < len(ids); base += 100 {
 		end := base + 100
 		if end > len(ids) {
@@ -424,22 +507,31 @@ func validatePosting(ctx context.Context, dg *dgo.Dgraph, expected map[string]st
 			}
 			q.WriteString(id)
 		}
-		q.WriteString(")) { uid bench.value } }")
+		q.WriteString(")) { uid bench.value bench.next { uid bench.value } } }")
 		resp, err := dg.NewReadOnlyTxn().Query(ctx, q.String())
 		if err != nil {
 			return "", 0, err
 		}
 		var data struct {
-			Q []node `json:"q"`
+			Q []queryNode `json:"q"`
 		}
 		if err := json.Unmarshal(resp.Json, &data); err != nil {
 			return "", 0, err
 		}
 		for _, n := range data.Q {
-			if expected[n.UID] != n.Value {
-				return "", len(rows), fmt.Errorf("posting value mismatch for %s", n.UID)
+			want, ok := expected[n.UID]
+			if _, duplicate := seen[n.UID]; duplicate {
+				return "", len(rows), fmt.Errorf("duplicate posting row for %s", n.UID)
 			}
-			rows = append(rows, n.Value)
+			seen[n.UID] = struct{}{}
+			if !ok {
+				return "", len(rows), fmt.Errorf("unexpected posting row for %s", n.UID)
+			}
+			row, err := canonicalPostingRow(n, want)
+			if err != nil {
+				return "", len(rows), err
+			}
+			rows = append(rows, row)
 		}
 	}
 	sort.Strings(rows)
@@ -448,6 +540,23 @@ func validatePosting(ctx context.Context, dg *dgo.Dgraph, expected map[string]st
 	}
 	h := sha256.Sum256([]byte(strings.Join(rows, "\n")))
 	return hex.EncodeToString(h[:]), len(rows), nil
+}
+
+func canonicalPostingRow(node queryNode, expected expectedNode) (string, error) {
+	if expected.Value != node.Value {
+		return "", fmt.Errorf("posting value mismatch for %s", node.UID)
+	}
+	nextValue := ""
+	if len(node.Next) > 1 {
+		return "", fmt.Errorf("posting edge count mismatch for %s", node.UID)
+	}
+	if len(node.Next) == 1 {
+		nextValue = node.Next[0].Value
+	}
+	if nextValue != expected.NextValue {
+		return "", fmt.Errorf("posting edge mismatch for source value %q", node.Value)
+	}
+	return node.Value + "\x00" + nextValue, nil
 }
 func schemaOK(ctx context.Context, dg *dgo.Dgraph) bool {
 	resp, err := dg.NewReadOnlyTxn().Query(ctx, "schema(pred: [bench.value, bench.next]) { predicate type }")
@@ -579,8 +688,9 @@ func metrics(backend string, cpu, hwm, diskLogical, diskAllocated float64, pb, p
 	}
 	gc, gcOK := delta(pa, pb, "go_gc_duration_seconds_count")
 	gcSource := "Prometheus Go runtime GC"
-	flush, flushOK := delta(pa, pb, "badger_write_num_vlog")
-	flushSource := "Badger Prometheus vlog writes (proxy; no flush counter)"
+	flush, flushOK := 0.0, false
+	flushSource := "Badger diagnostics"
+	flushReason := "Badger exposes badger_write_num_vlog, which is not a semantic flush counter"
 	check := 0.0
 	checkOK := false
 	checkSource := "backend diagnostics"
@@ -589,11 +699,12 @@ func metrics(backend string, cpu, hwm, diskLogical, diskAllocated float64, pb, p
 		gcSource = "TreeDB /debug/store"
 		flush, flushOK = delta(sa, sb, "treedb.command_wal.flush.count_total")
 		flushSource = "TreeDB /debug/store"
+		flushReason = "TreeDB semantic command-WAL flush counter unavailable"
 		check, checkOK = delta(sa, sb, "treedb.cache.auto_checkpoint.count")
 		checkSource = "TreeDB /debug/store"
 	}
 	m["gc_cycles"] = availability(gc, gcOK, "count", gcSource, "counter unavailable")
-	m["flushes"] = availability(flush, flushOK, "count", flushSource, "counter unavailable")
+	m["flushes"] = availability(flush, flushOK, "count", flushSource, flushReason)
 	m["checkpoints"] = availability(check, checkOK, "count", checkSource, "counter unavailable for selected backend")
 	return m
 }
@@ -610,8 +721,14 @@ func procCPU(pid int) (float64, error) {
 	if len(f) < 15 {
 		return 0, errors.New("short proc stat")
 	}
-	u, _ := strconv.ParseFloat(f[13], 64)
-	s, _ := strconv.ParseFloat(f[14], 64)
+	u, err := strconv.ParseFloat(f[13], 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse proc utime: %w", err)
+	}
+	s, err := strconv.ParseFloat(f[14], 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse proc stime: %w", err)
+	}
 	return (u + s) / 100, nil
 }
 func procHWM(pid int) (float64, error) {
@@ -622,7 +739,13 @@ func procHWM(pid int) (float64, error) {
 	for _, line := range strings.Split(string(b), "\n") {
 		if strings.HasPrefix(line, "VmHWM:") {
 			f := strings.Fields(line)
-			v, _ := strconv.ParseFloat(f[1], 64)
+			if len(f) < 2 {
+				return 0, errors.New("malformed VmHWM")
+			}
+			v, err := strconv.ParseFloat(f[1], 64)
+			if err != nil {
+				return 0, fmt.Errorf("parse VmHWM: %w", err)
+			}
 			return v * 1024, nil
 		}
 	}
@@ -638,6 +761,8 @@ func diskUsage(root string) (float64, float64, error) {
 			logical += float64(info.Size())
 			if st, ok := info.Sys().(*syscall.Stat_t); ok {
 				allocated += float64(st.Blocks * 512)
+			} else {
+				return errors.New("filesystem stat does not expose allocated blocks")
 			}
 		}
 		return nil
@@ -645,26 +770,123 @@ func diskUsage(root string) (float64, float64, error) {
 	return logical, allocated, err
 }
 
-func collectContext(o options) livebench.Context {
+func collectContext(o options) (livebench.Context, error) {
 	cmd := []string{os.Args[0]}
 	cmd = append(cmd, os.Args[1:]...)
-	return livebench.Context{DgraphSHA: command("git", "rev-parse", "HEAD"), GomapVersion: command("go", "list", "-m", "-f", "{{.Version}}", "github.com/snissn/gomap"), Dirty: command("git", "status", "--porcelain") != "", GoVersion: runtime.Version(), Host: command("hostname"), Kernel: command("uname", "-srvmo"), CPU: firstCPU(), ExactCommand: cmd, RawPath: filepath.Join(o.artifactDir, "result.json")}
+	dgraphSHA, err := commandRequired("git", "rev-parse", "HEAD")
+	if err != nil {
+		return livebench.Context{}, err
+	}
+	gomapVersion, err := commandRequired("go", "list", "-m", "-f", "{{.Version}}", "github.com/snissn/gomap")
+	if err != nil {
+		return livebench.Context{}, err
+	}
+	host, err := commandRequired("hostname")
+	if err != nil {
+		return livebench.Context{}, err
+	}
+	kernel, err := commandRequired("uname", "-srvmo")
+	if err != nil {
+		return livebench.Context{}, err
+	}
+	cpu, err := firstCPU()
+	if err != nil {
+		return livebench.Context{}, err
+	}
+	ram, err := totalRAM()
+	if err != nil {
+		return livebench.Context{}, err
+	}
+	storage, err := storageContext(o.artifactDir)
+	if err != nil {
+		return livebench.Context{}, err
+	}
+	environment := map[string]string{}
+	for _, name := range []string{"GOWORK", "TMPDIR", "GOMAXPROCS", "GOFLAGS"} {
+		environment[name] = os.Getenv(name)
+	}
+	return livebench.Context{DgraphSHA: dgraphSHA, GomapVersion: gomapVersion, Dirty: command("git", "status", "--porcelain") != "", GoVersion: runtime.Version(), Host: host, Kernel: kernel, CPU: cpu, TotalRAMBytes: ram, Storage: storage, Environment: environment, ExactCommand: cmd, RawPath: filepath.Join(o.artifactDir, "result.json")}, nil
 }
 func command(name string, args ...string) string {
 	b, _ := exec.Command(name, args...).Output()
 	return strings.TrimSpace(string(b))
 }
-func firstCPU() string {
-	b, _ := os.ReadFile("/proc/cpuinfo")
+func commandRequired(name string, args ...string) (string, error) {
+	b, err := exec.Command(name, args...).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s: %w: %s", name, err, strings.TrimSpace(string(b)))
+	}
+	value := strings.TrimSpace(string(b))
+	if value == "" {
+		return "", fmt.Errorf("%s returned empty output", name)
+	}
+	return value, nil
+}
+func firstCPU() (string, error) {
+	b, err := os.ReadFile("/proc/cpuinfo")
+	if err != nil {
+		return "", err
+	}
 	for _, line := range strings.Split(string(b), "\n") {
 		if strings.HasPrefix(line, "model name") {
 			p := strings.SplitN(line, ":", 2)
 			if len(p) == 2 {
-				return strings.TrimSpace(p[1])
+				return strings.TrimSpace(p[1]), nil
 			}
 		}
 	}
-	return "unknown"
+	return "", errors.New("CPU model unavailable")
+}
+func totalRAM() (uint64, error) {
+	b, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(line, "MemTotal:") {
+			fields := strings.Fields(line)
+			if len(fields) < 2 {
+				break
+			}
+			kib, err := strconv.ParseUint(fields[1], 10, 64)
+			if err != nil {
+				return 0, err
+			}
+			return kib * 1024, nil
+		}
+	}
+	return 0, errors.New("MemTotal unavailable")
+}
+func storageContext(path string) (livebench.StorageContext, error) {
+	source, err := commandRequired("findmnt", "-no", "SOURCE", "-T", path)
+	if err != nil {
+		return livebench.StorageContext{}, err
+	}
+	filesystem, err := commandRequired("findmnt", "-no", "FSTYPE", "-T", path)
+	if err != nil {
+		return livebench.StorageContext{}, err
+	}
+	mountpoint, err := commandRequired("findmnt", "-no", "TARGET", "-T", path)
+	if err != nil {
+		return livebench.StorageContext{}, err
+	}
+	device := strings.SplitN(source, "[", 2)[0]
+	if parent := command("lsblk", "-ndo", "PKNAME", device); parent != "" {
+		device = filepath.Join("/dev", strings.Fields(parent)[0])
+	}
+	model, err := commandRequired("lsblk", "-dn", "-o", "MODEL", device)
+	if err != nil {
+		return livebench.StorageContext{}, err
+	}
+	sizeText, err := commandRequired("lsblk", "-dn", "-b", "-o", "SIZE", device)
+	if err != nil {
+		return livebench.StorageContext{}, err
+	}
+	size, err := strconv.ParseUint(strings.Fields(sizeText)[0], 10, 64)
+	if err != nil {
+		return livebench.StorageContext{}, fmt.Errorf("parse storage size: %w", err)
+	}
+	return livebench.StorageContext{Scope: "artifact_and_posting", Source: source, Model: model, SizeBytes: size, Filesystem: filesystem, Mountpoint: mountpoint}, nil
 }
 func contaminants(maxLoad float64) []string {
 	var out []string
