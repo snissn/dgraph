@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "run_id": "badger-relaxed-r1",
   "repeat": 1,
   "config": {
@@ -20,19 +20,34 @@
     "seed": 20260711
   },
   "context": {
-    "dgraph_sha": "0d7d559c9ec4cae14c16b9990c41f206e2602862",
+    "dgraph_sha": "6ae8d25b27ca6ebf20d8bec4c5de6151aba341a5",
     "gomap_version": "v0.6.2-0.20260711114710-3a3e3c72a1a8",
     "dirty": false,
     "go_version": "go1.26.4",
     "host": "mikers-B560-DS3H-AC-Y1",
     "kernel": "Linux 6.8.0-124-generic #124~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 21:05:19 UTC  x86_64 GNU/Linux",
     "cpu": "11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz",
+    "total_ram_bytes": 33512763392,
+    "storage": {
+      "scope": "artifact_and_posting",
+      "source": "/dev/nvme1n1p1",
+      "model": "Samsung SSD 990 PRO 4TB",
+      "size_bytes": 4000787030016,
+      "filesystem": "ext4",
+      "mountpoint": "/mnt/fast4tb"
+    },
+    "environment": {
+      "GOFLAGS": "",
+      "GOMAXPROCS": "",
+      "GOWORK": "off",
+      "TMPDIR": "/mnt/fast4tb/tmp"
+    },
     "exact_command": [
-      "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/bin/livebench",
+      "/mnt/fast4tb/dgraph-17-evidence/6ae8d25b2-run1/bin/livebench",
       "--dgraph-bin",
-      "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/bin/dgraph",
+      "/mnt/fast4tb/dgraph-17-evidence/6ae8d25b2-run1/bin/dgraph",
       "--artifact-dir",
-      "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/live/badger-relaxed-r1",
+      "/mnt/fast4tb/dgraph-17-evidence/6ae8d25b2-run1/live/badger-relaxed-r1",
       "--backend",
       "badger",
       "--durability",
@@ -52,19 +67,19 @@
       "--alpha-port-offset",
       "23042"
     ],
-    "raw_path": "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/live/badger-relaxed-r1/result.json",
+    "raw_path": "/mnt/fast4tb/dgraph-17-evidence/6ae8d25b2-run1/live/badger-relaxed-r1/result.json",
     "contaminants": null,
     "excluded": false
   },
-  "setup_started": "2026-07-11T18:42:29.493394001Z",
-  "setup_finished": "2026-07-11T18:42:30.449199421Z",
-  "timed_started": "2026-07-11T18:42:30.452915996Z",
-  "timed_finished": "2026-07-11T18:42:30.754187956Z",
-  "throughput_ops_s": 6638.520226044269,
+  "setup_started": "2026-07-11T19:07:50.337543454Z",
+  "setup_finished": "2026-07-11T19:07:51.301833234Z",
+  "timed_started": "2026-07-11T19:07:51.305328213Z",
+  "timed_finished": "2026-07-11T19:07:51.616722458Z",
+  "throughput_ops_s": 6422.726277423656,
   "latency_ms": {
-    "p50": 0.527,
-    "p95": 0.987,
-    "p99": 1.128
+    "p50": 0.547,
+    "p95": 1.039,
+    "p99": 1.196
   },
   "metrics": {
     "checkpoints": {
@@ -75,13 +90,13 @@
     },
     "cpu_seconds": {
       "available": true,
-      "value": 0.8900000000000001,
+      "value": 0.9099999999999999,
       "unit": "seconds",
       "source": "/proc alpha utime+stime"
     },
     "disk_allocated_bytes": {
       "available": true,
-      "value": 376832,
+      "value": 385024,
       "unit": "bytes",
       "source": "posting directory stat blocks"
     },
@@ -92,9 +107,10 @@
       "source": "posting directory walk"
     },
     "flushes": {
-      "available": true,
+      "available": false,
       "unit": "count",
-      "source": "Badger Prometheus vlog writes (proxy; no flush counter)"
+      "source": "Badger diagnostics",
+      "reason": "Badger exposes badger_write_num_vlog, which is not a semantic flush counter"
     },
     "gc_cycles": {
       "available": true,
@@ -104,13 +120,13 @@
     },
     "recovery_seconds": {
       "available": true,
-      "value": 1.50556837,
+      "value": 1.505190213,
       "unit": "seconds",
       "source": "alpha process restart to healthy"
     },
     "rss_peak_bytes": {
       "available": true,
-      "value": 962777088,
+      "value": 964009984,
       "unit": "bytes",
       "source": "/proc alpha VmHWM"
     },
@@ -122,7 +138,7 @@
     },
     "write_bytes": {
       "available": true,
-      "value": 146367,
+      "value": 151677,
       "unit": "bytes",
       "source": "Badger Prometheus badger_write_bytes_user"
     }
@@ -131,7 +147,7 @@
     "backend_observed": "badger",
     "durability_observed": "syncwrites=false",
     "schema_ok": true,
-    "posting_checksum": "c77aa709f0e4024559b345021b8e245fcdab55aa11b71b58c37f98002cc54e91",
+    "posting_checksum": "2e08caad769d3f0f221ddeaaa36e528ae1b4764fefdc27df3913a788474074d8",
     "node_count": 920,
     "restart_ok": true,
     "unsupported_ok": true

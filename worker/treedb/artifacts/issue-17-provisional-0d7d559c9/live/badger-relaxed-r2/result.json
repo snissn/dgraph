@@ -1,11 +1,11 @@
 {
-  "schema_version": 2,
-  "run_id": "treedb-durable-r1",
-  "repeat": 1,
+  "schema_version": 1,
+  "run_id": "badger-relaxed-r2",
+  "repeat": 2,
   "config": {
-    "backend": "treedb",
-    "durability_class": "durable",
-    "posting_store": "backend=treedb; tier=benchmark_minimal; durability=durable; events=true",
+    "backend": "badger",
+    "durability_class": "relaxed",
+    "posting_store": "backend=badger; tier=production; durability=durable; events=false",
     "badger": "syncwrites=false",
     "dataset_nodes": 500,
     "concurrency": 4,
@@ -20,40 +20,25 @@
     "seed": 20260711
   },
   "context": {
-    "dgraph_sha": "6ae8d25b27ca6ebf20d8bec4c5de6151aba341a5",
+    "dgraph_sha": "0d7d559c9ec4cae14c16b9990c41f206e2602862",
     "gomap_version": "v0.6.2-0.20260711114710-3a3e3c72a1a8",
     "dirty": false,
     "go_version": "go1.26.4",
     "host": "mikers-B560-DS3H-AC-Y1",
     "kernel": "Linux 6.8.0-124-generic #124~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 21:05:19 UTC  x86_64 GNU/Linux",
     "cpu": "11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz",
-    "total_ram_bytes": 33512763392,
-    "storage": {
-      "scope": "artifact_and_posting",
-      "source": "/dev/nvme1n1p1",
-      "model": "Samsung SSD 990 PRO 4TB",
-      "size_bytes": 4000787030016,
-      "filesystem": "ext4",
-      "mountpoint": "/mnt/fast4tb"
-    },
-    "environment": {
-      "GOFLAGS": "",
-      "GOMAXPROCS": "",
-      "GOWORK": "off",
-      "TMPDIR": "/mnt/fast4tb/tmp"
-    },
     "exact_command": [
-      "/mnt/fast4tb/dgraph-17-evidence/6ae8d25b2-run1/bin/livebench",
+      "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/bin/livebench",
       "--dgraph-bin",
-      "/mnt/fast4tb/dgraph-17-evidence/6ae8d25b2-run1/bin/dgraph",
+      "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/bin/dgraph",
       "--artifact-dir",
-      "/mnt/fast4tb/dgraph-17-evidence/6ae8d25b2-run1/live/treedb-durable-r1",
+      "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/live/badger-relaxed-r2",
       "--backend",
-      "treedb",
+      "badger",
       "--durability",
-      "durable",
+      "relaxed",
       "--repeat",
-      "1",
+      "2",
       "--dataset-nodes",
       "500",
       "--warmup-ops",
@@ -63,67 +48,69 @@
       "--concurrency",
       "4",
       "--zero-port-offset",
-      "23302",
+      "23004",
       "--alpha-port-offset",
-      "23342"
+      "23044"
     ],
-    "raw_path": "/mnt/fast4tb/dgraph-17-evidence/6ae8d25b2-run1/live/treedb-durable-r1/result.json",
+    "raw_path": "/mnt/fast4tb/dgraph-17-evidence/0d7d559c9-run1/live/badger-relaxed-r2/result.json",
     "contaminants": null,
     "excluded": false
   },
-  "setup_started": "2026-07-11T19:09:32.731487286Z",
-  "setup_finished": "2026-07-11T19:09:35.140201423Z",
-  "timed_started": "2026-07-11T19:09:35.158486961Z",
-  "timed_finished": "2026-07-11T19:09:40.628854056Z",
-  "throughput_ops_s": 365.6061769287898,
+  "setup_started": "2026-07-11T18:42:38.413342377Z",
+  "setup_finished": "2026-07-11T18:42:39.375541615Z",
+  "timed_started": "2026-07-11T18:42:39.379480914Z",
+  "timed_finished": "2026-07-11T18:42:39.696942921Z",
+  "throughput_ops_s": 6299.966471263442,
   "latency_ms": {
-    "p50": 7.539,
-    "p95": 29.523,
-    "p99": 39.938
+    "p50": 0.553,
+    "p95": 1.054,
+    "p99": 1.233
   },
   "metrics": {
     "checkpoints": {
-      "available": true,
+      "available": false,
       "unit": "count",
-      "source": "TreeDB /debug/store"
+      "source": "backend diagnostics",
+      "reason": "counter unavailable for selected backend"
     },
     "cpu_seconds": {
       "available": true,
-      "value": 1.23,
+      "value": 0.9299999999999999,
       "unit": "seconds",
       "source": "/proc alpha utime+stime"
     },
     "disk_allocated_bytes": {
       "available": true,
-      "value": 5488640,
+      "value": 380928,
       "unit": "bytes",
       "source": "posting directory stat blocks"
     },
     "disk_logical_bytes": {
       "available": true,
-      "value": 5419963,
+      "value": 2282750002,
       "unit": "bytes",
       "source": "posting directory walk"
     },
     "flushes": {
       "available": true,
       "unit": "count",
-      "source": "TreeDB /debug/store"
+      "source": "Badger Prometheus vlog writes (proxy; no flush counter)"
     },
     "gc_cycles": {
       "available": true,
+      "value": 1,
       "unit": "count",
-      "source": "TreeDB /debug/store"
+      "source": "Prometheus Go runtime GC"
     },
     "recovery_seconds": {
       "available": true,
-      "value": 1.506139543,
+      "value": 1.505224035,
       "unit": "seconds",
       "source": "alpha process restart to healthy"
     },
     "rss_peak_bytes": {
       "available": true,
-      "value": 1128886272,
+      "value": 965623808,
       "unit": "bytes",
       "source": "/proc alpha VmHWM"
     },
@@ -135,16 +122,16 @@
     },
     "write_bytes": {
       "available": true,
-      "value": 155548,
+      "value": 147007,
       "unit": "bytes",
-      "source": "TreeDB /debug/store public batch set bytes"
+      "source": "Badger Prometheus badger_write_bytes_user"
     }
   },
   "validation": {
-    "backend_observed": "treedb",
-    "durability_observed": "wal_on_sync",
+    "backend_observed": "badger",
+    "durability_observed": "syncwrites=false",
     "schema_ok": true,
-    "posting_checksum": "2e08caad769d3f0f221ddeaaa36e528ae1b4764fefdc27df3913a788474074d8",
+    "posting_checksum": "c77aa709f0e4024559b345021b8e245fcdab55aa11b71b58c37f98002cc54e91",
     "node_count": 920,
     "restart_ok": true,
     "unsupported_ok": true
