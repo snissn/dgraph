@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -106,6 +107,20 @@ func TestWaitHTTPBoundsEachReadinessProbe(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("readiness timeout took %s", elapsed)
+	}
+}
+
+func TestWithDgraphRPCTimeoutCancelsStalledCall(t *testing.T) {
+	started := time.Now()
+	_, err := withDgraphRPCTimeout(context.Background(), 10*time.Millisecond, func(ctx context.Context) (struct{}, error) {
+		<-ctx.Done()
+		return struct{}{}, ctx.Err()
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("stalled RPC error=%v", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("stalled RPC timeout took %s", elapsed)
 	}
 }
 

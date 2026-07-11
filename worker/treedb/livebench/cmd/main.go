@@ -347,8 +347,41 @@ func client(addr string) (*dgo.Dgraph, error) {
 	return dgo.NewClient(addr, dgo.WithGrpcOption(grpc.WithTransportCredentials(insecure.NewCredentials())))
 }
 
+const dgraphRPCTimeout = 30 * time.Second
+
+func withDgraphRPCTimeout[T any](ctx context.Context, timeout time.Duration, call func(context.Context) (T, error)) (T, error) {
+	rpcCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return call(rpcCtx)
+}
+
+func dgraphAlter(ctx context.Context, dg *dgo.Dgraph, operation *api.Operation) error {
+	_, err := withDgraphRPCTimeout(ctx, dgraphRPCTimeout, func(rpcCtx context.Context) (struct{}, error) {
+		return struct{}{}, dg.Alter(rpcCtx, operation)
+	})
+	return err
+}
+
+func dgraphMutate(ctx context.Context, dg *dgo.Dgraph, mutation *api.Mutation) (*api.Response, error) {
+	return withDgraphRPCTimeout(ctx, dgraphRPCTimeout, func(rpcCtx context.Context) (*api.Response, error) {
+		return dg.NewTxn().Mutate(rpcCtx, mutation)
+	})
+}
+
+func dgraphQuery(ctx context.Context, dg *dgo.Dgraph, query string) (*api.Response, error) {
+	return withDgraphRPCTimeout(ctx, dgraphRPCTimeout, func(rpcCtx context.Context) (*api.Response, error) {
+		return dg.NewReadOnlyTxn().Query(rpcCtx, query)
+	})
+}
+
+func dgraphQueryWithVars(ctx context.Context, dg *dgo.Dgraph, query string, vars map[string]string) (*api.Response, error) {
+	return withDgraphRPCTimeout(ctx, dgraphRPCTimeout, func(rpcCtx context.Context) (*api.Response, error) {
+		return dg.NewReadOnlyTxn().QueryWithVars(rpcCtx, query, vars)
+	})
+}
+
 func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]expectedNode, error) {
-	if err := dg.Alter(ctx, &api.Operation{Schema: "bench.value: string .\nbench.next: uid .\n"}); err != nil {
+	if err := dgraphAlter(ctx, dg, &api.Operation{Schema: "bench.value: string .\nbench.next: uid .\n"}); err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, n)
@@ -362,7 +395,7 @@ func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]expectedNode,
 		for i := base; i < end; i++ {
 			fmt.Fprintf(&b, "_:n%d <bench.value> %q .\n", i, value(i))
 		}
-		resp, err := dg.NewTxn().Mutate(ctx, &api.Mutation{SetNquads: []byte(b.String()), CommitNow: true})
+		resp, err := dgraphMutate(ctx, dg, &api.Mutation{SetNquads: []byte(b.String()), CommitNow: true})
 		if err != nil {
 			return nil, err
 		}
@@ -378,7 +411,7 @@ func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]expectedNode,
 	for i, uid := range ids {
 		fmt.Fprintf(&edges, "<%s> <bench.next> <%s> .\n", uid, ids[(i+1)%len(ids)])
 	}
-	if _, err := dg.NewTxn().Mutate(ctx, &api.Mutation{SetNquads: []byte(edges.String()), CommitNow: true}); err != nil {
+	if _, err := dgraphMutate(ctx, dg, &api.Mutation{SetNquads: []byte(edges.String()), CommitNow: true}); err != nil {
 		return nil, err
 	}
 	for i, uid := range ids {
@@ -388,6 +421,8 @@ func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]expectedNode,
 }
 
 func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNode, ops, concurrency int, seed int64, writeBase int) ([]float64, map[string]expectedNode, error) {
+	exerciseCtx, cancelExercise := context.WithCancel(ctx)
+	defer cancelExercise()
 	type sample struct {
 		ms    float64
 		uid   string
@@ -413,19 +448,19 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNo
 				var err error
 				if kind < 60 {
 					var resp *api.Response
-					resp, err = dg.NewReadOnlyTxn().QueryWithVars(ctx, "query q($u: string) { q(func: uid($u)) { uid bench.value } }", map[string]string{"$u": uid})
+					resp, err = dgraphQueryWithVars(exerciseCtx, dg, "query q($u: string) { q(func: uid($u)) { uid bench.value } }", map[string]string{"$u": uid})
 					if err == nil {
 						err = validateReadResponse(resp.Json, uid, dataset[uid], false)
 					}
 				} else if kind < 80 {
 					var resp *api.Response
-					resp, err = dg.NewReadOnlyTxn().QueryWithVars(ctx, "query q($u: string) { q(func: uid($u)) { uid bench.value bench.next { uid bench.value } } }", map[string]string{"$u": uid})
+					resp, err = dgraphQueryWithVars(exerciseCtx, dg, "query q($u: string) { q(func: uid($u)) { uid bench.value bench.next { uid bench.value } } }", map[string]string{"$u": uid})
 					if err == nil {
 						err = validateReadResponse(resp.Json, uid, dataset[uid], true)
 					}
 				} else {
 					writeID := writeBase + i
-					resp, mutErr := dg.NewTxn().Mutate(ctx, &api.Mutation{SetNquads: []byte(fmt.Sprintf("_:w <bench.value> %q .", value(writeID))), CommitNow: true})
+					resp, mutErr := dgraphMutate(exerciseCtx, dg, &api.Mutation{SetNquads: []byte(fmt.Sprintf("_:w <bench.value> %q .", value(writeID))), CommitNow: true})
 					err = mutErr
 					if err == nil {
 						out <- sample{ms: float64(time.Since(start).Microseconds()) / 1000, uid: resp.Uids["w"], value: value(writeID), write: true}
@@ -441,6 +476,7 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNo
 	writes := map[string]expectedNode{}
 	for s := range out {
 		if s.err != nil {
+			cancelExercise()
 			return nil, nil, s.err
 		}
 		if s.write {
@@ -528,7 +564,7 @@ func validateReadResponse(raw []byte, uid string, expected expectedNode, oneHop 
 }
 
 func validatePosting(ctx context.Context, dg *dgo.Dgraph, expected map[string]expectedNode) (string, int, error) {
-	resp, err := dg.NewReadOnlyTxn().Query(ctx, postingValidationQuery(len(expected)))
+	resp, err := dgraphQuery(ctx, dg, postingValidationQuery(len(expected)))
 	if err != nil {
 		return "", 0, err
 	}
@@ -603,7 +639,7 @@ func canonicalPostingRow(node queryNode, expected expectedNode) (string, error) 
 	return node.Value + "\x00" + node.Next[0].Value, nil
 }
 func validateSchema(ctx context.Context, dg *dgo.Dgraph) error {
-	resp, err := dg.NewReadOnlyTxn().Query(ctx, "schema(pred: [bench.value, bench.next]) { predicate type }")
+	resp, err := dgraphQuery(ctx, dg, "schema(pred: [bench.value, bench.next]) { predicate type }")
 	if err != nil {
 		return err
 	}
