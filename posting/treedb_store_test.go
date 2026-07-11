@@ -378,6 +378,67 @@ func TestTreeDBStoreCallbackQueueIsBoundedAndFIFO(t *testing.T) {
 		read.Discard()
 		require.NoError(t, store.Close())
 	})
+
+	t.Run("synchronous then first callback", func(t *testing.T) {
+		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+		firstStarted := make(chan struct{})
+		secondStarted := make(chan struct{})
+		releaseFirst := make(chan struct{})
+		var calls atomic.Int32
+		store.beforeCommitForTest = func() {
+			switch calls.Add(1) {
+			case 1:
+				close(firstStarted)
+				<-releaseFirst
+			case 2:
+				close(secondStarted)
+			}
+		}
+
+		first := store.NewWriteTxn()
+		require.NoError(t, first.SetEntry(Entry{Key: []byte("same"), Value: []byte("synchronous")}))
+		firstDone := make(chan error, 1)
+		go func() { firstDone <- first.CommitAt(7, nil) }()
+		select {
+		case <-firstStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("synchronous commit did not start")
+		}
+
+		second := store.NewWriteTxn()
+		require.NoError(t, second.SetEntry(Entry{Key: []byte("same"), Value: []byte("callback")}))
+		secondDone := make(chan error, 1)
+		callbackDone := make(chan error, 1)
+		go func() {
+			secondDone <- second.CommitAt(7, func(err error) { callbackDone <- err })
+		}()
+		select {
+		case <-secondStarted:
+			t.Fatal("first callback commit overtook the blocked synchronous commit")
+		case err := <-secondDone:
+			t.Fatalf("first callback commit returned before the synchronous handoff: %v", err)
+		case <-time.After(100 * time.Millisecond):
+		}
+
+		close(releaseFirst)
+		require.NoError(t, <-firstDone)
+		require.NoError(t, <-secondDone)
+		select {
+		case <-secondStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("first callback commit did not run after the synchronous commit")
+		}
+		require.NoError(t, <-callbackDone)
+
+		read := store.NewReadTxn(7)
+		item, err := read.Get([]byte("same"))
+		require.NoError(t, err)
+		value, err := item.ValueCopy(nil)
+		require.NoError(t, err)
+		require.Equal(t, []byte("callback"), value)
+		read.Discard()
+		require.NoError(t, store.Close())
+	})
 }
 
 func TestTreeDBMutationBatchReleaseScrubsOwnedBytes(t *testing.T) {
