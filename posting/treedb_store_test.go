@@ -330,6 +330,7 @@ func TestTreeDBMutationBatchReleaseScrubsOwnedBytes(t *testing.T) {
 		arena:     make([]byte, 0, 8),
 	}
 	first := batch.ownBytes(8)
+	require.Equal(t, len(first), cap(first), "owned slices must not expose spare arena capacity")
 	copy(first, "secret-1")
 	second := batch.ownBytes(8 << 10)
 	copy(second, "secret-2")
@@ -516,10 +517,12 @@ func TestTreeDBStoreExactKeyAndSeekMatchBadger(t *testing.T) {
 
 func TestTreeDBStoreExactKeyIteratorAcceptsCodecMaximumKey(t *testing.T) {
 	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
+	const gomapMVCCV1FixedKeyBytes = 9 + 2 + 8
 	// Gomap's v1 MVCC codec uses a 9-byte namespace, a 2-byte terminator, and
 	// an 8-byte timestamp. A nonzero logical key of this length fills its uint16
-	// envelope exactly; appending a synthetic NUL upper bound would be invalid.
-	maxLogicalKey := bytes.Repeat([]byte{'x'}, (1<<16)-1-(9+2+8))
+	// envelope exactly; the one-byte-over assertion below makes any upstream
+	// layout change fail loudly until this pinned contract is updated.
+	maxLogicalKey := bytes.Repeat([]byte{'x'}, math.MaxUint16-gomapMVCCV1FixedKeyBytes)
 	read := store.NewReadTxn(1)
 	defer read.Discard()
 	it := read.NewKeyIterator(maxLogicalKey, IteratorOptions{})
@@ -527,6 +530,13 @@ func TestTreeDBStoreExactKeyIteratorAcceptsCodecMaximumKey(t *testing.T) {
 	it.Rewind()
 	require.False(t, it.Valid())
 	require.NoError(t, it.Error())
+
+	overflow := append(bytes.Clone(maxLogicalKey), 'x')
+	overflowIt := read.NewKeyIterator(overflow, IteratorOptions{})
+	defer overflowIt.Close()
+	overflowIt.Rewind()
+	require.False(t, overflowIt.Valid())
+	require.ErrorIs(t, overflowIt.Error(), mvcc.ErrInvalidKey)
 }
 
 func TestTreeDBStoreIteratorErrorIsSticky(t *testing.T) {
@@ -689,6 +699,12 @@ func TestTreeDBStoreLifecycleStatusAndDurabilityModes(t *testing.T) {
 	_, err = durable.ValueLogGC(context.Background(), treedb.ValueLogGCOptions{DryRun: true})
 	require.ErrorIs(t, err, treedb.ErrClosed)
 	_, err = durable.CompactStorage(context.Background(), treedb.CompactStorageOptions{})
+	require.ErrorIs(t, err, treedb.ErrClosed)
+	_, err = durable.DiscardFloor()
+	require.ErrorIs(t, err, treedb.ErrClosed)
+	err = durable.AdvanceDiscardFloor(1)
+	require.ErrorIs(t, err, treedb.ErrClosed)
+	_, err = durable.PruneVersions(1)
 	require.ErrorIs(t, err, treedb.ErrClosed)
 
 	dir := t.TempDir()

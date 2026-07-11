@@ -104,8 +104,10 @@ func OpenTreeDBStore(opts treedb.Options, mode TreeDBCommitMode) (*TreeDBStore, 
 			arena:     make([]byte, 0, 4<<10),
 		}
 	}
-	if commitMode == mvcc.CommitDurable && db.DurabilityMode() != "wal_on_sync" &&
-		!bytes.HasPrefix([]byte(db.DurabilityMode()), []byte("wal_on_sync+")) {
+	// Use TreeDB's exported configuration contract here. DurabilityMode is an
+	// operator-facing diagnostic string; opts.Durability is the stable typed
+	// capability that controls whether WriteSync is available.
+	if commitMode == mvcc.CommitDurable && opts.Durability != treedb.DurabilityDurable {
 		_ = store.Close()
 		return nil, fmt.Errorf("%w: durable adapter with TreeDB mode %q", mvcc.ErrDurabilityUnavailable, db.DurabilityMode())
 	}
@@ -246,17 +248,41 @@ func (s *TreeDBStore) CompactStorage(ctx context.Context, opts treedb.CompactSto
 // DiscardFloor exposes gomap's persisted global discard floor for Dgraph-owned
 // maintenance orchestration.
 func (s *TreeDBStore) DiscardFloor() (uint64, error) {
+	if s == nil {
+		return 0, fmt.Errorf("discard floor posting TreeDB: %w", treedb.ErrClosed)
+	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.IsClosed() || s.db == nil {
+		return 0, fmt.Errorf("discard floor posting TreeDB: %w", treedb.ErrClosed)
+	}
 	return s.mvcc.DiscardFloor()
 }
 
 // AdvanceDiscardFloor persists a monotonic discard floor using the adapter's
 // configured acknowledgement boundary.
 func (s *TreeDBStore) AdvanceDiscardFloor(timestamp uint64) error {
+	if s == nil {
+		return fmt.Errorf("advance discard floor posting TreeDB: %w", treedb.ErrClosed)
+	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.IsClosed() || s.db == nil {
+		return fmt.Errorf("advance discard floor posting TreeDB: %w", treedb.ErrClosed)
+	}
 	return s.mvcc.AdvanceDiscardFloor(timestamp, s.commitMode)
 }
 
 // PruneVersions removes obsolete versions below the persisted discard floor.
 func (s *TreeDBStore) PruneVersions(batchSize int) (mvcc.PruneStats, error) {
+	if s == nil {
+		return mvcc.PruneStats{}, fmt.Errorf("prune posting TreeDB versions: %w", treedb.ErrClosed)
+	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.IsClosed() || s.db == nil {
+		return mvcc.PruneStats{}, fmt.Errorf("prune posting TreeDB versions: %w", treedb.ErrClosed)
+	}
 	return s.mvcc.PruneVersions(mvcc.PruneOptions{BatchSize: batchSize, Mode: s.commitMode})
 }
 
@@ -330,11 +356,11 @@ func (b *treeDBMutationBatch) ownBytes(size int) []byte {
 			capacity = size
 		}
 		b.arena = make([]byte, size, capacity)
-		return b.arena
+		return b.arena[:size:size]
 	}
 	start := len(b.arena)
 	b.arena = b.arena[:start+size]
-	return b.arena[start:]
+	return b.arena[start : start+size : start+size]
 }
 
 func (t *treeDBWriteTxn) setMutation(mutation mvcc.Mutation) {
