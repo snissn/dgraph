@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestValidateReadResponseChecksPointAndOneHopContents(t *testing.T) {
@@ -61,6 +62,35 @@ func TestCanonicalPostingRowIncludesAndValidatesEdgeTopology(t *testing.T) {
 	}
 	if row, err := canonicalPostingRow(queryNode{UID: "0x4", Value: "write"}, expectedNode{Value: "write"}); err != nil || row != "write\x00" {
 		t.Fatalf("valid edge-free row rejected: row=%q err=%v", row, err)
+	}
+}
+
+func TestValidateSchemaJSONRequiresExactPredicateTypes(t *testing.T) {
+	good := []byte(`{"schema":[{"predicate":"bench.next","type":"uid"},{"predicate":"bench.value","type":"string"}]}`)
+	if err := validateSchemaJSON(good); err != nil {
+		t.Fatal(err)
+	}
+	for name, raw := range map[string]string{
+		"wrong value type":    `{"schema":[{"predicate":"bench.next","type":"uid"},{"predicate":"bench.value","type":"uid"}]}`,
+		"wrong edge type":     `{"schema":[{"predicate":"bench.next","type":"string"},{"predicate":"bench.value","type":"string"}]}`,
+		"missing predicate":   `{"schema":[{"predicate":"bench.value","type":"string"}]}`,
+		"duplicate predicate": `{"schema":[{"predicate":"bench.next","type":"uid"},{"predicate":"bench.next","type":"uid"},{"predicate":"bench.value","type":"string"}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := validateSchemaJSON([]byte(raw)); err == nil {
+				t.Fatal("expected schema validation failure")
+			}
+		})
+	}
+}
+
+func TestFetchHonorsTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	if _, err := fetch(server.URL, 10*time.Millisecond); err == nil {
+		t.Fatal("timed-out fetch unexpectedly succeeded")
 	}
 }
 

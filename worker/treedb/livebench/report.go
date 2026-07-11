@@ -86,7 +86,12 @@ func summarize(xs []float64) distribution {
 	for _, x := range xs {
 		variance += (x - mean) * (x - mean)
 	}
-	return distribution{median: xs[len(xs)/2], min: xs[0], max: xs[len(xs)-1], cv: math.Sqrt(variance/float64(len(xs))) / mean * 100}
+	middle := len(xs) / 2
+	median := xs[middle]
+	if len(xs)%2 == 0 {
+		median = (xs[middle-1] + xs[middle]) / 2
+	}
+	return distribution{median: median, min: xs[0], max: xs[len(xs)-1], cv: math.Sqrt(variance/float64(len(xs))) / mean * 100}
 }
 
 // RenderReport validates the complete matrix and keeps relaxed and durable

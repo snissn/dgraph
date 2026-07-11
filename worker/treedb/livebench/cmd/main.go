@@ -194,7 +194,10 @@ func run(o options) (err error) {
 	r.Validation.BackendObserved = statusAfter["backend"]
 	r.Validation.DurabilityObserved = statusAfter["profile"]
 	r.Validation.UnsupportedOK = unsupportedOK(o.backend, statusAfter)
-	r.Validation.SchemaOK = schemaOK(ctx, dg)
+	if err := validateSchema(ctx, dg); err != nil {
+		return fmt.Errorf("schema validation: %w", err)
+	}
+	r.Validation.SchemaOK = true
 	expected := mergeExpected(dataset, warmupWrites, timedWrites)
 	checksum, count, err := validatePosting(ctx, dg, expected)
 	if err != nil {
@@ -239,11 +242,6 @@ func run(o options) (err error) {
 	}
 	if err := r.Validate(); err != nil {
 		return fmt.Errorf("result validation: %w", err)
-	}
-	r.Context.RawPath = filepath.Join(o.artifactDir, "result.json")
-	// RawPath participates in validation, so update it before the final validation/write.
-	if err := r.Validate(); err != nil {
-		return fmt.Errorf("final result validation: %w", err)
 	}
 	return livebench.WriteImmutable(r.Context.RawPath, r)
 }
@@ -586,13 +584,55 @@ func canonicalPostingRow(node queryNode, expected expectedNode) (string, error) 
 	}
 	return node.Value + "\x00" + node.Next[0].Value, nil
 }
-func schemaOK(ctx context.Context, dg *dgo.Dgraph) bool {
+func validateSchema(ctx context.Context, dg *dgo.Dgraph) error {
 	resp, err := dg.NewReadOnlyTxn().Query(ctx, "schema(pred: [bench.value, bench.next]) { predicate type }")
-	return err == nil && strings.Contains(string(resp.Json), "bench.value") && strings.Contains(string(resp.Json), "bench.next")
+	if err != nil {
+		return err
+	}
+	return validateSchemaJSON(resp.Json)
 }
 
-func fetch(url string) ([]byte, error) {
-	resp, err := http.Get(url)
+func validateSchemaJSON(raw []byte) error {
+	var response struct {
+		Schema []struct {
+			Predicate string `json:"predicate"`
+			Type      string `json:"type"`
+		} `json:"schema"`
+	}
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return fmt.Errorf("decode schema response: %w", err)
+	}
+	want := map[string]string{"bench.value": "string", "bench.next": "uid"}
+	seen := make(map[string]struct{}, len(want))
+	for _, entry := range response.Schema {
+		wantType, ok := want[entry.Predicate]
+		if !ok {
+			return fmt.Errorf("unexpected schema predicate %q", entry.Predicate)
+		}
+		if _, duplicate := seen[entry.Predicate]; duplicate {
+			return fmt.Errorf("duplicate schema predicate %q", entry.Predicate)
+		}
+		if entry.Type != wantType {
+			return fmt.Errorf("schema predicate %q has type %q, want %q", entry.Predicate, entry.Type, wantType)
+		}
+		seen[entry.Predicate] = struct{}{}
+	}
+	for predicate := range want {
+		if _, ok := seen[predicate]; !ok {
+			return fmt.Errorf("missing schema predicate %q", predicate)
+		}
+	}
+	return nil
+}
+
+func fetch(url string, timeout time.Duration) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -607,14 +647,14 @@ func captureCPUProfile(base, path string, seconds int) error {
 	if seconds < 1 {
 		return errors.New("profile-seconds must be positive")
 	}
-	b, err := fetch(fmt.Sprintf("%s/debug/pprof/profile?seconds=%d", base, seconds))
+	b, err := fetch(fmt.Sprintf("%s/debug/pprof/profile?seconds=%d", base, seconds), time.Duration(seconds)*time.Second+30*time.Second)
 	if err != nil {
 		return err
 	}
 	return livebench.WriteImmutableBytes(path, b)
 }
 func storeStatus(base string) (map[string]string, map[string]float64, error) {
-	b, err := fetch(base + "/debug/store")
+	b, err := fetch(base+"/debug/store", 30*time.Second)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -679,7 +719,7 @@ func unsupportedOK(backend string, status map[string]string) bool {
 }
 
 func prometheus(url string) (map[string]float64, error) {
-	b, err := fetch(url)
+	b, err := fetch(url, 30*time.Second)
 	if err != nil {
 		return nil, err
 	}

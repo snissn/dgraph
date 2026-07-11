@@ -2,6 +2,7 @@
 package livebench
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -108,6 +109,16 @@ func TestResultRejectsUnavailableOrMalformedCoreMetrics(t *testing.T) {
 				t.Fatalf("got %v, want core metric failure", err)
 			}
 		})
+	}
+}
+
+func TestMetricSerializesMeasuredZero(t *testing.T) {
+	b, err := json.Marshal(Metric{Available: true, Value: 0, Unit: "count", Source: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"value":0`) {
+		t.Fatalf("measured zero omitted from metric: %s", b)
 	}
 }
 

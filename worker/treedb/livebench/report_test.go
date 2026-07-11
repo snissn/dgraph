@@ -27,6 +27,12 @@ func TestDiscoverProfileArtifactsRequiresCompleteNonEmptyFiles(t *testing.T) {
 	}
 }
 
+func TestSummarizeAveragesEvenMiddleValues(t *testing.T) {
+	if got := summarize([]float64{100, 1, 10, 20}).median; got != 15 {
+		t.Fatalf("median=%v, want 15", got)
+	}
+}
+
 func TestRenderReportSeparatesDurabilityClassesAndMakesDecision(t *testing.T) {
 	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
 	for i := range set {

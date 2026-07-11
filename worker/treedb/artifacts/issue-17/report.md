@@ -45,21 +45,23 @@ TreeDB throughput delta versus durability-matched Badger: **-44.47%** (gate: no 
 parity, schema, posting, unsupported-feature, and recovery gates passed. The performance decision
 applies only to this benchmark-minimal topology and workload.
 
-## Profile attribution
+## Profile artifacts
+
+Separate TreeDB profile runs were collected after the decision matrix; their throughput is
+diagnostic and is not part of the A/B decision.
 
 - Relaxed TreeDB: [`profiles/treedb-relaxed.pprof`](profiles/treedb-relaxed.pprof) and
-  [`profiles/treedb-relaxed-top.txt`](profiles/treedb-relaxed-top.txt). The profile is
-  syscall/allocation-heavy, but without matched substrate-only and adapter/runtime profiles it
-  cannot attribute the split between gomap itself and Dgraph integration overhead.
+  [`profiles/treedb-relaxed-top.txt`](profiles/treedb-relaxed-top.txt).
 - Durable TreeDB: [`profiles/treedb-durable.pprof`](profiles/treedb-durable.pprof) and
-  [`profiles/treedb-durable-top.txt`](profiles/treedb-durable-top.txt). The five-second wall-clock
-  profile collected little CPU, which is consistent with I/O wait; it is not causal proof of the
-  durable throughput gap.
+  [`profiles/treedb-durable-top.txt`](profiles/treedb-durable-top.txt).
+
+These artifacts do not by themselves attribute cost between gomap and Dgraph integration, establish
+I/O wait, or prove a causal explanation for either throughput delta.
 
 ## Raw artifacts and reproduction
 
 Reproduce from the recorded Dgraph SHA with
-`TMPDIR=/mnt/fast4tb/tmp GOWORK=off worker/treedb/run_durability_ab.sh --artifact-dir NEW_DIR`.
+`TMPDIR=/mnt/fast4tb/tmp GOWORK=off worker/treedb/run_durability_ab.sh --artifact-dir /absolute/path/outside/repository/NEW_DIR`.
 Paths below are relative to the artifact root; each JSON retains its exact original absolute command
 and raw path.
 

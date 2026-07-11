@@ -15,15 +15,17 @@ Every timed read was checked against its expected value and one-hop cycle edge. 
 restart checksum canonically hashes `source value -> target value` plus edge-free unique writes, so
 it is independent of leased UIDs. All 12 cells share one checksum and node count.
 
-Profile-run throughput is diagnostic only and is not included in the A/B decision. The relaxed
-profile is syscall/allocation-heavy, but cannot split gomap substrate cost from Dgraph
-adapter/runtime overhead without comparative profiles. The durable profile collected only 880 ms of
-CPU over five wall-clock seconds, which is consistent with I/O wait but is not causal proof.
+Profile-run throughput is diagnostic only and is not included in the A/B decision. The CPU profiles
+do not by themselves attribute cost between gomap and Dgraph integration, establish I/O wait, or
+prove a causal explanation for either throughput delta.
 
 The original run lived under `/mnt/fast4tb`; absolute scratch paths and exact commands remain in the
 raw JSON for auditability. Reproduction uses a new immutable artifact directory:
 
 ```sh
 TMPDIR=/mnt/fast4tb/tmp GOWORK=off \
-  worker/treedb/run_durability_ab.sh --artifact-dir NEW_DIR
+  worker/treedb/run_durability_ab.sh --artifact-dir /absolute/path/outside/repository/NEW_DIR
 ```
+
+`NEW_DIR` is a placeholder for a new absolute artifact directory outside the repository; relative or
+in-repository paths are rejected before any artifact is created.

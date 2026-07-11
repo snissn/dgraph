@@ -36,7 +36,7 @@ type Config struct {
 
 type Metric struct {
 	Available bool    `json:"available"`
-	Value     float64 `json:"value,omitempty"`
+	Value     float64 `json:"value"`
 	Unit      string  `json:"unit"`
 	Source    string  `json:"source"`
 	Reason    string  `json:"reason,omitempty"`

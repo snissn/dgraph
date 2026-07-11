@@ -86,7 +86,8 @@
       "available": false,
       "unit": "count",
       "source": "backend diagnostics",
-      "reason": "counter unavailable for selected backend"
+      "reason": "counter unavailable for selected backend",
+      "value": 0
     },
     "cpu_seconds": {
       "available": true,
@@ -110,7 +111,8 @@
       "available": false,
       "unit": "count",
       "source": "Badger diagnostics",
-      "reason": "Badger exposes badger_write_num_vlog, which is not a semantic flush counter"
+      "reason": "Badger exposes badger_write_num_vlog, which is not a semantic flush counter",
+      "value": 0
     },
     "gc_cycles": {
       "available": true,
@@ -134,7 +136,8 @@
       "available": false,
       "unit": "ratio",
       "source": "backend diagnostics",
-      "reason": "equivalent physical write-byte counter unavailable or logical write bytes zero"
+      "reason": "equivalent physical write-byte counter unavailable or logical write bytes zero",
+      "value": 0
     },
     "write_bytes": {
       "available": true,
