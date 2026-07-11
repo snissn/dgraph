@@ -65,8 +65,12 @@ func TestRuntimeProfilesUseCumulativeCapabilityTiers(t *testing.T) {
 				require.True(t, opts.CommandWAL)
 
 				err = CheckCapabilityTier(tier)
-				require.ErrorIs(t, err, ErrUnsupportedFeature)
-				require.Contains(t, err.Error(), "capability tier "+string(tier)+" is not ready")
+				if tier == TierBenchmarkMinimal {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, ErrUnsupportedFeature)
+					require.Contains(t, err.Error(), "capability tier "+string(tier)+" is not ready")
+				}
 			})
 		}
 	}

@@ -6,7 +6,6 @@
 package worker
 
 import (
-	"errors"
 	"path/filepath"
 	"testing"
 
@@ -43,49 +42,54 @@ func TestSetConfigurationNormalizesPostingStoreBackend(t *testing.T) {
 	root := t.TempDir()
 	x.WorkerConfig.TmpDir = filepath.Join(root, "tmp")
 
+	treeDBFlag := ParsePostingStoreSuperFlag("backend=TreeDB")
 	SetConfiguration(&Options{
-		PostingDir:          filepath.Join(root, "p"),
-		WALDir:              filepath.Join(root, "w"),
-		PostingStoreBackend: "TreeDB",
+		PostingDir:             filepath.Join(root, "p"),
+		WALDir:                 filepath.Join(root, "w"),
+		PostingStoreBackend:    treeDBFlag.Backend,
+		PostingStoreTier:       treeDBFlag.Tier,
+		PostingStoreDurability: treeDBFlag.Durability,
+		PostingStoreEvents:     treeDBFlag.Events,
+		PostingStoreEventsSet:  treeDBFlag.EventsConfigured,
 	})
 	require.Equal(t, PostingStoreBackendTreeDB, Config.PostingStoreBackend)
+	require.Equal(t, PostingStoreTierBenchmarkMinimal, Config.PostingStoreTier)
+	require.True(t, Config.PostingStoreEvents)
 
+	badgerFlag := ParsePostingStoreSuperFlag("")
 	SetConfiguration(&Options{
-		PostingDir: filepath.Join(root, "p2"),
-		WALDir:     filepath.Join(root, "w2"),
+		PostingDir:             filepath.Join(root, "p2"),
+		WALDir:                 filepath.Join(root, "w2"),
+		PostingStoreBackend:    badgerFlag.Backend,
+		PostingStoreTier:       badgerFlag.Tier,
+		PostingStoreDurability: badgerFlag.Durability,
+		PostingStoreEvents:     badgerFlag.Events,
+		PostingStoreEventsSet:  badgerFlag.EventsConfigured,
 	})
 	require.Equal(t, PostingStoreBackendBadger, Config.PostingStoreBackend)
+	require.Equal(t, PostingStoreTierProduction, Config.PostingStoreTier)
+	require.False(t, Config.PostingStoreEvents)
+
+	disabled := ParsePostingStoreSuperFlag("backend=treedb; events=false")
+	require.True(t, disabled.EventsConfigured)
+	require.False(t, disabled.Events)
 }
 
-func TestCheckPostingStoreBackendReadyFailsClosedForTreeDB(t *testing.T) {
+func TestCheckPostingStoreBackendReadyAllowsBenchmarkMinimalTreeDB(t *testing.T) {
 	require.NoError(t, CheckPostingStoreBackendReady(PostingStoreBackendBadger))
+	require.NoError(t, CheckPostingStoreBackendReady(PostingStoreBackendTreeDB))
+	require.NoError(t, ValidatePostingStoreSelection("treedb", "benchmark_minimal", "durable", false, true))
+	require.NoError(t, ValidatePostingStoreSelection("treedb", "benchmark_minimal", "relaxed", false, true))
 
-	err := CheckPostingStoreBackendReady(PostingStoreBackendTreeDB)
-	require.ErrorIs(t, err, treedb.ErrUnsupportedFeature)
-	require.Contains(t, err.Error(), "posting-store backend \"treedb\" is experimental and not ready")
-	require.Contains(t, err.Error(), string(treedb.TierBenchmarkMinimal))
-	require.Contains(t, err.Error(), string(treedb.FeatureLifecycleGCStats))
-	require.NotContains(t, err.Error(), string(treedb.FeatureBadgerManagedTransactions))
-	require.NotContains(t, err.Error(), string(treedb.FeatureBadgerEntryMetadata))
-	require.NotContains(t, err.Error(), string(treedb.FeatureBadgerAllVersionIterators))
-	require.NotContains(t, err.Error(), string(treedb.FeatureBadgerStreamImportExport))
-	require.NotContains(t, err.Error(), string(treedb.FeatureEncryptionKeyRegistry))
-
-	var readinessErr *treedb.FeatureReadinessError
-	require.True(t, errors.As(err, &readinessErr))
-	require.Equal(t, []treedb.FeatureRecord{
-		{
-			ID:           treedb.FeatureLifecycleGCStats,
-			Status:       treedb.StatusDisabledNeedBlocker,
-			RequiredTier: treedb.TierBenchmarkMinimal,
-			Reason:       "TreeDBStore owns close, status, value-log GC, full compaction, and stats, but the Alpha lifecycle does not invoke that owner surface yet",
-			Evidence: []string{
-				"dgraphTreeDBAPI compile assertion",
-				"TestOpenSmoke",
-				"posting.TestTreeDBStoreLifecycleStatusAndDurabilityModes",
-			},
-		},
-	}, readinessErr.Blockers)
+	err := ValidatePostingStoreSelection("treedb", "production", "durable", false, true)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "restricted to tier")
+	err = ValidatePostingStoreSelection("treedb", "benchmark_minimal", "unknown", false, true)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "durability must be")
+	err = ValidatePostingStoreSelection("treedb", "benchmark_minimal", "durable", false, false)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "requires events=true")
 }
 
 func TestCheckPostingStoreBackendReadyRejectsEncryptedTreeDBStartup(t *testing.T) {
@@ -102,6 +106,6 @@ func TestPostingStoreBackendStatus(t *testing.T) {
 	require.Equal(t, "posting-store backend badger: default production backend",
 		PostingStoreBackendStatus(""))
 	require.Contains(t, PostingStoreBackendStatus(PostingStoreBackendTreeDB),
-		"posting-store backend treedb: experimental, benchmark_minimal disabled until")
+		"posting-store backend treedb: experimental, tier=benchmark_minimal")
 	require.Contains(t, PostingStoreBackendStatus("unknown"), "posting-store backend \"unknown\" is not supported")
 }

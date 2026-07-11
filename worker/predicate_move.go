@@ -118,6 +118,9 @@ func batchAndProposeKeyValues(ctx context.Context, kvs chan *pb.KVS) error {
 // Returns count which can be used to verify whether we have moved all keys
 // for a predicate or not.
 func (w *grpcWorker) ReceivePredicate(stream pb.Worker_ReceivePredicateServer) error {
+	if _, err := requireBadgerPostingStore("predicate move receive"); err != nil {
+		return err
+	}
 	if !groups().Node.AmLeader() {
 		return errors.Errorf("ReceivePredicate failed: Not the leader of group")
 	}
@@ -188,6 +191,9 @@ func (w *grpcWorker) ReceivePredicate(stream pb.Worker_ReceivePredicateServer) e
 
 func (w *grpcWorker) MovePredicate(ctx context.Context,
 	in *pb.MovePredicatePayload) (*api.Payload, error) {
+	if _, err := requireBadgerPostingStore("predicate move send"); err != nil {
+		return nil, err
+	}
 	ctx, span := trace.SpanFromContext(ctx).TracerProvider().Tracer("grpcWorker").Start(ctx, "MovePredicate")
 	defer span.End()
 

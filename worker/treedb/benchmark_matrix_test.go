@@ -48,7 +48,7 @@ var dgraphTreeDBBlockerRows = []dgraphTreeDBBlockerRow{
 	},
 	{
 		name:   "Subscriptions",
-		reason: "TreeDB does not yet provide the Badger Subscribe API used by worker.SubscribeForUpdates.",
+		reason: "The restricted internal commit-event bridge does not claim the full Badger DB.Subscribe operational contract.",
 	},
 	{
 		name:   "EncryptionKeyRegistry",

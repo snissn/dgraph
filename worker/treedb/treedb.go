@@ -5,11 +5,10 @@
 
 // Package treedb contains the Dgraph-side TreeDB integration scaffold.
 //
-// It intentionally does not replace the Alpha posting store yet. Dgraph's
-// operational paths still expose Badger-specific protobuf values, streams,
-// subscriptions, encryption, and cache metrics across package boundaries. The
-// benchmark-minimal posting contract has a TreeDBStore implementation, while
-// this package keeps runtime selection fail-closed until Alpha lifecycle wiring.
+// It supports an explicit restricted Alpha benchmark-minimal runtime. Dgraph's
+// later-tier operational paths still expose Badger-specific protobuf values,
+// streams, subscriptions, encryption, and cache metrics across package
+// boundaries; those invocations remain fail-closed for TreeDB.
 package treedb
 
 import (

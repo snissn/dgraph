@@ -12,12 +12,14 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/dgraph-io/dgraph/v25/conn"
+	"github.com/dgraph-io/dgraph/v25/posting"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/dgraph-io/dgraph/v25/schema"
 )
 
 func InitForLite(ps *badger.DB) {
 	pstore = ps
+	postingStore = posting.NewBadgerStore(ps)
 	groups().state = &pb.MembershipState{}
 	groups().Node = &node{Node: &conn.Node{Id: 1}}
 	groups().gid = 1

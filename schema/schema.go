@@ -19,7 +19,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dgraph-io/badger/v4"
-	badgerpb "github.com/dgraph-io/badger/v4/pb"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/dgraph-io/dgraph/v25/tok"
 	"github.com/dgraph-io/dgraph/v25/tok/hnsw"
@@ -569,9 +568,6 @@ func Load(predicate string) error {
 
 // LoadFromDb reads schema information from db and stores it in memory
 func LoadFromDb(ctx context.Context) error {
-	if pstore == nil {
-		return errors.New("schema stream bootstrap requires the Badger operational backend")
-	}
 	// Reset the state because with the introduction of incremental restore,
 	// it can't be assumed that the state would be empty before loading the
 	// schema from the DB as we don't do drop all in case of incremental restores.
@@ -588,36 +584,40 @@ const (
 )
 
 // loadFromDb iterates through the DB and loads all the stored schema updates.
-func loadFromDB(ctx context.Context, loadType int) error {
-	if pstore == nil {
-		return errors.New("schema stream bootstrap requires the Badger operational backend")
-	}
-	stream := pstore.NewStreamAt(math.MaxUint64)
-
-	switch loadType {
+func loadFromDB(ctx context.Context, mode int) error {
+	var prefix []byte
+	switch mode {
 	case loadSchema:
-		stream.Prefix = x.SchemaPrefix()
-		stream.LogPrefix = "LoadFromDb Schema"
+		prefix = x.SchemaPrefix()
 	case loadType:
-		stream.Prefix = x.TypePrefix()
-		stream.LogPrefix = "LoadFromDb Type"
+		prefix = x.TypePrefix()
 	default:
-		glog.Fatalf("Invalid load type")
+		return errors.Errorf("invalid schema load mode: %d", mode)
 	}
 
-	stream.KeyToList = func(key []byte, itr *badger.Iterator) (*badgerpb.KVList, error) {
+	txn := schemaStore.NewReadTxn(math.MaxUint64)
+	defer txn.Discard()
+	itr := txn.NewIterator(prefix)
+	defer itr.Close()
+	for itr.Rewind(); itr.ValidForPrefix(prefix); itr.Next() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		item := itr.Item()
+		key := item.Key()
 		pk, err := x.Parse(key)
 		if err != nil {
 			glog.Errorf("Error while parsing key %s: %v", hex.Dump(key), err)
-			return nil, nil
+			continue
 		}
 		if len(pk.Attr) == 0 {
 			glog.Warningf("Empty Attribute: %+v for Key: %x\n", pk, key)
-			return nil, nil
+			continue
 		}
 
-		switch loadType {
+		switch mode {
 		case loadSchema:
 			var s pb.SchemaUpdate
 			err := item.Value(func(val []byte) error {
@@ -629,7 +629,9 @@ func loadFromDB(ctx context.Context, loadType int) error {
 				State().Set(pk.Attr, &s)
 				return nil
 			})
-			return nil, err
+			if err != nil {
+				return err
+			}
 		case loadType:
 			var t pb.TypeUpdate
 			err := item.Value(func(val []byte) error {
@@ -641,12 +643,12 @@ func loadFromDB(ctx context.Context, loadType int) error {
 				State().SetType(pk.Attr, &t)
 				return nil
 			})
-			return nil, err
+			if err != nil {
+				return err
+			}
 		}
-		glog.Fatalf("Invalid load type")
-		return nil, errors.New("shouldn't reach here")
 	}
-	return stream.Orchestrate(ctx)
+	return itr.Error()
 }
 
 // InitialTypes returns the type updates to insert at the beginning of

@@ -161,7 +161,7 @@ func (ir *incrRollupi) Process(closer *z.Closer, getNewTs func(bool) uint64) {
 
 	defer closer.Done()
 
-	writer := NewTxnWriter(pstore)
+	writer := NewTxnWriterForStore(postingStore)
 	defer writer.Flush()
 
 	m := make(map[uint64]int64) // map hash(key) to ts. hash(key) to limit the size of the map.

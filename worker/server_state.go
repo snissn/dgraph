@@ -7,6 +7,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"time"
@@ -14,10 +15,13 @@ import (
 	"github.com/golang/glog"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/dgraph/v25/posting"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/dgraph-io/dgraph/v25/raftwal"
+	dgraphtreedb "github.com/dgraph-io/dgraph/v25/worker/treedb"
 	"github.com/dgraph-io/dgraph/v25/x"
 	"github.com/dgraph-io/ristretto/v2/z"
+	td "github.com/snissn/gomap/TreeDB"
 )
 
 const (
@@ -49,9 +53,14 @@ const (
 type ServerState struct {
 	FinishCh chan struct{} // channel to wait for all pending reqs to finish.
 
-	Pstore   *badger.DB
-	WALstore *raftwal.DiskStorage
-	gcCloser *z.Closer // closer for valueLogGC
+	Pstore *badger.DB
+	// PostingStore is the single posting-store handle used by the restricted
+	// runtime. Pstore remains non-nil only for the production Badger backend.
+	PostingStore posting.Store
+	TreeDBStore  *posting.TreeDBStore
+	CommitEvents *posting.CommitEventBus
+	WALstore     *raftwal.DiskStorage
+	gcCloser     *z.Closer // closer for valueLogGC
 
 	needTs chan tsReq
 }
@@ -109,56 +118,152 @@ func (s *ServerState) InitStorage() {
 		// Postings directory
 		// All the writes to posting store should be synchronous. We use batched writers
 		// for posting lists, so the cost of sync writes is amortized.
-		x.Check(os.MkdirAll(Config.PostingDir, 0700))
-		backend, err := NormalizePostingStoreBackend(Config.PostingStoreBackend)
-		x.Check(err)
-		glog.Infof("%s", PostingStoreBackendStatus(backend))
-		switch backend {
-		case PostingStoreBackendBadger:
-			opt := x.WorkerConfig.Badger.
-				WithDir(Config.PostingDir).WithValueDir(Config.PostingDir).
-				WithNumVersionsToKeep(math.MaxInt32).
-				WithNamespaceOffset(x.NamespaceOffset)
-			opt = setBadgerOptions(opt)
-
-			// Print the options w/o exposing key.
-			// TODO: Build a stringify interface in Badger options, which is used to print nicely here.
-			key := opt.EncryptionKey
-			opt.EncryptionKey = nil
-			glog.Infof("Opening postings BadgerDB with options: %+v\n", opt)
-			opt.EncryptionKey = key
-
-			s.Pstore, err = badger.OpenManaged(opt)
-			x.Checkf(err, "Error while creating badger KV posting store")
-
-			// zero out from memory
-			opt.EncryptionKey = nil
-		case PostingStoreBackendTreeDB:
-			x.Checkf(CheckPostingStoreBackendReadyForConfig(backend, x.WorkerConfig.EncryptionKey != nil),
-				"Error while creating experimental TreeDB posting store")
-		default:
-			x.Checkf(CheckPostingStoreBackendReady(backend), "Error while selecting posting store")
-		}
+		x.Checkf(s.openPostingStore(), "Error while opening posting store")
 	}
 	// Temp directory
 	x.Check(os.MkdirAll(x.WorkerConfig.TmpDir, 0700))
 
-	s.gcCloser = z.NewCloser(3)
-	go x.RunVlogGC(s.Pstore, s.gcCloser)
-	// Commenting this out because Badger is doing its own cache checks.
-	go x.MonitorCacheHealth(s.Pstore, s.gcCloser)
+	closerCount := 1
+	if s.Pstore != nil {
+		closerCount = 3
+	}
+	s.gcCloser = z.NewCloser(closerCount)
+	if s.Pstore != nil {
+		go x.RunVlogGC(s.Pstore, s.gcCloser)
+		// Commenting this out because Badger is doing its own cache checks.
+		go x.MonitorCacheHealth(s.Pstore, s.gcCloser)
+	}
 	go x.MonitorDiskMetrics("postings_fs", Config.PostingDir, s.gcCloser)
+}
+
+func (s *ServerState) openPostingStore() error {
+	if err := os.MkdirAll(Config.PostingDir, 0o700); err != nil {
+		return err
+	}
+	backend, err := NormalizePostingStoreBackend(Config.PostingStoreBackend)
+	if err != nil {
+		return err
+	}
+	if err := ValidatePostingStoreSelection(backend, Config.PostingStoreTier,
+		Config.PostingStoreDurability, x.WorkerConfig.EncryptionKey != nil,
+		Config.PostingStoreEvents); err != nil {
+		return err
+	}
+	// Validation accepts selector values case-insensitively. Persist the same
+	// normalized value used for runtime profile selection and status reporting.
+	Config.PostingStoreDurability = normalizePostingStoreDurability(Config.PostingStoreDurability)
+	glog.Infof("%s; tier=%s; durability=%s; post_commit_events=%t",
+		PostingStoreBackendStatus(backend), Config.PostingStoreTier,
+		Config.PostingStoreDurability, Config.PostingStoreEvents)
+	switch backend {
+	case PostingStoreBackendBadger:
+		opt := x.WorkerConfig.Badger.
+			WithDir(Config.PostingDir).WithValueDir(Config.PostingDir).
+			WithNumVersionsToKeep(math.MaxInt32).
+			WithNamespaceOffset(x.NamespaceOffset)
+		opt = setBadgerOptions(opt)
+		key := opt.EncryptionKey
+		opt.EncryptionKey = nil
+		glog.Infof("Opening postings BadgerDB with options: %+v\n", opt)
+		opt.EncryptionKey = key
+		s.Pstore, err = badger.OpenManaged(opt)
+		opt.EncryptionKey = nil
+		if err != nil {
+			return fmt.Errorf("open Badger posting store: %w", err)
+		}
+		s.PostingStore = posting.NewBadgerStore(s.Pstore)
+	case PostingStoreBackendTreeDB:
+		profile := td.ProfileCommandWALDurable
+		mode := posting.TreeDBCommitDurable
+		if Config.PostingStoreDurability == PostingStoreDurabilityRelaxed {
+			profile = td.ProfileCommandWALRelaxed
+			mode = posting.TreeDBCommitRelaxed
+		}
+		treeOpts, err := dgraphtreedb.ResolveOptions(dgraphtreedb.OpenOptions{
+			Dir: Config.PostingDir, Profile: profile,
+			RequireInMemory: x.WorkerConfig.Badger.InMemory,
+		})
+		if err != nil {
+			return fmt.Errorf("resolve TreeDB posting store: %w", err)
+		}
+		s.TreeDBStore, err = posting.OpenTreeDBStore(treeOpts, mode)
+		if err != nil {
+			return fmt.Errorf("open TreeDB posting store: %w", err)
+		}
+		s.PostingStore = s.TreeDBStore
+	}
+	if Config.PostingStoreEvents {
+		s.CommitEvents = posting.NewCommitEventBus(256)
+		s.PostingStore = posting.WithCommitEvents(s.PostingStore, s.CommitEvents)
+	}
+	return nil
 }
 
 // Dispose stops and closes all the resources inside the server state.
 func (s *ServerState) Dispose() {
 	s.gcCloser.SignalAndWait()
-	if err := s.Pstore.Close(); err != nil {
-		glog.Errorf("Error while closing postings store: %v", err)
-	}
+	s.closePostingStore()
 	if err := s.WALstore.Close(); err != nil {
 		glog.Errorf("Error while closing WAL store: %v", err)
 	}
+}
+
+func (s *ServerState) closePostingStore() {
+	if s.TreeDBStore != nil {
+		if err := s.TreeDBStore.Close(); err != nil {
+			glog.Errorf("Error while closing TreeDB postings store: %v", err)
+		}
+	} else if s.Pstore != nil {
+		if err := s.Pstore.Close(); err != nil {
+			glog.Errorf("Error while closing postings store: %v", err)
+		}
+	}
+	if s.CommitEvents != nil {
+		// Store close establishes the admitted-commit completion boundary. Bus
+		// close then cancels subscriber backpressure and closes subscriptions.
+		s.CommitEvents.Close()
+	}
+}
+
+// PostingStoreRuntimeStatus exposes the effective experimental runtime selection.
+func (s *ServerState) PostingStoreRuntimeStatus() map[string]string {
+	status := map[string]string{
+		"backend": Config.PostingStoreBackend, "tier": Config.PostingStoreTier,
+		"durability":         Config.PostingStoreDurability,
+		"post_commit_events": fmt.Sprint(Config.PostingStoreEvents),
+	}
+	if s.TreeDBStore != nil {
+		treeStatus := s.TreeDBStore.Status()
+		status["profile"] = treeStatus.DurabilityMode
+		status["durable_commits"] = fmt.Sprint(treeStatus.DurableCommits)
+		status["closed"] = fmt.Sprint(treeStatus.Closed)
+		status["unsupported"] = "backup,export,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality"
+	}
+	return status
+}
+
+// PostingStoreStats returns backend-native diagnostics without manufacturing
+// unavailable Badger cache counters for TreeDB.
+func (s *ServerState) PostingStoreStats() (map[string]string, error) {
+	if s.TreeDBStore != nil {
+		return s.TreeDBStore.Stats()
+	}
+	if s.Pstore == nil {
+		return nil, fmt.Errorf("posting store is not open")
+	}
+	return map[string]string{"backend": PostingStoreBackendBadger}, nil
+}
+
+// RunPostingStoreGC triggers the selected backend's value-log maintenance.
+func (s *ServerState) RunPostingStoreGC(ctx context.Context) error {
+	if s.TreeDBStore != nil {
+		_, err := s.TreeDBStore.ValueLogGC(ctx, td.ValueLogGCOptions{})
+		return err
+	}
+	if s.Pstore == nil {
+		return fmt.Errorf("posting store is not open")
+	}
+	return s.Pstore.RunValueLogGC(0.5)
 }
 
 func (s *ServerState) GetTimestamp(readOnly bool) uint64 {

@@ -1123,6 +1123,11 @@ func SubscribeForUpdates(prefixes [][]byte, ignore string, cb func(kvs *badgerpb
 	if len(prefixes) > 0 {
 		prefix = prefixes[0]
 	}
+	if Config.PostingStoreBackend == PostingStoreBackendTreeDB && State.CommitEvents == nil {
+		glog.Infof("TreeDB restricted commit-event delivery is disabled; skipping update subscription for prefix %q", prefix)
+		closer.Done()
+		return
+	}
 	defer func() {
 		glog.Infof("SubscribeForUpdates closing for prefix: %q\n", prefix)
 		closer.Done()

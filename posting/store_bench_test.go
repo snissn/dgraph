@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 )
@@ -191,6 +192,133 @@ func BenchmarkBadgerStoreSeam(b *testing.B) {
 			}
 		})
 	})
+}
+
+// BenchmarkBadgerStoreSeamInterleaved is the comparison benchmark for the
+// Badger seam overhead gate. BenchmarkBadgerStoreSeam keeps conventional
+// per-mode allocation rows, but -count runs all direct samples before all seam
+// samples. Here both modes share one database and their execution order swaps
+// after every operation, producing same-process, same-state, same-time-span ratios.
+func BenchmarkBadgerStoreSeamInterleaved(b *testing.B) {
+	keys := make([][]byte, 64)
+	for i := range keys {
+		keys[i] = []byte(fmt.Sprintf("posting/store-interleaved/%03d", i))
+	}
+	value := []byte("benchmark-value")
+
+	b.Run("point-read", func(b *testing.B) {
+		direct := openPopulatedBenchmarkDB(b, keys)
+		seam := NewBadgerStore(direct)
+		var elapsed [2]time.Duration
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for offset := 0; offset < len(elapsed); offset++ {
+				mode := (i + offset) % len(elapsed)
+				start := time.Now()
+				if mode == 0 {
+					txn := direct.NewTransactionAt(math.MaxUint64, false)
+					item, err := txn.Get(keys[i%len(keys)])
+					if err != nil {
+						b.Fatal(err)
+					}
+					benchmarkStoreSink = item.UserMeta()
+					txn.Discard()
+				} else {
+					txn := seam.NewReadTxn(math.MaxUint64)
+					item, err := txn.Get(keys[i%len(keys)])
+					if err != nil {
+						b.Fatal(err)
+					}
+					benchmarkStoreSink = item.UserMeta()
+					txn.Discard()
+				}
+				elapsed[mode] += time.Since(start)
+			}
+		}
+		b.StopTimer()
+		reportBadgerStoreSeamInterleaved(b, elapsed)
+	})
+
+	b.Run("write", func(b *testing.B) {
+		direct := openStoreBenchmarkDB(b)
+		seam := NewBadgerStore(direct)
+		var elapsed [2]time.Duration
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for offset := 0; offset < len(elapsed); offset++ {
+				mode := (i + offset) % len(elapsed)
+				commitTs := uint64(i*len(elapsed) + offset + 1)
+				start := time.Now()
+				if mode == 0 {
+					txn := direct.NewTransactionAt(math.MaxUint64, true)
+					if err := txn.SetEntry(&badger.Entry{Key: keys[i%len(keys)], Value: value}); err != nil {
+						b.Fatal(err)
+					}
+					if err := txn.CommitAt(commitTs, nil); err != nil {
+						b.Fatal(err)
+					}
+				} else {
+					txn := seam.NewWriteTxn()
+					if err := txn.SetEntry(Entry{Key: keys[i%len(keys)], Value: value}); err != nil {
+						b.Fatal(err)
+					}
+					if err := txn.CommitAt(commitTs, nil); err != nil {
+						b.Fatal(err)
+					}
+				}
+				elapsed[mode] += time.Since(start)
+			}
+		}
+		b.StopTimer()
+		reportBadgerStoreSeamInterleaved(b, elapsed)
+	})
+
+	b.Run("batch-write", func(b *testing.B) {
+		direct := openStoreBenchmarkDB(b)
+		seam := NewBadgerStore(direct)
+		var elapsed [2]time.Duration
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for offset := 0; offset < len(elapsed); offset++ {
+				mode := (i + offset) % len(elapsed)
+				commitTs := uint64(i*len(elapsed) + offset + 1)
+				start := time.Now()
+				if mode == 0 {
+					txn := direct.NewTransactionAt(math.MaxUint64, true)
+					for _, key := range keys[:16] {
+						if err := txn.SetEntry(&badger.Entry{Key: key, Value: value}); err != nil {
+							b.Fatal(err)
+						}
+					}
+					if err := txn.CommitAt(commitTs, nil); err != nil {
+						b.Fatal(err)
+					}
+				} else {
+					txn := seam.NewWriteTxn()
+					for _, key := range keys[:16] {
+						if err := txn.SetEntry(Entry{Key: key, Value: value}); err != nil {
+							b.Fatal(err)
+						}
+					}
+					if err := txn.CommitAt(commitTs, nil); err != nil {
+						b.Fatal(err)
+					}
+				}
+				elapsed[mode] += time.Since(start)
+			}
+		}
+		b.StopTimer()
+		reportBadgerStoreSeamInterleaved(b, elapsed)
+	})
+}
+
+func reportBadgerStoreSeamInterleaved(b *testing.B, elapsed [2]time.Duration) {
+	directNs := float64(elapsed[0].Nanoseconds()) / float64(b.N)
+	seamNs := float64(elapsed[1].Nanoseconds()) / float64(b.N)
+	b.ReportMetric(directNs, "direct-ns/op")
+	b.ReportMetric(seamNs, "seam-ns/op")
+	b.ReportMetric(seamNs/directNs, "seam/direct")
+	b.ReportMetric((seamNs/directNs-1)*100, "seam-overhead-%")
 }
 
 func openPopulatedBenchmarkDB(b *testing.B, keys [][]byte) *badger.DB {

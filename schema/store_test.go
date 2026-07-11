@@ -45,16 +45,36 @@ func TestSchemaStorePreservesLoadAndDelete(t *testing.T) {
 	readAfter.Discard()
 }
 
-func TestSchemaStoreFailsClosedForBadgerStreamBootstrap(t *testing.T) {
+func TestSchemaStoreSupportsNeutralIteratorBootstrap(t *testing.T) {
 	InitForStore(newBadgerStore(ps))
 	t.Cleanup(func() { Init(ps) })
-	predicate := x.AttrInRootNamespace("schema-store-preserved-on-bootstrap-error")
-	want := &pb.SchemaUpdate{Predicate: predicate, ValueType: pb.Posting_STRING}
-	State().Set(predicate, want)
+	predicate := x.AttrInRootNamespace("schema-store-neutral-bootstrap")
+	typeName := x.AttrInRootNamespace("SchemaStoreNeutralType")
+	wantSchema := &pb.SchemaUpdate{Predicate: predicate, ValueType: pb.Posting_STRING}
+	wantType := &pb.TypeUpdate{
+		TypeName: typeName,
+		Fields:   []*pb.SchemaUpdate{{Predicate: predicate, ValueType: pb.Posting_STRING}},
+	}
+	schemaValue, err := proto.Marshal(wantSchema)
+	require.NoError(t, err)
+	typeValue, err := proto.Marshal(wantType)
+	require.NoError(t, err)
+	txn := ps.NewTransactionAt(math.MaxUint64, true)
+	require.NoError(t, txn.Set(x.SchemaKey(predicate), schemaValue))
+	require.NoError(t, txn.Set(x.TypeKey(typeName), typeValue))
+	require.NoError(t, txn.CommitAt(50, nil))
 
-	err := LoadFromDb(context.Background())
-	require.EqualError(t, err, "schema stream bootstrap requires the Badger operational backend")
-	got, ok := State().Get(context.Background(), predicate)
+	err = LoadFromDb(context.Background())
+	require.NoError(t, err)
+	gotSchema, ok := State().Get(context.Background(), predicate)
 	require.True(t, ok)
-	require.True(t, proto.Equal(want, &got))
+	require.True(t, proto.Equal(wantSchema, &gotSchema))
+	gotType, ok := State().GetType(typeName)
+	require.True(t, ok)
+	require.True(t, proto.Equal(wantType, &gotType))
+}
+
+func TestLoadFromDBRejectsInvalidMode(t *testing.T) {
+	err := loadFromDB(context.Background(), -1)
+	require.EqualError(t, err, "invalid schema load mode: -1")
 }

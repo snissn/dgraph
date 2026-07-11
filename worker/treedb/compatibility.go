@@ -183,7 +183,7 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		Status:          StatusDisabledNeedBlocker,
 		RequiredTier:    TierOperational,
 		Decision:        "fail closed until TreeDB can provide Dgraph-compatible snapshot/export/import stream contracts or explicit replacement workflows",
-		OperatorMessage: "TreeDB posting-store backend is disabled because backup, export, restore, and snapshot paths require Badger stream APIs.",
+		OperatorMessage: "TreeDB backup, export, restore, and snapshot transfer are disabled because those paths require Badger stream APIs.",
 		RequiredAPIs: []string{
 			"(*badger.DB).NewStreamAt",
 			"(*badger.Stream).Orchestrate",
@@ -207,8 +207,8 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		Feature:         FeatureBadgerSubscriptions,
 		Status:          StatusDisabledNeedBlocker,
 		RequiredTier:    TierOperational,
-		Decision:        "fail closed until worker update subscriptions have TreeDB-backed ordering, filtering, and cancellation semantics",
-		OperatorMessage: "TreeDB posting-store backend is disabled because worker.SubscribeForUpdates requires Badger subscription behavior.",
+		Decision:        "allow the restricted Dgraph-owned internal commit-event bridge, but fail closed for claims of full Badger DB.Subscribe compatibility",
+		OperatorMessage: "TreeDB Alpha requires internal worker event delivery for future successful commits; full Badger subscription compatibility remains unavailable.",
 		RequiredAPIs: []string{
 			"badger.DB.Subscribe",
 			"badger pb.Match prefix filters",
@@ -220,6 +220,7 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		},
 		Evidence: []string{
 			"BenchmarkDgraphTreeDBMatrix/Blocked/Subscriptions",
+			"worker.TestTreeDBCommitEventSubscriptionStreamsFutureCommitsAndCancels",
 		},
 	},
 	{
@@ -248,7 +249,7 @@ var postingCompatibilityMatrix = []CompatibilityRecord{
 		Status:          StatusDisabledNeedBlocker,
 		RequiredTier:    TierOperational,
 		Decision:        "fail closed until TreeDB import/export/subscription code can produce or replace Badger pb.KV, pb.KVList, and pb.Match shapes without data loss",
-		OperatorMessage: "TreeDB posting-store backend is disabled because Dgraph backup and subscription paths exchange Badger protobuf payloads.",
+		OperatorMessage: "TreeDB backup and Badger-compatible subscription paths are disabled because they exchange Badger protobuf payloads.",
 		RequiredAPIs: []string{
 			"github.com/dgraph-io/badger/v4/pb.KV",
 			"github.com/dgraph-io/badger/v4/pb.KVList",

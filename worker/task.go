@@ -2556,6 +2556,9 @@ func (qs *queryState) evaluate(cp countParams, out *pb.Result) error {
 
 	x.AssertTrue(countl >= 1)
 	countKey = x.CountKey(cp.attr, uint32(countl), cp.reverse)
+	if _, err := requireBadgerPostingStore("count range iteration"); err != nil {
+		return err
+	}
 
 	txn := pstore.NewTransactionAt(cp.readTs, false)
 	defer txn.Discard()

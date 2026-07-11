@@ -190,6 +190,9 @@ func getInequalityTokens(ctx context.Context, readTs uint64, attr, f, lang strin
 	// If some new index key was written as part of same transaction it won't be on disk
 	// until the txn is committed. This is OK, we don't need to overlay in-memory contents on the
 	// DB, to keep the design simple and efficient.
+	if _, err := requireBadgerPostingStore("inequality index iteration"); err != nil {
+		return nil, nil, err
+	}
 	txn := pstore.NewTransactionAt(readTs, false)
 	defer txn.Discard()
 

@@ -36,6 +36,9 @@ type badgerWriter interface {
 
 // populateSnapshot gets data for a shard from the leader and writes it to BadgerDB on the follower.
 func (n *node) populateSnapshot(snap *pb.Snapshot, pl *conn.Pool) error {
+	if _, err := requireBadgerPostingStore("Raft snapshot receive"); err != nil {
+		return err
+	}
 	c := pb.NewWorkerClient(pl.Get())
 
 	// We should absolutely cancel the context when we return from this function, that way, the
@@ -252,6 +255,9 @@ func doStreamSnapshot(snap *pb.Snapshot, out pb.Worker_StreamSnapshotServer) err
 }
 
 func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) error {
+	if _, err := requireBadgerPostingStore("Raft snapshot send"); err != nil {
+		return err
+	}
 	// Pause rollups during snapshot streaming.
 	closer, err := groups().Node.startTask(opSnapshot)
 	if err != nil {

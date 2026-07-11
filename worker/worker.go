@@ -26,11 +26,13 @@ import (
 	"github.com/dgraph-io/dgraph/v25/conn"
 	"github.com/dgraph-io/dgraph/v25/posting"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
+	"github.com/dgraph-io/dgraph/v25/schema"
 	"github.com/dgraph-io/dgraph/v25/x"
 )
 
 var (
 	pstore       *badger.DB
+	postingStore posting.Store
 	workerServer *grpc.Server
 	raftServer   conn.RaftServer
 
@@ -46,7 +48,14 @@ func workerPort() int {
 
 // Init initializes this package.
 func Init(ps *badger.DB) {
+	InitForPostingStore(ps, posting.NewBadgerStore(ps))
+}
+
+// InitForPostingStore initializes the worker live path with an explicit store.
+// Badger-only RPCs remain fail-closed when ps is nil.
+func InitForPostingStore(ps *badger.DB, store posting.Store) {
 	pstore = ps
+	postingStore = store
 	// needs to be initialized after group config
 	limiter = rateLimiter{c: sync.NewCond(&sync.Mutex{}), max: int(x.WorkerConfig.Raft.GetInt64("pending-proposals"))}
 	go limiter.bleed()
@@ -63,6 +72,9 @@ func Init(ps *badger.DB) {
 	workerServer = grpc.NewServer(grpcOpts...)
 }
 
+// SchemaStore exposes the current owner through schema's cycle-safe contract.
+func SchemaStore() schema.Store { return schemaPostingStore{store: State.PostingStore} }
+
 // grpcWorker struct implements the gRPC server interface.
 type grpcWorker struct {
 	sync.Mutex
@@ -74,6 +86,16 @@ var _ pb.WorkerServer = (*grpcWorker)(nil)
 
 func (w *grpcWorker) Subscribe(
 	req *pb.SubscriptionRequest, stream pb.Worker_SubscribeServer) error {
+	if Config.PostingStoreBackend == PostingStoreBackendTreeDB {
+		if State.CommitEvents == nil {
+			glog.Infof("TreeDB restricted commit-event delivery is disabled; closing update subscription")
+			return nil
+		}
+		return subscribeToTreeDBCommitEvents(stream.Context(), req, stream, State.CommitEvents)
+	}
+	if _, err := requireBadgerPostingStore("Badger-compatible update subscription"); err != nil {
+		return err
+	}
 	// Subscribe on given prefixes.
 	var matches []badgerpb.Match
 	for _, p := range req.GetPrefixes() {
@@ -111,6 +133,14 @@ func RunServer(bindall bool) {
 
 // StoreStats returns stats for data store.
 func StoreStats() string {
+	if State.TreeDBStore != nil {
+		status := State.PostingStoreRuntimeStatus()
+		stats, err := State.PostingStoreStats()
+		if err != nil {
+			return fmt.Sprintf("TreeDB posting-store status=%v stats_error=%v", status, err)
+		}
+		return fmt.Sprintf("TreeDB posting-store status=%v stats=%v", status, stats)
+	}
 	return "Currently no stats for badger"
 }
 
@@ -139,6 +169,9 @@ func UpdateCacheMb(memoryMB int64) error {
 	glog.Infof("Updating cacheMb to %d", memoryMB)
 	if memoryMB < 0 {
 		return errors.Errorf("cache_mb must be non-negative")
+	}
+	if _, err := requireBadgerPostingStore("Badger block/index cache resizing"); err != nil {
+		return err
 	}
 
 	cachePercent, err := x.GetCachePercentages(Config.CachePercentage, 3)

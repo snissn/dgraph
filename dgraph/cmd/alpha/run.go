@@ -130,7 +130,10 @@ they form a Raft group and provide synchronous replication.
 	flag.String("posting-store", worker.PostingStoreDefaults,
 		z.NewSuperFlagHelp(worker.PostingStoreDefaults).
 			Head("Experimental Alpha posting-store backend selector.").
-			Flag("backend", "Posting-store backend. Supported values: badger (default), treedb (experimental and fail-closed until TreeDB compatibility gates pass).").
+			Flag("backend", "Posting-store backend. Supported values: badger (default), treedb (experimental benchmark-minimal runtime).").
+			Flag("tier", "Capability tier. Defaults to benchmark_minimal for TreeDB and production for Badger.").
+			Flag("durability", "TreeDB acknowledgement boundary: durable or relaxed.").
+			Flag("events", "Enable Dgraph-owned in-process successful post-commit events. Required and enabled by default for TreeDB; disabled by default for Badger.").
 			String())
 
 	// Cache flags.
@@ -698,8 +701,7 @@ func run() {
 		pstoreBlockCacheSize, pstoreIndexCacheSize)
 	bopts := badger.DefaultOptions("").FromSuperFlag(worker.BadgerDefaults + cacheOpts).
 		FromSuperFlag(Alpha.Conf.GetString("badger"))
-	postingStore := z.NewSuperFlag(Alpha.Conf.GetString("posting-store")).MergeAndCheckDefault(
-		worker.PostingStoreDefaults)
+	postingStore := worker.ParsePostingStoreSuperFlag(Alpha.Conf.GetString("posting-store"))
 	security := z.NewSuperFlag(Alpha.Conf.GetString("security")).MergeAndCheckDefault(
 		worker.SecurityDefaults)
 	conf := audit.GetAuditConf(Alpha.Conf.GetString("audit"))
@@ -710,12 +712,16 @@ func run() {
 	enableMcp := Alpha.Conf.GetBool("mcp")
 
 	opts := worker.Options{
-		PostingDir:          Alpha.Conf.GetString("postings"),
-		WALDir:              Alpha.Conf.GetString("wal"),
-		PostingStoreBackend: postingStore.GetString("backend"),
-		CacheMb:             totalCache,
-		CachePercentage:     cachePercentage,
-		RemoveOnUpdate:      removeOnUpdate,
+		PostingDir:             Alpha.Conf.GetString("postings"),
+		WALDir:                 Alpha.Conf.GetString("wal"),
+		PostingStoreBackend:    postingStore.Backend,
+		PostingStoreTier:       postingStore.Tier,
+		PostingStoreDurability: postingStore.Durability,
+		PostingStoreEvents:     postingStore.Events,
+		PostingStoreEventsSet:  postingStore.EventsConfigured,
+		CacheMb:                totalCache,
+		CachePercentage:        cachePercentage,
+		RemoveOnUpdate:         removeOnUpdate,
 
 		MutationsMode:      worker.AllowMutations,
 		AuthToken:          security.GetString("token"),
@@ -836,12 +842,17 @@ func run() {
 
 	// Posting will initialize index which requires schema. Hence, initialize
 	// schema before calling posting.Init().
-	schema.Init(worker.State.Pstore)
-	posting.Init(worker.State.Pstore, postingListCacheSize, removeOnUpdate)
+	if worker.State.Pstore != nil {
+		schema.Init(worker.State.Pstore)
+		posting.Init(worker.State.Pstore, postingListCacheSize, removeOnUpdate)
+	} else {
+		schema.InitForStore(worker.SchemaStore())
+		posting.InitForStore(worker.State.PostingStore, postingListCacheSize, removeOnUpdate)
+	}
 	posting.SetEnabledDetailedMetrics(enableDetailedMetrics)
 	defer posting.Cleanup()
 
-	worker.Init(worker.State.Pstore)
+	worker.InitForPostingStore(worker.State.Pstore, worker.State.PostingStore)
 
 	// setup shutdown os signal handler
 	sdCh := make(chan os.Signal, 3)

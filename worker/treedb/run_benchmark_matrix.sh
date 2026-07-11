@@ -186,7 +186,7 @@ set -e
 	echo "| ${bt}Blocked/EntryTTL${bt} | skipped | TreeDBStore rejects nonzero Badger Entry.ExpiresAt values until an operational-tier expiry contract exists. |"
 	echo "| ${bt}Blocked/StreamBackupExport${bt} | skipped | TreeDB does not yet provide Dgraph's Badger NewStreamAt/Stream.Orchestrate backup-export contract. |"
 	echo "| ${bt}Blocked/StreamWriterImport${bt} | skipped | TreeDB does not yet provide Dgraph's Badger NewStreamWriter import/restore contract. |"
-	echo "| ${bt}Blocked/Subscriptions${bt} | skipped | TreeDB does not yet provide the Badger Subscribe API used by worker.SubscribeForUpdates. |"
+	echo "| ${bt}Blocked/Subscriptions${bt} | skipped | The restricted internal commit-event bridge does not claim the full Badger DB.Subscribe operational contract. |"
 	echo "| ${bt}Blocked/EncryptionKeyRegistry${bt} | skipped | TreeDB Dgraph scaffold intentionally fails closed for Badger-compatible encryption and key registry APIs. |"
 	echo
 	echo "## Result"

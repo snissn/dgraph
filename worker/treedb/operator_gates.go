@@ -62,16 +62,14 @@ var operatorGateReport = []OperatorGate{
 	},
 	{
 		ID:       GateBenchmarkMinimalTier,
-		Status:   GateStatusFailClosed,
-		Decision: "TreeDB may run the restricted Alpha benchmark only after the benchmark-minimal capability tier passes.",
-		Summary:  "TreeDBStore managed timestamps, posting metadata/discard markers, and all-version iteration pass; backend lifecycle wiring still blocks the benchmark-minimal tier.",
+		Status:   GateStatusPass,
+		Decision: "TreeDB may run the explicit restricted Alpha benchmark-minimal tier.",
+		Summary:  "TreeDBStore lifecycle, managed timestamps, posting metadata/discard markers, all-version iteration, GC, and stats pass the benchmark-minimal tier.",
 		Evidence: []string{
 			"CheckCapabilityTier(benchmark_minimal)",
 			"TestCapabilityTierRequirementsAndBlockers/benchmark_minimal",
-			"posting.TestTreeDBStoreMatchesBadgerGoldenIteratorTrace",
-		},
-		FollowUps: []string{
-			"Wire TreeDBStore into the restricted Alpha lifecycle in issue #19 before changing this gate.",
+			"worker.TestServerStateTreeDBLifecycle",
+			"worker.TestTreeDBRestrictedRuntimeMutationQuerySchemaRestart",
 		},
 	},
 	{
@@ -102,9 +100,9 @@ var operatorGateReport = []OperatorGate{
 	},
 	{
 		ID:       GateTreeDBPrimitiveDurability,
-		Status:   GateStatusEvidence,
-		Decision: "TreeDB primitives and the posting adapter can open, write, close, and reopen, without enabling Alpha runtime selection.",
-		Summary:  "TreeDBStore satisfies benchmark-minimal posting semantics; restricted Alpha lifecycle wiring remains separate.",
+		Status:   GateStatusPass,
+		Decision: "TreeDB primitives and the posting adapter can open, write, close, reopen, and serve the restricted Alpha runtime.",
+		Summary:  "TreeDBStore satisfies benchmark-minimal posting semantics and the restricted Alpha lifecycle owns exactly one backend handle.",
 		Evidence: []string{
 			"TestOpenSmoke",
 			"TestOpenReopenDurability",
@@ -113,29 +111,23 @@ var operatorGateReport = []OperatorGate{
 	},
 	{
 		ID:       GateTreeDBSelector,
-		Status:   GateStatusFailClosed,
-		Decision: "An explicit TreeDB selector value is accepted but startup refuses to open TreeDB while blockers remain.",
-		Summary:  "There is no silent fallback from requested TreeDB to Badger.",
+		Status:   GateStatusPass,
+		Decision: "An explicit TreeDB selector opens only the restricted benchmark-minimal tier.",
+		Summary:  "The selector owns exactly the requested backend and never silently falls back from TreeDB to Badger.",
 		Evidence: []string{
-			"worker.TestCheckPostingStoreBackendReadyFailsClosedForTreeDB",
+			"worker.TestCheckPostingStoreBackendReadyAllowsBenchmarkMinimalTreeDB",
+			"worker.TestServerStateTreeDBLifecycle",
 			"CheckPostingBackendReady",
-		},
-		FollowUps: []string{
-			"Wire the proven TreeDBStore adapter into the restricted Alpha lifecycle in issue #19.",
 		},
 	},
 	{
 		ID:       GatePostingSchemaWorkflows,
-		Status:   GateStatusFailClosed,
-		Decision: "TreeDBStore satisfies benchmark-minimal posting semantics, but runtime posting/schema workflows remain Badger-only until issue #19.",
-		Summary:  "Posting writes/reads now have TreeDB UserMeta, discard-marker, managed-timestamp, and all-version iterator evidence; runtime wiring is still fail-closed.",
+		Status:   GateStatusPass,
+		Decision: "Basic point posting mutations, reads, and schema persistence are supported in the restricted TreeDB Alpha runtime.",
+		Summary:  "The benchmark-minimal runtime exercises posting writes/reads and schema update/load across close and reopen; later-tier indexed and transfer workflows remain gated.",
 		Evidence: []string{
-			"posting.TestBadgerStorePreservesManagedTimestampsMetadataAndIteration",
 			"posting.TestTreeDBStoreMatchesBadgerGoldenIteratorTrace",
-			"PostingCompatibilityMatrix managed_timestamp_transactions, entry_metadata, and all_version_iteration rows",
-		},
-		FollowUps: []string{
-			"Exercise posting/schema workflows through the restricted runtime in issue #19 before changing this gate.",
+			"worker.TestTreeDBRestrictedRuntimeMutationQuerySchemaRestart",
 		},
 	},
 	{
@@ -155,14 +147,18 @@ var operatorGateReport = []OperatorGate{
 	{
 		ID:       GateSubscriptions,
 		Status:   GateStatusFailClosed,
-		Decision: "Subscriptions remain Badger-only for TreeDB requests.",
-		Summary:  "worker.SubscribeForUpdates requires Badger subscription filtering, ordering, cancellation, and pb.KVList payloads.",
+		Decision: "TreeDB Alpha requires restricted internal worker event delivery; full Badger DB.Subscribe compatibility remains unavailable.",
+		Summary:  "The Dgraph-owned bridge filters future ordered successful commits into the pb.KVList fields used by ACL and GraphQL schema watchers; startup fails closed when delivery is disabled.",
 		Evidence: []string{
 			"PostingCompatibilityMatrix subscriptions row",
-			"BenchmarkDgraphTreeDBMatrix/Blocked/Subscriptions",
+			"posting.TestCommitEventBusOrdersOutOfOrderCompletionsAndSkipsFailures",
+			"posting.TestCommitEventBusBackpressureCancellationAndShutdown",
+			"worker.TestTreeDBCommitEventSubscriptionStreamsFutureCommitsAndCancels",
+			"worker.TestServerStateTreeDBRejectsDisabledCommitEvents",
+			"worker.TestTreeDBDisabledSubscriptionsExitWithoutRetryOrStateAccess",
 		},
 		FollowUps: []string{
-			"Add TreeDB-backed subscription semantics and tests before enabling runtime TreeDB.",
+			"Require a separate operational-tier contract before claiming full Badger subscription parity.",
 		},
 	},
 	{
@@ -192,7 +188,7 @@ var operatorGateReport = []OperatorGate{
 		ID:       GateDefaultDecision,
 		Status:   GateStatusPass,
 		Decision: DefaultDecisionKeepBadger,
-		Summary:  "Final decision for this graph: keep Badger as the default backend; TreeDB remains explicit, experimental, and fail-closed.",
+		Summary:  "Final decision for this graph: keep Badger as the default backend; TreeDB is explicit, experimental, and limited to the restricted benchmark-minimal tier, with unsupported workflows failing closed.",
 		Evidence: []string{
 			"worker.PostingStoreDefaults backend=badger",
 			"worker.TestNormalizePostingStoreBackend",
