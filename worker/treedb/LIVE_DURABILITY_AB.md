@@ -42,12 +42,10 @@ The issue #17 decision evidence produced from Dgraph commit
 `6ae8d25b27ca6ebf20d8bec4c5de6151aba341a5` is committed under
 [`artifacts/issue-17`](artifacts/issue-17/README.md). The committed report uses paths relative to
 that directory; each raw result retains the original absolute command and scratch path for audit.
-The superseded pre-oracle run remains under
-[`artifacts/issue-17-provisional-0d7d559c9`](artifacts/issue-17-provisional-0d7d559c9/README.md) for
-history, but is not decision evidence.
 
-When a TreeDB cell materially misses its durability-matched baseline, capture a separate CPU profile
-without treating the profiled throughput as benchmark evidence. Reuse the committed runner binary
+Non-smoke decision runs automatically capture separate relaxed and durable TreeDB CPU profiles after
+the matrix. Profile-run throughput is never treated as benchmark evidence, and the report links only
+artifacts verified to exist. To reproduce one profile manually, reuse the committed runner binary
 produced in the artifact root and raise `--timed-ops` enough to cover `--profile-seconds`:
 
 ```sh

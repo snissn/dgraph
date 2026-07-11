@@ -77,6 +77,12 @@ func run(o options) (err error) {
 	if o.dgraphBin == "" || o.artifactDir == "" || (o.backend != "badger" && o.backend != "treedb") || (o.class != "relaxed" && o.class != "durable") {
 		return errors.New("--dgraph-bin, --artifact-dir, valid --backend, and valid --durability are required")
 	}
+	if o.repeat < 1 || o.dataset < 1 || o.concurrency < 1 || o.warmup < 1 || o.timed < 1 {
+		return errors.New("--repeat, --dataset-nodes, --concurrency, --warmup-ops, and --timed-ops must be positive")
+	}
+	if o.cpuProfile != "" && o.profileSeconds < 1 {
+		return errors.New("--profile-seconds must be positive when --cpu-profile is set")
+	}
 	if _, err := os.Stat(o.artifactDir); !os.IsNotExist(err) {
 		return fmt.Errorf("artifact directory must not exist: %s", o.artifactDir)
 	}

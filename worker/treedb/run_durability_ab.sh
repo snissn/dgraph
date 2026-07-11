@@ -5,7 +5,8 @@ set -Eeuo pipefail
 usage() {
 	printf '%s\n' 'usage: worker/treedb/run_durability_ab.sh [--smoke] --artifact-dir NEW_DIR' \
 		'Runs adapter microbenchmarks and the four-cell live durability matrix.' \
-		'Environment overrides: REPEATS DATASET_NODES WARMUP_OPS TIMED_OPS CONCURRENCY COUNT BENCHTIME.'
+		'Decision runs also collect separate relaxed/durable TreeDB CPU profiles.' \
+		'Environment overrides: REPEATS DATASET_NODES WARMUP_OPS TIMED_OPS CONCURRENCY COUNT BENCHTIME PROFILE_RELAXED_OPS PROFILE_DURABLE_OPS PROFILE_SECONDS.'
 }
 
 smoke=0
@@ -125,5 +126,36 @@ for class in relaxed durable; do
 	done
 done
 
-"${artifact_dir}/bin/report" --repeats "${repeats}" --out "${artifact_dir}/report.md" "${result_paths[@]}"
+profile_args=()
+if [[ ${smoke} -eq 0 ]]; then
+	profile_relaxed_ops=${PROFILE_RELAXED_OPS:-100000}
+	profile_durable_ops=${PROFILE_DURABLE_OPS:-10000}
+	profile_seconds=${PROFILE_SECONDS:-5}
+	profile_dir="${artifact_dir}/profiles"
+	mkdir -p "${profile_dir}"
+	for profile_class in relaxed durable; do
+		profile_ops=${profile_relaxed_ops}
+		profile_offset=26000
+		if [[ ${profile_class} == durable ]]; then
+			profile_ops=${profile_durable_ops}
+			profile_offset=26200
+		fi
+		profile_run="${profile_dir}/treedb-${profile_class}-run"
+		profile_path="${profile_dir}/treedb-${profile_class}.pprof"
+		"${artifact_dir}/bin/livebench" \
+			--dgraph-bin "${artifact_dir}/bin/dgraph" --artifact-dir "${profile_run}" \
+			--backend treedb --durability "${profile_class}" --repeat 1 \
+			--dataset-nodes "${dataset}" --warmup-ops "${warmup}" --timed-ops "${profile_ops}" \
+			--concurrency "${concurrency}" --zero-port-offset "${profile_offset}" --alpha-port-offset "$((profile_offset + 40))" \
+			--cpu-profile "${profile_path}" --profile-seconds "${profile_seconds}"
+		go tool pprof -top -nodecount=25 "${artifact_dir}/bin/dgraph" "${profile_path}" |
+			tee "${profile_dir}/treedb-${profile_class}-top.txt"
+	done
+	profile_args=(--profile-dir "${profile_dir}")
+fi
+
+"${artifact_dir}/bin/report" --repeats "${repeats}" --out "${artifact_dir}/report.md" "${profile_args[@]}" "${result_paths[@]}"
 printf 'report=%s\ncontext=%s\nmicrobench=%s\n' "${artifact_dir}/report.md" "${artifact_dir}/context.txt" "${artifact_dir}/microbench/raw.txt"
+if [[ ${smoke} -eq 0 ]]; then
+	printf 'profiles=%s\n' "${artifact_dir}/profiles"
+fi

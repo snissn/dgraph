@@ -73,6 +73,51 @@ func TestCoreCollectorsReturnErrorsInsteadOfSyntheticValues(t *testing.T) {
 	}
 }
 
+func TestRunRejectsNonPositiveWorkloadOptionsBeforeSetup(t *testing.T) {
+	base := options{
+		dgraphBin: "/does/not/exist", artifactDir: filepath.Join(t.TempDir(), "new"),
+		backend: "badger", class: "relaxed", repeat: 1, dataset: 1,
+		concurrency: 1, warmup: 1, timed: 1, profileSeconds: 1,
+	}
+	tests := []struct {
+		name   string
+		mutate func(*options)
+	}{
+		{"repeat", func(o *options) { o.repeat = 0 }},
+		{"dataset", func(o *options) { o.dataset = 0 }},
+		{"concurrency", func(o *options) { o.concurrency = -1 }},
+		{"warmup", func(o *options) { o.warmup = 0 }},
+		{"timed", func(o *options) { o.timed = -1 }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			o := base
+			o.artifactDir = filepath.Join(t.TempDir(), "new")
+			tc.mutate(&o)
+			if err := run(o); err == nil || !strings.Contains(err.Error(), "must be positive") {
+				t.Fatalf("got %v, want positive-option error", err)
+			}
+			if _, err := os.Stat(o.artifactDir); !os.IsNotExist(err) {
+				t.Fatalf("invalid options created artifact directory: %v", err)
+			}
+		})
+	}
+}
+
+func TestRunRejectsNonPositiveProfileSecondsBeforeSetup(t *testing.T) {
+	o := options{
+		dgraphBin: "/does/not/exist", artifactDir: filepath.Join(t.TempDir(), "new"),
+		backend: "treedb", class: "relaxed", repeat: 1, dataset: 1,
+		concurrency: 1, warmup: 1, timed: 1, cpuProfile: "cpu.pprof",
+	}
+	if err := run(o); err == nil || !strings.Contains(err.Error(), "--profile-seconds must be positive") {
+		t.Fatalf("got %v, want positive profile duration error", err)
+	}
+	if _, err := os.Stat(o.artifactDir); !os.IsNotExist(err) {
+		t.Fatalf("invalid profile options created artifact directory: %v", err)
+	}
+}
+
 func TestCaptureCPUProfileWritesImmutableArtifact(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("seconds"); got != "3" {

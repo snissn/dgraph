@@ -3,9 +3,11 @@ package livebench
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -28,6 +30,51 @@ func LoadResults(paths []string) ([]Result, error) {
 
 type distribution struct{ median, min, max, cv float64 }
 
+type ProfileArtifact struct {
+	PPROF string
+	Top   string
+}
+
+type ProfileArtifacts struct {
+	Relaxed  ProfileArtifact
+	Durable  ProfileArtifact
+	verified bool
+}
+
+func (p ProfileArtifacts) Validate() error {
+	if !p.verified {
+		return errors.New("profile artifacts were not verified on disk")
+	}
+	for class, artifact := range map[string]ProfileArtifact{"relaxed": p.Relaxed, "durable": p.Durable} {
+		if artifact.PPROF == "" || artifact.Top == "" {
+			return fmt.Errorf("%s profile artifact paths are incomplete", class)
+		}
+	}
+	return nil
+}
+
+// DiscoverProfileArtifacts verifies the separately generated profile files and
+// returns report-relative links. Supplying a profile directory is an explicit
+// contract: partial or empty profile output is an error, never a report claim.
+func DiscoverProfileArtifacts(dir string) (ProfileArtifacts, error) {
+	profiles := ProfileArtifacts{
+		Relaxed: ProfileArtifact{PPROF: "profiles/treedb-relaxed.pprof", Top: "profiles/treedb-relaxed-top.txt"},
+		Durable: ProfileArtifact{PPROF: "profiles/treedb-durable.pprof", Top: "profiles/treedb-durable-top.txt"},
+	}
+	for _, name := range []string{"treedb-relaxed.pprof", "treedb-relaxed-top.txt", "treedb-durable.pprof", "treedb-durable-top.txt"} {
+		path := filepath.Join(dir, name)
+		info, err := os.Stat(path)
+		if err != nil {
+			return ProfileArtifacts{}, fmt.Errorf("profile artifact %s: %w", path, err)
+		}
+		if !info.Mode().IsRegular() || info.Size() == 0 {
+			return ProfileArtifacts{}, fmt.Errorf("profile artifact %s is empty or not regular", path)
+		}
+	}
+	profiles.verified = true
+	return profiles, nil
+}
+
 func summarize(xs []float64) distribution {
 	sort.Float64s(xs)
 	sum := 0.0
@@ -45,6 +92,17 @@ func summarize(xs []float64) distribution {
 // RenderReport validates the complete matrix and keeps relaxed and durable
 // comparisons in separate headline sections.
 func RenderReport(results []Result, repeats int) (string, error) {
+	return renderReport(results, repeats, nil)
+}
+
+func RenderReportWithProfiles(results []Result, repeats int, profiles ProfileArtifacts) (string, error) {
+	if err := profiles.Validate(); err != nil {
+		return "", err
+	}
+	return renderReport(results, repeats, &profiles)
+}
+
+func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (string, error) {
 	if err := ValidateSet(results, repeats); err != nil {
 		return "", err
 	}
@@ -95,9 +153,13 @@ func RenderReport(results []Result, repeats int) (string, error) {
 		decision = "STOP advancement/integration at this phase; keep Badger as the production default"
 	}
 	fmt.Fprintf(&b, "## Decision\n\n**%s.** Logical parity, schema, posting, unsupported-feature, and recovery gates passed. The performance decision applies only to this benchmark-minimal topology and workload.\n\n", decision)
-	b.WriteString("## Profile attribution\n\n")
-	b.WriteString("- Relaxed TreeDB: [`profiles/treedb-relaxed.pprof`](profiles/treedb-relaxed.pprof) and [`profiles/treedb-relaxed-top.txt`](profiles/treedb-relaxed-top.txt). The profile is syscall/allocation-heavy, but without matched substrate-only and adapter/runtime profiles it cannot attribute the split between gomap itself and Dgraph integration overhead.\n")
-	b.WriteString("- Durable TreeDB: [`profiles/treedb-durable.pprof`](profiles/treedb-durable.pprof) and [`profiles/treedb-durable-top.txt`](profiles/treedb-durable-top.txt). The five-second wall-clock profile collected little CPU, which is consistent with I/O wait; it is not causal proof of the durable throughput gap.\n\n")
+	if profiles != nil {
+		b.WriteString("## Profile artifacts\n\n")
+		b.WriteString("Separate TreeDB profile runs were collected after the decision matrix; their throughput is diagnostic and is not part of the A/B decision.\n\n")
+		fmt.Fprintf(&b, "- Relaxed TreeDB: [`%s`](%s) and [`%s`](%s).\n", profiles.Relaxed.PPROF, profiles.Relaxed.PPROF, profiles.Relaxed.Top, profiles.Relaxed.Top)
+		fmt.Fprintf(&b, "- Durable TreeDB: [`%s`](%s) and [`%s`](%s).\n\n", profiles.Durable.PPROF, profiles.Durable.PPROF, profiles.Durable.Top, profiles.Durable.Top)
+		b.WriteString("These artifacts do not by themselves attribute cost between gomap and Dgraph integration, establish I/O wait, or prove a causal explanation for either throughput delta.\n\n")
+	}
 	b.WriteString("## Raw artifacts and reproduction\n\nReproduce from the recorded Dgraph SHA with `TMPDIR=/mnt/fast4tb/tmp GOWORK=off worker/treedb/run_durability_ab.sh --artifact-dir NEW_DIR`. Paths below are relative to the artifact root; each JSON retains its exact original absolute command and raw path.\n\n")
 	for _, r := range results {
 		fmt.Fprintf(&b, "- `%s`: `live/%s/result.json`; Dgraph `%s`; gomap `%s`; dirty `%t`\n", r.RunID, r.RunID, r.Context.DgraphSHA, r.Context.GomapVersion, r.Context.Dirty)
