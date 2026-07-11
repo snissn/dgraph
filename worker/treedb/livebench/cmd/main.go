@@ -301,29 +301,47 @@ func stopOnReturn(p *process, name string, runErr *error) {
 }
 
 func waitHTTP(ctx context.Context, url string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	waitCtx, cancelWait := context.WithTimeout(ctx, timeout)
+	defer cancelWait()
+	for {
+		probeCtx, cancelProbe := context.WithTimeout(waitCtx, 2*time.Second)
+		req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, url, nil)
+		if err != nil {
+			cancelProbe()
+			return err
+		}
 		resp, err := http.DefaultClient.Do(req)
+		var probeErr error
+		ready := false
 		if err == nil {
 			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+				probeErr = fmt.Errorf("drain readiness response: %w", err)
+			} else if err := resp.Body.Close(); err != nil {
+				probeErr = fmt.Errorf("close readiness response: %w", err)
+			} else {
+				ready = resp.StatusCode == http.StatusOK
+			}
+			if probeErr != nil {
 				_ = resp.Body.Close()
-				return fmt.Errorf("drain readiness response: %w", err)
-			}
-			if err := resp.Body.Close(); err != nil {
-				return fmt.Errorf("close readiness response: %w", err)
-			}
-			if resp.StatusCode == http.StatusOK {
-				return nil
 			}
 		}
+		probeTimedOut := probeCtx.Err() != nil
+		cancelProbe()
+		if ready {
+			return nil
+		}
+		if probeErr != nil && !probeTimedOut {
+			return probeErr
+		}
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-waitCtx.Done():
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return fmt.Errorf("readiness timeout after %s", timeout)
 		case <-time.After(250 * time.Millisecond):
 		}
 	}
-	return errors.New("timeout")
 }
 func client(addr string) (*dgo.Dgraph, error) {
 	return dgo.NewClient(addr, dgo.WithGrpcOption(grpc.WithTransportCredentials(insecure.NewCredentials())))

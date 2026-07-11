@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -91,6 +92,20 @@ func TestFetchHonorsTimeout(t *testing.T) {
 	defer server.Close()
 	if _, err := fetch(server.URL, 10*time.Millisecond); err == nil {
 		t.Fatal("timed-out fetch unexpectedly succeeded")
+	}
+}
+
+func TestWaitHTTPBoundsEachReadinessProbe(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	started := time.Now()
+	if err := waitHTTP(context.Background(), server.URL, 50*time.Millisecond); err == nil || !strings.Contains(err.Error(), "readiness timeout") {
+		t.Fatalf("waitHTTP error=%v", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("readiness timeout took %s", elapsed)
 	}
 }
 
