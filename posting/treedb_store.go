@@ -49,6 +49,12 @@ const (
 	treeDBEnvelopeHeader       = 5
 
 	treeDBEnvelopeDiscard byte = 1 << 0
+
+	// Match the shape of Badger's bounded callback write pipeline without
+	// coupling this adapter to Badger internals. One worker preserves admission
+	// order; the bounded queue applies backpressure before owned mutation batches
+	// can grow without limit.
+	treeDBCommitQueueCapacity = 64
 )
 
 // TreeDBStore owns exactly one TreeDB handle and exactly one external-MVCC
@@ -62,6 +68,9 @@ type TreeDBStore struct {
 
 	lifecycleMu  sync.Mutex
 	commitWG     sync.WaitGroup
+	workerWG     sync.WaitGroup
+	workerOnce   sync.Once
+	commitQueue  chan treeDBCommitRequest
 	mutationPool sync.Pool
 	closeOnce    sync.Once
 	closeErr     error
@@ -86,10 +95,14 @@ func OpenTreeDBStore(opts treedb.Options, mode TreeDBCommitMode) (*TreeDBStore, 
 	}
 	store := &TreeDBStore{
 		db: db, mvcc: mvcc.New(db), commitMode: commitMode, mode: mode,
-		durability: db.DurabilityMode(),
+		durability:  db.DurabilityMode(),
+		commitQueue: make(chan treeDBCommitRequest, treeDBCommitQueueCapacity),
 	}
 	store.mutationPool.New = func() any {
-		return &treeDBMutationBatch{mutations: make([]mvcc.Mutation, 0, 16)}
+		return &treeDBMutationBatch{
+			mutations: make([]mvcc.Mutation, 0, 16),
+			arena:     make([]byte, 0, 4<<10),
+		}
 	}
 	if commitMode == mvcc.CommitDurable && db.DurabilityMode() != "wal_on_sync" &&
 		!bytes.HasPrefix([]byte(db.DurabilityMode()), []byte("wal_on_sync+")) {
@@ -137,6 +150,8 @@ func (s *TreeDBStore) Close() error {
 		// No new commit can be admitted after closed is published. Wait for every
 		// commit accepted before that boundary before closing the owned DB.
 		s.commitWG.Wait()
+		close(s.commitQueue)
+		s.workerWG.Wait()
 
 		s.lifecycleMu.Lock()
 		defer s.lifecycleMu.Unlock()
@@ -255,6 +270,13 @@ type treeDBWriteTxn struct {
 
 type treeDBMutationBatch struct {
 	mutations []mvcc.Mutation
+	arena     []byte
+}
+
+type treeDBCommitRequest struct {
+	commitTs uint64
+	batch    *treeDBMutationBatch
+	callback func(error)
 }
 
 func (t *treeDBWriteTxn) SetEntry(entry Entry) error {
@@ -267,10 +289,10 @@ func (t *treeDBWriteTxn) SetEntry(entry Entry) error {
 		t.stickyErr = fmt.Errorf("%w: key %x expires at %d", ErrTreeDBTTLUnsupported, entry.Key, entry.ExpiresAt)
 		return t.stickyErr
 	}
-	// One allocation owns both the key and envelope while preserving the
-	// caller-copy boundary. This avoids the map/string/copy staging overhead on
-	// Dgraph's common one-entry managed transactions.
-	owned := make([]byte, len(entry.Key)+treeDBEnvelopeHeader+len(entry.Value))
+	// One arena region owns both the key and envelope while preserving the
+	// caller-copy boundary. The pooled arena avoids per-mutation allocations on
+	// Dgraph's common small managed transactions.
+	owned := t.batch.ownBytes(len(entry.Key) + treeDBEnvelopeHeader + len(entry.Value))
 	key := owned[:len(entry.Key)]
 	copy(key, entry.Key)
 	value := owned[len(entry.Key):]
@@ -285,9 +307,16 @@ func (t *treeDBWriteTxn) Delete(key []byte) error {
 	if t.closed {
 		return ErrTreeDBTxnClosed
 	}
-	owned := append([]byte(nil), key...)
+	owned := t.batch.ownBytes(len(key))
+	copy(owned, key)
 	t.setMutation(mvcc.Mutation{Key: owned, Delete: true})
 	return nil
+}
+
+func (b *treeDBMutationBatch) ownBytes(size int) []byte {
+	start := len(b.arena)
+	b.arena = append(b.arena, make([]byte, size)...)
+	return b.arena[start:]
 }
 
 func (t *treeDBWriteTxn) setMutation(mutation mvcc.Mutation) {
@@ -316,21 +345,12 @@ func (t *treeDBWriteTxn) CommitAt(commitTs uint64, cb func(error)) error {
 		go cb(err)
 		return nil
 	}
-	if err := t.store.admitCommit(); err != nil {
+	request := treeDBCommitRequest{commitTs: commitTs, batch: batch, callback: cb}
+	if err := t.store.enqueueCommit(request); err != nil {
 		t.store.releaseMutationBatch(batch)
 		go cb(err)
 		return nil
 	}
-	// Match Badger's callback form: an admitted commit runs behind the callback
-	// boundary, permitting TxnWriter to pipeline commits. The store lifecycle
-	// gate keeps the DB open through the storage commit. Complete that gate
-	// before invoking the callback so a callback may itself call Close.
-	go func() {
-		err := t.store.commitAtAdmitted(commitTs, batch.mutations)
-		t.store.releaseMutationBatch(batch)
-		t.store.commitWG.Done()
-		cb(err)
-	}()
 	return nil
 }
 
@@ -356,8 +376,9 @@ func (s *TreeDBStore) releaseMutationBatch(batch *treeDBMutationBatch) {
 	for i := range batch.mutations {
 		batch.mutations[i] = mvcc.Mutation{}
 	}
-	if cap(batch.mutations) <= 64 {
+	if cap(batch.mutations) <= 64 && cap(batch.arena) <= 64<<10 {
 		batch.mutations = batch.mutations[:0]
+		batch.arena = batch.arena[:0]
 		s.mutationPool.Put(batch)
 	}
 }
@@ -373,6 +394,41 @@ func (s *TreeDBStore) admitCommit() error {
 	}
 	s.commitWG.Add(1)
 	return nil
+}
+
+func (s *TreeDBStore) enqueueCommit(request treeDBCommitRequest) error {
+	if s == nil {
+		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
+	}
+	// Holding lifecycleMu across the bounded send gives concurrent callers one
+	// admission order and prevents Close from closing the queue between the
+	// closed check and send. The storage worker never takes lifecycleMu, so a
+	// full queue still makes progress and deliberately backpressures the caller.
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.closed.Load() || s.db == nil {
+		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
+	}
+	s.workerOnce.Do(func() {
+		s.workerWG.Add(1)
+		go s.runCommitQueue()
+	})
+	s.commitWG.Add(1)
+	s.commitQueue <- request
+	return nil
+}
+
+func (s *TreeDBStore) runCommitQueue() {
+	defer s.workerWG.Done()
+	for request := range s.commitQueue {
+		err := s.commitAtAdmitted(request.commitTs, request.batch.mutations)
+		s.releaseMutationBatch(request.batch)
+		s.commitWG.Done()
+		// Callbacks remain off the storage worker so they may call Close without
+		// deadlocking the queue drain. Storage work and its owned buffers remain
+		// strictly bounded and FIFO regardless of callback behavior.
+		go request.callback(err)
+	}
 }
 
 func (s *TreeDBStore) commitAt(commitTs uint64, mutations []mvcc.Mutation) error {

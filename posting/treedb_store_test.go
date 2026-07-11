@@ -235,6 +235,94 @@ func TestTreeDBStoreTxnWriterPipelinesAndCloseWaitsForAdmittedCommit(t *testing.
 	require.NoError(t, <-closeDone)
 }
 
+func TestTreeDBStoreCallbackQueueIsBoundedAndFIFO(t *testing.T) {
+	t.Run("backpressure", func(t *testing.T) {
+		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+		commitStarted := make(chan struct{})
+		releaseCommits := make(chan struct{})
+		var started sync.Once
+		store.beforeCommitForTest = func() {
+			started.Do(func() { close(commitStarted) })
+			<-releaseCommits
+		}
+
+		writer := NewTxnWriterForStore(store)
+		require.NoError(t, writer.SetAt([]byte("active"), []byte("value"), BitDeltaPosting, 1))
+		select {
+		case <-commitStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("callback commit worker did not start")
+		}
+
+		for i := 0; i < treeDBCommitQueueCapacity; i++ {
+			require.NoError(t, writer.SetAt([]byte(fmt.Sprintf("queued-%03d", i)), []byte("value"),
+				BitDeltaPosting, uint64(i+2)))
+		}
+		overflowDone := make(chan error, 1)
+		go func() {
+			overflowDone <- writer.SetAt([]byte("backpressured"), []byte("value"), BitDeltaPosting,
+				uint64(treeDBCommitQueueCapacity+2))
+		}()
+		select {
+		case err := <-overflowDone:
+			t.Fatalf("callback queue accepted more than its bounded capacity: %v", err)
+		case <-time.After(100 * time.Millisecond):
+		}
+
+		close(releaseCommits)
+		require.NoError(t, <-overflowDone)
+		require.NoError(t, writer.Wait())
+		require.NoError(t, store.Close())
+	})
+
+	t.Run("duplicate key and timestamp", func(t *testing.T) {
+		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+		firstStarted := make(chan struct{})
+		secondStarted := make(chan struct{})
+		releaseFirst := make(chan struct{})
+		var calls atomic.Int32
+		store.beforeCommitForTest = func() {
+			switch calls.Add(1) {
+			case 1:
+				close(firstStarted)
+				<-releaseFirst
+			case 2:
+				close(secondStarted)
+			}
+		}
+
+		writer := NewTxnWriterForStore(store)
+		require.NoError(t, writer.SetAt([]byte("same"), []byte("first"), BitDeltaPosting, 7))
+		select {
+		case <-firstStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("first callback commit did not start")
+		}
+		require.NoError(t, writer.SetAt([]byte("same"), []byte("second"), BitDeltaPosting, 7))
+		select {
+		case <-secondStarted:
+			t.Fatal("second callback commit overtook the blocked first commit")
+		case <-time.After(100 * time.Millisecond):
+		}
+		close(releaseFirst)
+		require.NoError(t, writer.Wait())
+		select {
+		case <-secondStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("second callback commit did not run after the first")
+		}
+
+		read := store.NewReadTxn(7)
+		item, err := read.Get([]byte("same"))
+		require.NoError(t, err)
+		value, err := item.ValueCopy(nil)
+		require.NoError(t, err)
+		require.Equal(t, []byte("second"), value)
+		read.Discard()
+		require.NoError(t, store.Close())
+	})
+}
+
 func TestTreeDBStorePointErrorMappingAndCorruption(t *testing.T) {
 	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
 	require.NoError(t, commitTreeDBMutations(store, 2, mvcc.Mutation{Key: []byte("deleted"), Delete: true}))
