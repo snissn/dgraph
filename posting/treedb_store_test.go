@@ -321,6 +321,63 @@ func TestTreeDBStoreCallbackQueueIsBoundedAndFIFO(t *testing.T) {
 		read.Discard()
 		require.NoError(t, store.Close())
 	})
+
+	t.Run("callback then synchronous", func(t *testing.T) {
+		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+		firstStarted := make(chan struct{})
+		secondStarted := make(chan struct{})
+		releaseFirst := make(chan struct{})
+		var calls atomic.Int32
+		store.beforeCommitForTest = func() {
+			switch calls.Add(1) {
+			case 1:
+				close(firstStarted)
+				<-releaseFirst
+			case 2:
+				close(secondStarted)
+			}
+		}
+
+		first := store.NewWriteTxn()
+		require.NoError(t, first.SetEntry(Entry{Key: []byte("same"), Value: []byte("callback")}))
+		firstDone := make(chan error, 1)
+		require.NoError(t, first.CommitAt(7, func(err error) { firstDone <- err }))
+		select {
+		case <-firstStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("callback commit did not start")
+		}
+
+		second := store.NewWriteTxn()
+		require.NoError(t, second.SetEntry(Entry{Key: []byte("same"), Value: []byte("synchronous")}))
+		secondDone := make(chan error, 1)
+		go func() { secondDone <- second.CommitAt(7, nil) }()
+		select {
+		case <-secondStarted:
+			t.Fatal("synchronous commit overtook the blocked callback commit")
+		case err := <-secondDone:
+			t.Fatalf("synchronous commit returned before the earlier callback commit: %v", err)
+		case <-time.After(100 * time.Millisecond):
+		}
+
+		close(releaseFirst)
+		require.NoError(t, <-firstDone)
+		require.NoError(t, <-secondDone)
+		select {
+		case <-secondStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("synchronous commit did not run after the callback commit")
+		}
+
+		read := store.NewReadTxn(7)
+		item, err := read.Get([]byte("same"))
+		require.NoError(t, err)
+		value, err := item.ValueCopy(nil)
+		require.NoError(t, err)
+		require.Equal(t, []byte("synchronous"), value)
+		read.Discard()
+		require.NoError(t, store.Close())
+	})
 }
 
 func TestTreeDBMutationBatchReleaseScrubsOwnedBytes(t *testing.T) {

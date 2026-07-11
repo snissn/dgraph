@@ -69,7 +69,7 @@ type TreeDBStore struct {
 	lifecycleMu  sync.Mutex
 	commitWG     sync.WaitGroup
 	workerWG     sync.WaitGroup
-	workerOnce   sync.Once
+	queueActive  bool
 	commitQueue  chan treeDBCommitRequest
 	mutationPool sync.Pool
 	closeOnce    sync.Once
@@ -307,6 +307,7 @@ type treeDBCommitRequest struct {
 	commitTs uint64
 	batch    *treeDBMutationBatch
 	callback func(error)
+	done     chan error
 }
 
 func (t *treeDBWriteTxn) SetEntry(entry Entry) error {
@@ -378,11 +379,11 @@ func (t *treeDBWriteTxn) setMutation(mutation mvcc.Mutation) {
 func (t *treeDBWriteTxn) CommitAt(commitTs uint64, cb func(error)) error {
 	batch, err := t.prepareCommit()
 	if cb == nil {
-		defer t.store.releaseMutationBatch(batch)
 		if err != nil {
+			t.store.releaseMutationBatch(batch)
 			return err
 		}
-		return t.store.commitAt(commitTs, batch.mutations)
+		return t.store.commitSync(commitTs, batch)
 	}
 	if err != nil {
 		t.store.releaseMutationBatch(batch)
@@ -434,19 +435,6 @@ func (s *TreeDBStore) releaseMutationBatch(batch *treeDBMutationBatch) {
 	}
 }
 
-func (s *TreeDBStore) admitCommit() error {
-	if s == nil {
-		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
-	}
-	s.lifecycleMu.Lock()
-	defer s.lifecycleMu.Unlock()
-	if s.closed.Load() || s.db == nil {
-		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
-	}
-	s.commitWG.Add(1)
-	return nil
-}
-
 func (s *TreeDBStore) enqueueCommit(request treeDBCommitRequest) error {
 	if s == nil {
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
@@ -460,10 +448,15 @@ func (s *TreeDBStore) enqueueCommit(request treeDBCommitRequest) error {
 	if s.closed.Load() || s.db == nil {
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
 	}
-	s.workerOnce.Do(func() {
+	if !s.queueActive {
+		// Direct synchronous commits admitted before callback mode was activated
+		// must publish before the first queued request. lifecycleMu prevents a new
+		// direct admission while this wait establishes the handoff boundary.
+		s.commitWG.Wait()
+		s.queueActive = true
 		s.workerWG.Add(1)
 		go s.runCommitQueue()
-	})
+	}
 	s.commitWG.Add(1)
 	s.commitQueue <- request
 	return nil
@@ -475,19 +468,41 @@ func (s *TreeDBStore) runCommitQueue() {
 		err := s.commitAtAdmitted(request.commitTs, request.batch.mutations)
 		s.releaseMutationBatch(request.batch)
 		s.commitWG.Done()
+		if request.done != nil {
+			request.done <- err
+		}
 		// Callbacks remain off the storage worker so they may call Close without
 		// deadlocking the queue drain. Storage work and its owned buffers remain
 		// strictly bounded and FIFO regardless of callback behavior.
-		go request.callback(err)
+		if request.callback != nil {
+			go request.callback(err)
+		}
 	}
 }
 
-func (s *TreeDBStore) commitAt(commitTs uint64, mutations []mvcc.Mutation) error {
-	if err := s.admitCommit(); err != nil {
-		return err
+func (s *TreeDBStore) commitSync(commitTs uint64, batch *treeDBMutationBatch) error {
+	if s == nil {
+		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
 	}
-	defer s.commitWG.Done()
-	return s.commitAtAdmitted(commitTs, mutations)
+	s.lifecycleMu.Lock()
+	if s.closed.Load() || s.db == nil {
+		s.lifecycleMu.Unlock()
+		s.releaseMutationBatch(batch)
+		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
+	}
+	if !s.queueActive {
+		s.commitWG.Add(1)
+		s.lifecycleMu.Unlock()
+		defer s.commitWG.Done()
+		defer s.releaseMutationBatch(batch)
+		return s.commitAtAdmitted(commitTs, batch.mutations)
+	}
+
+	done := make(chan error, 1)
+	s.commitWG.Add(1)
+	s.commitQueue <- treeDBCommitRequest{commitTs: commitTs, batch: batch, done: done}
+	s.lifecycleMu.Unlock()
+	return <-done
 }
 
 func (s *TreeDBStore) commitAtAdmitted(commitTs uint64, mutations []mvcc.Mutation) error {
