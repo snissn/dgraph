@@ -96,9 +96,7 @@ type Result struct {
 	Validation    Validation         `json:"validation"`
 }
 
-var requiredMetrics = []string{
-	"cpu_seconds", "rss_peak_bytes", "disk_logical_bytes", "disk_allocated_bytes",
-	"write_bytes", "write_amplification", "gc_cycles", "flushes", "checkpoints", "recovery_seconds",
+var requiredTreeDBMetrics = []string{
 	"treedb_public_batch_write_calls", "treedb_public_batch_write_sync_calls",
 	"treedb_group_commit_groups", "treedb_group_commit_commits", "treedb_group_commit_participants",
 	"treedb_group_commit_syncs", "treedb_group_commit_group_size_max",
@@ -106,6 +104,11 @@ var requiredMetrics = []string{
 	"treedb_point_successor_calls", "treedb_point_successor_sources", "treedb_point_successor_sources_max",
 	"treedb_iterator_snapshot_rotations", "treedb_leaf_log_segment_rotations",
 }
+
+var requiredMetrics = append([]string{
+	"cpu_seconds", "rss_peak_bytes", "disk_logical_bytes", "disk_allocated_bytes",
+	"write_bytes", "write_amplification", "gc_cycles", "flushes", "checkpoints", "recovery_seconds",
+}, requiredTreeDBMetrics...)
 
 func (c Config) Fingerprint() string {
 	copy := c
@@ -172,6 +175,15 @@ func (r Result) Validate() error {
 		}
 		if m.Available && (math.IsNaN(m.Value) || math.IsInf(m.Value, 0) || m.Value < 0) {
 			errs = append(errs, fmt.Errorf("metric %q has invalid available value %v", name, m.Value))
+		}
+	}
+	for _, name := range requiredTreeDBMetrics {
+		m, ok := r.Metrics[name]
+		if r.Config.Backend == "treedb" && (!ok || !m.Available) {
+			errs = append(errs, fmt.Errorf("TreeDB diagnostic %q must be available", name))
+		}
+		if r.Config.Backend == "badger" && ok && m.Available {
+			errs = append(errs, fmt.Errorf("TreeDB-only diagnostic %q must be unavailable for Badger", name))
 		}
 	}
 	for _, name := range []string{"cpu_seconds", "rss_peak_bytes", "disk_logical_bytes", "disk_allocated_bytes", "recovery_seconds"} {

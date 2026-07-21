@@ -48,6 +48,11 @@ func validResult(backend, class string) Result {
 	for _, name := range requiredMetrics {
 		metrics[name] = Metric{Available: true, Value: 1, Unit: "count", Source: "test"}
 	}
+	if backend == "badger" {
+		for _, name := range requiredTreeDBMetrics {
+			metrics[name] = Metric{Unit: "count", Source: "TreeDB test diagnostic", Reason: "TreeDB-only diagnostic"}
+		}
+	}
 	return Result{SchemaVersion: SchemaVersion, RunID: backend + "-" + class, Repeat: 1,
 		Config:       Config{Backend: backend, DurabilityClass: class, PostingStore: posting, Badger: badger, DatasetNodes: 10, Concurrency: 1, WarmupOps: 1, TimedOps: 10, QueryMix: map[string]int{"read": 80, "write": 20}, Topology: "single-zero-single-alpha", Seed: 42},
 		Context:      Context{DgraphSHA: "abc", GomapVersion: "v1", GoVersion: "go1", Host: "host", Kernel: "kernel", CPU: "cpu", TotalRAMBytes: 1024, Storage: StorageContext{Scope: "artifact_and_posting", Source: "/dev/test", Model: "test", SizeBytes: 2048, Filesystem: "ext4", Mountpoint: "/mnt"}, Environment: map[string]string{"GOWORK": "off", "TMPDIR": "/tmp", "GOMAXPROCS": "", "GOFLAGS": ""}, ExactCommand: []string{"bench"}, RawPath: "/raw"},
@@ -120,6 +125,23 @@ func TestResultRejectsUnavailableOrMalformedCoreMetrics(t *testing.T) {
 				t.Fatalf("got %v, want core metric failure", err)
 			}
 		})
+	}
+}
+
+func TestResultFailsClosedOnTreeDBDiagnosticAvailability(t *testing.T) {
+	tree := validResult("treedb", "relaxed")
+	metric := tree.Metrics["treedb_group_commit_commits"]
+	metric.Available = false
+	metric.Reason = "debug sample failed"
+	tree.Metrics["treedb_group_commit_commits"] = metric
+	if err := tree.Validate(); err == nil || !strings.Contains(err.Error(), "TreeDB diagnostic") {
+		t.Fatalf("TreeDB unavailable diagnostic got %v", err)
+	}
+
+	badger := validResult("badger", "relaxed")
+	badger.Metrics["treedb_group_commit_commits"] = Metric{Available: true, Value: 1, Unit: "count", Source: "fabricated"}
+	if err := badger.Validate(); err == nil || !strings.Contains(err.Error(), "must be unavailable for Badger") {
+		t.Fatalf("Badger fabricated TreeDB diagnostic got %v", err)
 	}
 }
 
