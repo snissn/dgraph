@@ -618,7 +618,6 @@ func (s *TreeDBStore) completeTreeDBCommit(
 	}
 	s.releaseMutationBatch(completion.request.batch)
 	s.commitWG.Done()
-	s.releaseTreeDBCommitSlot()
 	if finished != nil {
 		finished[completion.request.sequence] = completion
 	}
@@ -650,6 +649,11 @@ func (s *TreeDBStore) deliverTreeDBCommit(completion treeDBCommitCompletion) {
 	if completion.request.callback != nil {
 		go completion.request.callback(completion.err)
 	}
+	// Admission ownership lasts through FIFO acknowledgement delivery. Durable
+	// commits may finish storage out of order and wait in the scheduler's
+	// finished map; releasing here prevents that map from becoming an unbounded
+	// second queue while the earliest result is held.
+	s.releaseTreeDBCommitSlot()
 }
 
 func (s *TreeDBStore) commitSync(commitTs uint64, batch *treeDBMutationBatch) error {

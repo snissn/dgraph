@@ -529,6 +529,86 @@ func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t 
 	})
 }
 
+func TestTreeDBStoreFIFOAcknowledgementRetainsAdmissionOwnership(t *testing.T) {
+	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
+	firstStarted := make(chan struct{})
+	releaseFirst := make(chan struct{})
+	var releaseOnce sync.Once
+	t.Cleanup(func() { releaseOnce.Do(func() { close(releaseFirst) }) })
+
+	var laterFinished atomic.Int32
+	laterPhysicalComplete := make(chan struct{})
+	var completedOnce sync.Once
+	store.commitStartedForTest = func(timestamp uint64, _ []mvcc.Mutation) {
+		if timestamp == 1 {
+			close(firstStarted)
+			<-releaseFirst
+		}
+	}
+	store.commitFinishedForTest = func(timestamp uint64, _ error) {
+		if timestamp != 1 && laterFinished.Add(1) == treeDBCommitOwnershipLimit-1 {
+			completedOnce.Do(func() { close(laterPhysicalComplete) })
+		}
+	}
+
+	firstDone := make(chan error, 1)
+	for timestamp := uint64(1); timestamp <= treeDBCommitOwnershipLimit; timestamp++ {
+		txn := store.NewWriteTxn()
+		require.NoError(t, txn.SetEntry(Entry{
+			Key: []byte(fmt.Sprintf("held-ack-%03d", timestamp)), Value: []byte("value"),
+		}))
+		callback := func(error) {}
+		if timestamp == 1 {
+			callback = func(err error) { firstDone <- err }
+		}
+		require.NoError(t, txn.CommitAt(timestamp, callback))
+		if timestamp == 1 {
+			select {
+			case <-firstStarted:
+			case <-time.After(5 * time.Second):
+				t.Fatal("first durable commit did not reach its hold barrier")
+			}
+		}
+	}
+	select {
+	case <-laterPhysicalComplete:
+	case <-time.After(5 * time.Second):
+		t.Fatal("later durable commits did not physically complete behind held acknowledgement")
+	}
+	require.Equal(t, treeDBCommitOwnershipLimit, len(store.commitSlots),
+		"physically completed but withheld results must retain admission ownership")
+
+	overflow := store.NewWriteTxn()
+	require.NoError(t, overflow.SetEntry(Entry{Key: []byte("held-ack-overflow"), Value: []byte("value")}))
+	overflowReturned := make(chan error, 1)
+	attemptedOverflow := make(chan struct{})
+	go func() {
+		close(attemptedOverflow)
+		overflowReturned <- overflow.CommitAt(treeDBCommitOwnershipLimit+1, nil)
+	}()
+	<-attemptedOverflow
+	select {
+	case err := <-overflowReturned:
+		t.Fatalf("commit admitted past FIFO-held ownership limit: %v", err)
+	default:
+	}
+
+	releaseOnce.Do(func() { close(releaseFirst) })
+	select {
+	case err := <-firstDone:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("first durable acknowledgement was not delivered")
+	}
+	select {
+	case err := <-overflowReturned:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("next commit did not admit after FIFO acknowledgement delivery")
+	}
+	require.NoError(t, store.Close())
+}
+
 func treeDBStatDelta(t *testing.T, before, after map[string]string, key string) uint64 {
 	t.Helper()
 	return treeDBStatUint(t, after, key) - treeDBStatUint(t, before, key)
