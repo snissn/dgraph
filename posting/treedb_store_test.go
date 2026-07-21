@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -233,6 +234,118 @@ func TestTreeDBStoreTxnWriterPipelinesAndCloseWaitsForAdmittedCommit(t *testing.
 	close(releaseCommit)
 	require.NoError(t, writer.Wait())
 	require.NoError(t, <-closeDone)
+}
+
+func TestTreeDBStoreDurableSchedulerOverlapsIndependentCommitsForGroupCommit(t *testing.T) {
+	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
+	before, err := store.Stats()
+	require.NoError(t, err)
+
+	const commits = 4
+	started := make(chan struct{}, commits)
+	release := make(chan struct{})
+	store.commitStartedForTest = func(_ uint64, _ []mvcc.Mutation) {
+		started <- struct{}{}
+		<-release
+	}
+
+	done := make(chan error, commits)
+	for i := 0; i < commits; i++ {
+		txn := store.NewWriteTxn()
+		require.NoError(t, txn.SetEntry(Entry{
+			Key: []byte(fmt.Sprintf("independent-%d", i)), Value: []byte("value"),
+		}))
+		require.NoError(t, txn.CommitAt(uint64(i+1), func(err error) { done <- err }))
+	}
+
+	// This is a scheduler barrier, not a timing assertion: every independent
+	// request must reach the MVCC admission hook before any is allowed to enter
+	// Gomap's durable group-commit barrier. The timeout only detects a deadlock.
+	for i := 0; i < commits; i++ {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("only %d/%d independent commits reached the admission barrier", i, commits)
+		}
+	}
+	close(release)
+	for i := 0; i < commits; i++ {
+		require.NoError(t, <-done)
+	}
+
+	after, err := store.Stats()
+	require.NoError(t, err)
+	groups := treeDBStatDelta(t, before, after, "treedb.command_wal.group_commit.groups_total")
+	participants := treeDBStatDelta(t, before, after, "treedb.command_wal.group_commit.participants_total")
+	syncs := treeDBStatDelta(t, before, after, "treedb.command_wal.file_sync.calls_total")
+	require.Greater(t, groups, uint64(0), "independent durable commits must form a Gomap group")
+	require.Greater(t, participants, uint64(1), "the adapter must create a multi-commit group")
+	require.Less(t, syncs, uint64(commits), "a grouped durable acknowledgement must share command-WAL syncs")
+	require.Greater(t, treeDBStatUint(t, after, "treedb.command_wal.group_commit.group_size_max"), uint64(1))
+	require.NoError(t, store.Close())
+}
+
+func TestTreeDBStoreSchedulerOnlyOvertakesIndependentMultiKeyBatches(t *testing.T) {
+	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+	started := make(chan uint64, 4)
+	release := make(chan struct{})
+	store.commitStartedForTest = func(timestamp uint64, _ []mvcc.Mutation) {
+		started <- timestamp
+		<-release
+	}
+
+	commit := func(timestamp uint64, keys ...string) <-chan error {
+		t.Helper()
+		txn := store.NewWriteTxn()
+		for _, key := range keys {
+			require.NoError(t, txn.SetEntry(Entry{Key: []byte(key), Value: []byte(key)}))
+		}
+		done := make(chan error, 1)
+		require.NoError(t, txn.CommitAt(timestamp, func(err error) { done <- err }))
+		return done
+	}
+
+	// The first admitted batch owns both a and b. Later batches touching either
+	// key must remain behind it, while the independent c batch may enter the
+	// bounded window. This defines the only permitted scheduler overtaking.
+	first := commit(1, "a", "b")
+	second := commit(2, "a")
+	third := commit(3, "b")
+	fourth := commit(4, "c")
+	seen := map[uint64]bool{}
+	for len(seen) != 2 {
+		select {
+		case timestamp := <-started:
+			seen[timestamp] = true
+		case <-time.After(5 * time.Second):
+			t.Fatalf("started commits=%v, want exactly first multi-key batch and independent batch", seen)
+		}
+	}
+	require.Equal(t, map[uint64]bool{1: true, 4: true}, seen)
+	select {
+	case timestamp := <-started:
+		t.Fatalf("dependent batch %d overtook its multi-key predecessor", timestamp)
+	default:
+	}
+	close(release)
+	for _, done := range []<-chan error{first, second, third, fourth} {
+		require.NoError(t, <-done)
+	}
+	require.NoError(t, store.Close())
+}
+
+func treeDBStatDelta(t *testing.T, before, after map[string]string, key string) uint64 {
+	t.Helper()
+	return treeDBStatUint(t, after, key) - treeDBStatUint(t, before, key)
+}
+
+func treeDBStatUint(t *testing.T, stats map[string]string, key string) uint64 {
+	t.Helper()
+	value, ok := stats[key]
+	require.Truef(t, ok, "missing TreeDB stat %q", key)
+	parsed, err := strconv.ParseUint(value, 10, 64)
+	require.NoErrorf(t, err, "parse TreeDB stat %q=%q", key, value)
+	return parsed
 }
 
 func TestTreeDBStoreCallbackQueueIsBoundedAndFIFO(t *testing.T) {
