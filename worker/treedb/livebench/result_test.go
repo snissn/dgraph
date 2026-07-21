@@ -145,6 +145,14 @@ func TestResultFailsClosedOnTreeDBDiagnosticAvailability(t *testing.T) {
 	}
 }
 
+func TestResultRequiresPointAppendCoverageDiagnostic(t *testing.T) {
+	tree := validResult("treedb", "relaxed")
+	delete(tree.Metrics, "treedb_command_wal_append_point_calls")
+	if err := tree.Validate(); err == nil || !strings.Contains(err.Error(), "treedb_command_wal_append_point_calls") {
+		t.Fatalf("missing point-append coverage diagnostic got %v", err)
+	}
+}
+
 func TestMetricSerializesMeasuredZero(t *testing.T) {
 	b, err := json.Marshal(Metric{Available: true, Value: 0, Unit: "count", Source: "test"})
 	if err != nil {

@@ -43,14 +43,15 @@ Value-log logical and file syncs are both zero, so the remaining barrier is not 
 synchronization.
 
 The relaxed rows have no foreground command-WAL or value-log syncs and record a median 1041 engine
-flushes. A post-run code-path audit found that the direct-point route bypasses the retained public-
-batch logical-write counter, but the frozen JSON lacks the point-append coverage counter needed to
-prove whether that route was active in these rows. The normalized unavailable value is therefore a
-conservative later erratum/inference about counter coverage, not an artifact-backed measurement. The
-flush count is not interpreted as publications per application write. The 2400 point-successor calls
-inspect a median 6648 sources, or 2.770 sources per call, with no iterator-snapshot or leaf-log-
-segment rotations. Issue #3941 substantially reduced the earlier source-fan-in residual, but that
-reduction did not close the unchanged terminal workload's performance gate.
+flushes. Their public-batch call counters are valid measured zeros. Separately, a post-run code-path
+audit found that the direct-point route bypasses the public-batch logical-byte counter used by the
+resource table, but the frozen JSON lacks the point-append coverage counter needed to prove whether
+that route was active in these rows. Normalizing that raw logical-byte zero as unavailable is
+therefore a conservative later erratum/inference about counter coverage, not an artifact-backed
+measurement. The flush count is not interpreted as publications per application write. The 2400
+point-successor calls inspect a median 6648 sources, or 2.770 sources per call, with no iterator-
+snapshot or leaf-log-segment rotations. Issue #3941 substantially reduced the earlier source-fan-in
+residual, but that reduction did not close the unchanged terminal workload's performance gate.
 
 The next bounded target is therefore the measured durable residual: classify why durable Dgraph
 store calls fail to join a group, expose group eligibility and rejection reasons, and overlap or

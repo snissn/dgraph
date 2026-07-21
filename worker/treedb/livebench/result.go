@@ -98,6 +98,7 @@ type Result struct {
 
 var requiredTreeDBMetrics = []string{
 	"treedb_public_batch_write_calls", "treedb_public_batch_write_sync_calls",
+	"treedb_command_wal_append_point_calls",
 	"treedb_group_commit_groups", "treedb_group_commit_commits", "treedb_group_commit_participants",
 	"treedb_group_commit_syncs", "treedb_group_commit_group_size_max",
 	"treedb_command_wal_file_syncs", "treedb_value_log_syncs", "treedb_value_log_file_syncs",
