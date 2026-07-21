@@ -298,7 +298,7 @@ func TestTreeDBStoreDurableSchedulerOverlapsIndependentCommitsForGroupCommit(t *
 }
 
 func TestTreeDBStoreSchedulerOnlyOvertakesIndependentMultiKeyBatches(t *testing.T) {
-	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
 	started := make(chan uint64, 4)
 	release := make(chan struct{})
 	store.commitStartedForTest = func(timestamp uint64, _ []mvcc.Mutation) {
@@ -348,7 +348,7 @@ func TestTreeDBStoreSchedulerOnlyOvertakesIndependentMultiKeyBatches(t *testing.
 
 func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t *testing.T) {
 	t.Run("callback", func(t *testing.T) {
-		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
 		firstStarted := make(chan struct{})
 		releaseFirst := make(chan struct{})
 		var releaseOnce sync.Once
@@ -396,7 +396,7 @@ func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t 
 	})
 
 	t.Run("first error then synchronous", func(t *testing.T) {
-		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
 		firstStarted := make(chan struct{})
 		releaseFirst := make(chan struct{})
 		var releaseOnce sync.Once

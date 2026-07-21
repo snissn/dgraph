@@ -486,6 +486,26 @@ func (s *TreeDBStore) enqueueCommit(request treeDBCommitRequest) error {
 
 func (s *TreeDBStore) runCommitQueue() {
 	defer s.workerWG.Done()
+	if s.mode != TreeDBCommitDurable {
+		s.runSerialCommitQueue()
+		return
+	}
+	s.runDurableCommitQueue()
+}
+
+// runSerialCommitQueue retains the original callback-queue behavior for
+// relaxed commits. The relaxed Alpha guardrail is sensitive to publication
+// contention, while only durable commits need concurrent arrival to form a
+// command-WAL group at their acknowledgement barrier.
+func (s *TreeDBStore) runSerialCommitQueue() {
+	for request := range s.commitQueue {
+		err := s.commitAtAdmitted(request.commitTs, request.batch.mutations)
+		s.completeTreeDBCommit(treeDBCommitCompletion{request: request, err: err}, nil, nil)
+		s.deliverTreeDBCommit(treeDBCommitCompletion{request: request, err: err})
+	}
+}
+
+func (s *TreeDBStore) runDurableCommitQueue() {
 	completed := make(chan treeDBCommitCompletion, treeDBCommitConcurrency)
 	pending := make([]treeDBCommitRequest, 0, treeDBCommitQueueCapacity)
 	inFlightKeys := make(map[string]struct{})
@@ -565,12 +585,16 @@ func (s *TreeDBStore) completeTreeDBCommit(
 	completion treeDBCommitCompletion, inFlightKeys map[string]struct{}, finished map[uint64]treeDBCommitCompletion,
 ) {
 	for _, mutation := range completion.request.batch.mutations {
-		delete(inFlightKeys, string(mutation.Key))
+		if inFlightKeys != nil {
+			delete(inFlightKeys, string(mutation.Key))
+		}
 	}
 	s.releaseMutationBatch(completion.request.batch)
 	s.commitWG.Done()
 	s.releaseTreeDBCommitSlot()
-	finished[completion.request.sequence] = completion
+	if finished != nil {
+		finished[completion.request.sequence] = completion
+	}
 }
 
 // deliverTreeDBCommits preserves the original queue's externally observable
@@ -584,16 +608,20 @@ func (s *TreeDBStore) deliverTreeDBCommits(finished map[uint64]treeDBCommitCompl
 			return next
 		}
 		delete(finished, next)
-		if completion.request.done != nil {
-			completion.request.done <- completion.err
-		}
-		// Callbacks remain off the scheduler so they may call Close without
-		// deadlocking the queue drain. Storage work and its owned buffers remain
-		// bounded regardless of callback behavior.
-		if completion.request.callback != nil {
-			go completion.request.callback(completion.err)
-		}
+		s.deliverTreeDBCommit(completion)
 		next++
+	}
+}
+
+func (s *TreeDBStore) deliverTreeDBCommit(completion treeDBCommitCompletion) {
+	if completion.request.done != nil {
+		completion.request.done <- completion.err
+	}
+	// Callbacks remain off the scheduler so they may call Close without
+	// deadlocking the queue drain. Storage work and its owned buffers remain
+	// bounded regardless of callback behavior.
+	if completion.request.callback != nil {
+		go completion.request.callback(completion.err)
 	}
 }
 
