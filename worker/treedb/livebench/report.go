@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -111,6 +112,7 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 	if err := ValidateSet(results, repeats); err != nil {
 		return "", err
 	}
+	results = normalizeLegacyPointAppendCoverage(results)
 	by := map[string][]Result{}
 	for _, r := range results {
 		by[r.Config.Backend+"/"+r.Config.DurabilityClass] = append(by[r.Config.Backend+"/"+r.Config.DurabilityClass], r)
@@ -194,6 +196,29 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 	}
 	b.WriteString("\nExcluded runs are rejected by aggregation. Alpha CPU is a timed-phase `/proc` delta; RSS is Alpha `VmHWM` and therefore includes setup. Disk metrics cover the postings directory. Badger's large logical size with small allocated size comes from sparse preallocated files, so logical and allocated bytes must be read together. TreeDB logical write bytes use its public-batch counter only when the point-append counter proves no direct-point writes occurred; otherwise they fail closed as unavailable. Write amplification remains unavailable because an equivalent physical-byte counter is not exposed. Badger flush and checkpoint counts are unavailable because no equivalent semantic counters are exposed; vlog writes are not relabeled as flushes.\n")
 	return b.String(), nil
+}
+
+// normalizeLegacyPointAppendCoverage keeps frozen schema-v3 matrices reportable without allowing
+// their public-batch logical-byte counter to masquerade as total logical-write coverage. Schema v4
+// requires the point-append diagnostic and therefore never takes this compatibility path.
+func normalizeLegacyPointAppendCoverage(results []Result) []Result {
+	normalized := append([]Result(nil), results...)
+	for i := range normalized {
+		r := &normalized[i]
+		if r.SchemaVersion != legacySchemaVersion || r.Config.Backend != "treedb" {
+			continue
+		}
+		coverage, ok := r.Metrics[pointAppendCoverageMetric]
+		if ok && coverage.Available {
+			continue
+		}
+		r.Metrics = maps.Clone(r.Metrics)
+		logical := r.Metrics["write_bytes"]
+		logical.Available = false
+		logical.Reason = "legacy schema lacks the point-append counter needed for total logical-write coverage"
+		r.Metrics["write_bytes"] = logical
+	}
+	return normalized
 }
 
 func metricSummary(results []Result, name string, precision int) string {

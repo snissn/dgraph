@@ -147,9 +147,23 @@ func TestResultFailsClosedOnTreeDBDiagnosticAvailability(t *testing.T) {
 
 func TestResultRequiresPointAppendCoverageDiagnostic(t *testing.T) {
 	tree := validResult("treedb", "relaxed")
-	delete(tree.Metrics, "treedb_command_wal_append_point_calls")
-	if err := tree.Validate(); err == nil || !strings.Contains(err.Error(), "treedb_command_wal_append_point_calls") {
+	delete(tree.Metrics, pointAppendCoverageMetric)
+	if err := tree.Validate(); err == nil || !strings.Contains(err.Error(), pointAppendCoverageMetric) {
 		t.Fatalf("missing point-append coverage diagnostic got %v", err)
+	}
+}
+
+func TestResultAllowsLegacySchemaWithoutPointAppendCoverageDiagnostic(t *testing.T) {
+	tree := validResult("treedb", "relaxed")
+	tree.SchemaVersion = legacySchemaVersion
+	delete(tree.Metrics, pointAppendCoverageMetric)
+	if err := tree.Validate(); err != nil {
+		t.Fatalf("legacy result rejected: %v", err)
+	}
+
+	delete(tree.Metrics, "treedb_group_commit_commits")
+	if err := tree.Validate(); err == nil || !strings.Contains(err.Error(), "treedb_group_commit_commits") {
+		t.Fatalf("legacy result accepted without non-legacy diagnostic: %v", err)
 	}
 }
 

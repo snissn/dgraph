@@ -120,3 +120,24 @@ func TestRenderReportUsesExplicitStopOutcome(t *testing.T) {
 		t.Fatalf("missing explicit stop outcome:\n%s", report)
 	}
 }
+
+func TestIssue29LegacyArtifactsRemainReportable(t *testing.T) {
+	paths, err := filepath.Glob("../artifacts/issue-29/live/*/result.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 12 {
+		t.Fatalf("issue #29 result count=%d, want 12", len(paths))
+	}
+	results, err := LoadResults(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := RenderReport(results, 3)
+	if err != nil {
+		t.Fatalf("render frozen schema-v%d evidence: %v", legacySchemaVersion, err)
+	}
+	if !strings.Contains(report, "| 0 (3/3) | 0 (3/3) | unavailable (0/3)") {
+		t.Fatalf("legacy report did not retain measured public-batch zeros and fail closed on point coverage:\n%s", report)
+	}
+}

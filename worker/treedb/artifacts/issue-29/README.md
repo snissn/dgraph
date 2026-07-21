@@ -66,6 +66,19 @@ the live matched matrix and retained counters, not profile-run throughput.
 
 ## Reproduction
 
+The immutable matrix JSON uses schema v3, which predates the point-append coverage diagnostic. The
+current report loader accepts that one missing legacy metric and fails the logical-byte value closed
+as unavailable during rendering. Newly generated schema-v4 results require the diagnostic. The
+compatibility path does not synthesize a point-append value or relax any other required metric.
+
+Regenerate the core report tables from the committed JSON into a new file with:
+
+```sh
+TMPDIR=/mnt/fast4tb/tmp GOWORK=off go run ./worker/treedb/livebench/reportcmd \
+  --repeats 3 --out /absolute/path/to/NEW-report.md \
+  worker/treedb/artifacts/issue-29/live/*/result.json
+```
+
 The original immutable run is retained outside the repository at
 `/mnt/fast4tb/dgraph-29-84e3f665-artifacts`. Reproduce from the recorded Dgraph SHA in a new
 absolute artifact directory:
