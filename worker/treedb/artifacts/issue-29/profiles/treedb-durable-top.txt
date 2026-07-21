@@ -1,0 +1,33 @@
+File: dgraph
+Build ID: b8ecab5f6bb7b67c76b1500192890cbdd2324173
+Type: cpu
+Time: 2026-07-21 02:27:18 HST
+Duration: 5s, Total samples = 1.73s (34.60%)
+Showing nodes accounting for 0.89s, 51.45% of 1.73s total
+Showing top 25 nodes out of 663
+      flat  flat%   sum%        cum   cum%
+     0.33s 19.08% 19.08%      0.33s 19.08%  internal/runtime/syscall/linux.Syscall6
+     0.07s  4.05% 23.12%      0.07s  4.05%  runtime.memclrNoHeapPointers
+     0.06s  3.47% 26.59%      0.06s  3.47%  runtime.memmove
+     0.05s  2.89% 29.48%      0.05s  2.89%  runtime.(*mspan).writeHeapBitsSmall
+     0.03s  1.73% 31.21%      0.03s  1.73%  runtime.(*itabTableType).find
+     0.03s  1.73% 32.95%      0.03s  1.73%  runtime.futex
+     0.03s  1.73% 34.68%      0.03s  1.73%  runtime.nextFreeFast (inline)
+     0.03s  1.73% 36.42%      0.09s  5.20%  runtime.stealWork
+     0.03s  1.73% 38.15%      0.03s  1.73%  runtime.usleep
+     0.02s  1.16% 39.31%      0.02s  1.16%  github.com/dgraph-io/dgraph/v25/dql.godeep
+     0.02s  1.16% 40.46%      0.02s  1.16%  github.com/snissn/go-crc32-asm.crc32IEEEVPCLMUL512
+     0.02s  1.16% 41.62%      0.02s  1.16%  internal/filepathlite.(*lazybuf).append
+     0.02s  1.16% 42.77%      0.02s  1.16%  internal/runtime/atomic.(*UnsafePointer).StoreNoWB
+     0.02s  1.16% 43.93%      0.04s  2.31%  runtime.growslice
+     0.02s  1.16% 45.09%      0.11s  6.36%  runtime.newobject
+     0.02s  1.16% 46.24%      0.04s  2.31%  runtime.selectgo
+     0.01s  0.58% 46.82%      0.01s  0.58%  bytes.(*Buffer).Write
+     0.01s  0.58% 47.40%      0.01s  0.58%  context.(*cancelCtx).Err
+     0.01s  0.58% 47.98%      0.01s  0.58%  crypto/internal/fips140/sha256.(*Digest).Reset
+     0.01s  0.58% 48.55%      0.01s  0.58%  fmt.(*fmt).fmtBoolean
+     0.01s  0.58% 49.13%      0.01s  0.58%  github.com/dgraph-io/badger/v4/y.(*WaterMark).Done
+     0.01s  0.58% 49.71%      0.01s  0.58%  github.com/dgraph-io/dgraph/v25/edgraph.(*Server).doQuery.func2
+     0.01s  0.58% 50.29%      0.01s  0.58%  github.com/dgraph-io/dgraph/v25/posting.(*List).calculateUids.func1
+     0.01s  0.58% 50.87%      0.01s  0.58%  github.com/dgraph-io/dgraph/v25/posting.(*Txn).UpdateCachedKeys
+     0.01s  0.58% 51.45%      0.02s  1.16%  github.com/dgraph-io/dgraph/v25/query.AssignUids
