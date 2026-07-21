@@ -351,6 +351,8 @@ func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t 
 		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
 		firstStarted := make(chan struct{})
 		releaseFirst := make(chan struct{})
+		var releaseOnce sync.Once
+		t.Cleanup(func() { releaseOnce.Do(func() { close(releaseFirst) }) })
 		secondFinished := make(chan error, 1)
 		store.commitStartedForTest = func(timestamp uint64, _ []mvcc.Mutation) {
 			if timestamp == 1 {
@@ -368,18 +370,27 @@ func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t 
 		require.NoError(t, first.SetEntry(Entry{Key: []byte("first"), Value: []byte("one")}))
 		firstDone := make(chan error, 1)
 		require.NoError(t, first.CommitAt(1, func(err error) { firstDone <- err }))
-		<-firstStarted
+		select {
+		case <-firstStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("first independent commit did not reach its hold barrier")
+		}
 		second := store.NewWriteTxn()
 		require.NoError(t, second.SetEntry(Entry{Key: []byte("second"), Value: []byte("two")}))
 		secondDone := make(chan error, 1)
 		require.NoError(t, second.CommitAt(2, func(err error) { secondDone <- err }))
-		require.NoError(t, <-secondFinished)
+		select {
+		case err := <-secondFinished:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("later independent callback commit did not physically complete")
+		}
 		select {
 		case err := <-secondDone:
 			t.Fatalf("later callback acknowledged before earlier result: %v", err)
 		default:
 		}
-		close(releaseFirst)
+		releaseOnce.Do(func() { close(releaseFirst) })
 		require.NoError(t, <-firstDone)
 		require.NoError(t, <-secondDone)
 	})
@@ -388,6 +399,8 @@ func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t 
 		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
 		firstStarted := make(chan struct{})
 		releaseFirst := make(chan struct{})
+		var releaseOnce sync.Once
+		t.Cleanup(func() { releaseOnce.Do(func() { close(releaseFirst) }) })
 		secondFinished := make(chan error, 1)
 		store.commitStartedForTest = func(timestamp uint64, _ []mvcc.Mutation) {
 			if timestamp == 0 {
@@ -405,12 +418,21 @@ func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t 
 		require.NoError(t, first.SetEntry(Entry{Key: []byte("bad"), Value: []byte("value")}))
 		firstDone := make(chan error, 1)
 		require.NoError(t, first.CommitAt(0, func(err error) { firstDone <- err }))
-		<-firstStarted
+		select {
+		case <-firstStarted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("first failing commit did not reach its hold barrier")
+		}
 		second := store.NewWriteTxn()
 		require.NoError(t, second.SetEntry(Entry{Key: []byte("good"), Value: []byte("value")}))
 		secondReturned := make(chan error, 1)
 		go func() { secondReturned <- second.CommitAt(2, nil) }()
-		require.NoError(t, <-secondFinished)
+		select {
+		case err := <-secondFinished:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("later independent synchronous commit did not physically complete")
+		}
 		read := store.NewReadTxn(2)
 		item, err := read.Get([]byte("good"))
 		require.NoError(t, err, "later independent commit must have physically published")
@@ -422,7 +444,7 @@ func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t 
 			t.Fatalf("later synchronous acknowledgement escaped before earlier error delivery: %v", err)
 		default:
 		}
-		close(releaseFirst)
+		releaseOnce.Do(func() { close(releaseFirst) })
 		require.ErrorIs(t, <-firstDone, mvcc.ErrZeroTimestamp)
 		require.NoError(t, <-secondReturned)
 	})
