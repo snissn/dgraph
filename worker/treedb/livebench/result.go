@@ -198,6 +198,13 @@ func (r Result) Validate() error {
 			errs = append(errs, fmt.Errorf("TreeDB-only diagnostic %q must be unavailable for Badger", name))
 		}
 	}
+	if r.Config.Backend == "treedb" {
+		pointAppends, pointOK := r.Metrics[pointAppendCoverageMetric]
+		logicalBytes, logicalOK := r.Metrics["write_bytes"]
+		if pointOK && pointAppends.Available && pointAppends.Value > 0 && logicalOK && logicalBytes.Available {
+			errs = append(errs, errors.New("TreeDB logical write bytes must be unavailable when direct-point appends are present"))
+		}
+	}
 	for _, name := range []string{"cpu_seconds", "rss_peak_bytes", "disk_logical_bytes", "disk_allocated_bytes", "recovery_seconds"} {
 		m, ok := r.Metrics[name]
 		invalidZero := name != "cpu_seconds" && m.Value <= 0
