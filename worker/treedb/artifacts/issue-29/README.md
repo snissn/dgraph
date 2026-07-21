@@ -71,12 +71,14 @@ current report loader accepts that one missing legacy metric and fails the logic
 as unavailable during rendering. Newly generated schema-v4 results require the diagnostic. The
 compatibility path does not synthesize a point-append value or relax any other required metric.
 
-Regenerate the core report tables from the committed JSON into a new file with:
+Regenerate the committed report byte for byte into a new file with:
 
 ```sh
 TMPDIR=/mnt/fast4tb/tmp GOWORK=off go run ./worker/treedb/livebench/reportcmd \
-  --repeats 3 --out /absolute/path/to/NEW-report.md \
+  --repeats 3 --profile-dir worker/treedb/artifacts/issue-29/profiles \
+  --out /absolute/path/to/NEW-report.md \
   worker/treedb/artifacts/issue-29/live/*/result.json
+cmp /absolute/path/to/NEW-report.md worker/treedb/artifacts/issue-29/report.md
 ```
 
 The original immutable run is retained outside the repository at

@@ -133,11 +133,19 @@ func TestIssue29LegacyArtifactsRemainReportable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, err := RenderReport(results, 3)
+	profiles, err := DiscoverProfileArtifacts("../artifacts/issue-29/profiles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := RenderReportWithProfiles(results, 3, profiles)
 	if err != nil {
 		t.Fatalf("render frozen schema-v%d evidence: %v", legacySchemaVersion, err)
 	}
-	if !strings.Contains(report, "| 0 (3/3) | 0 (3/3) | unavailable (0/3)") {
-		t.Fatalf("legacy report did not retain measured public-batch zeros and fail closed on point coverage:\n%s", report)
+	want, err := os.ReadFile("../artifacts/issue-29/report.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report != string(want) {
+		t.Fatal("schema-v3 JSON and retained profiles did not reproduce the committed report byte for byte")
 	}
 }

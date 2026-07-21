@@ -25,6 +25,9 @@ lint:
       paths:
         - contrib/**
         - protos/pb/pb.pb.go
+    - linters: [markdownlint]
+      paths:
+        - worker/treedb/artifacts/issue-29/report.md
   enabled:
     - taplo@0.10.0
     - svgo@4.0.1
