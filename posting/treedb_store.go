@@ -561,18 +561,45 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 
 func nextIndependentTreeDBCommit(pending []treeDBCommitRequest, inFlightKeys map[string]struct{}) int {
 	for i := range pending {
-		independent := true
-		for _, mutation := range pending[i].batch.mutations {
-			if _, exists := inFlightKeys[string(mutation.Key)]; exists {
-				independent = false
+		if treeDBCommitConflictsWithInFlight(pending[i], inFlightKeys) {
+			continue
+		}
+		// A later request must also remain behind every earlier pending request
+		// that shares a logical key, even when that earlier request is itself
+		// blocked on an in-flight predecessor. Otherwise A(x), B(x,y), C(y)
+		// could run A+C before B and violate the transitive FIFO dependency.
+		blockedByEarlierPending := false
+		for earlier := 0; earlier < i; earlier++ {
+			if treeDBCommitsShareKey(pending[earlier], pending[i]) {
+				blockedByEarlierPending = true
 				break
 			}
 		}
-		if independent {
+		if !blockedByEarlierPending {
 			return i
 		}
 	}
 	return -1
+}
+
+func treeDBCommitConflictsWithInFlight(request treeDBCommitRequest, inFlightKeys map[string]struct{}) bool {
+	for _, mutation := range request.batch.mutations {
+		if _, exists := inFlightKeys[string(mutation.Key)]; exists {
+			return true
+		}
+	}
+	return false
+}
+
+func treeDBCommitsShareKey(left, right treeDBCommitRequest) bool {
+	for _, leftMutation := range left.batch.mutations {
+		for _, rightMutation := range right.batch.mutations {
+			if bytes.Equal(leftMutation.Key, rightMutation.Key) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func reserveTreeDBCommitKeys(mutations []mvcc.Mutation, inFlightKeys map[string]struct{}) {

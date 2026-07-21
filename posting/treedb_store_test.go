@@ -346,6 +346,85 @@ func TestTreeDBStoreSchedulerOnlyOvertakesIndependentMultiKeyBatches(t *testing.
 	require.NoError(t, store.Close())
 }
 
+func TestTreeDBStoreSchedulerPreservesTransitivePendingKeyDependencies(t *testing.T) {
+	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
+	started := make(chan uint64, 4)
+	releaseA := make(chan struct{})
+	releaseB := make(chan struct{})
+	var releaseAOnce, releaseBOnce sync.Once
+	t.Cleanup(func() {
+		releaseAOnce.Do(func() { close(releaseA) })
+		releaseBOnce.Do(func() { close(releaseB) })
+	})
+	store.commitStartedForTest = func(timestamp uint64, _ []mvcc.Mutation) {
+		started <- timestamp
+		switch timestamp {
+		case 1:
+			<-releaseA
+		case 2:
+			<-releaseB
+		}
+	}
+
+	commit := func(timestamp uint64, keys ...string) <-chan error {
+		t.Helper()
+		txn := store.NewWriteTxn()
+		for _, key := range keys {
+			require.NoError(t, txn.SetEntry(Entry{Key: []byte(key), Value: []byte(key)}))
+		}
+		done := make(chan error, 1)
+		require.NoError(t, txn.CommitAt(timestamp, func(err error) { done <- err }))
+		return done
+	}
+
+	// B shares x with A and y with C. C must not bypass B merely because B is
+	// pending behind A. Only independent D may overlap A.
+	a := commit(1, "x")
+	b := commit(2, "x", "y")
+	c := commit(3, "y")
+	d := commit(4, "z")
+	seen := map[uint64]bool{}
+	for len(seen) != 2 {
+		select {
+		case timestamp := <-started:
+			seen[timestamp] = true
+		case <-time.After(5 * time.Second):
+			t.Fatalf("started commits=%v, want only A(x) and D(z)", seen)
+		}
+	}
+	require.Equal(t, map[uint64]bool{1: true, 4: true}, seen)
+
+	releaseAOnce.Do(func() { close(releaseA) })
+	select {
+	case timestamp := <-started:
+		require.Equal(t, uint64(2), timestamp, "B(x,y) must start before C(y)")
+	case <-time.After(5 * time.Second):
+		t.Fatal("B(x,y) did not start after A(x) completed")
+	}
+	select {
+	case timestamp := <-started:
+		t.Fatalf("C(y) bypassed pending B(x,y): started %d", timestamp)
+	default:
+	}
+
+	releaseBOnce.Do(func() { close(releaseB) })
+	select {
+	case timestamp := <-started:
+		require.Equal(t, uint64(3), timestamp, "C(y) must start after B(x,y) completes")
+	case <-time.After(5 * time.Second):
+		t.Fatal("C(y) did not start after B(x,y) completed")
+	}
+	for _, done := range []<-chan error{a, b, c, d} {
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("admitted callback did not complete")
+		}
+	}
+	require.NoError(t, store.Close())
+}
+
 func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t *testing.T) {
 	t.Run("callback", func(t *testing.T) {
 		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
