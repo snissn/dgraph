@@ -44,11 +44,12 @@ invalidate Gomap's local group-commit evidence.
 
 The relaxed rows have no foreground file syncs and no iterator-snapshot or leaf-log-segment
 rotations, but each of 2400 point-successor calls inspects a median 62,525 sources: 26.052 sources
-per call, with a process-lifetime maximum of 92. The separate relaxed CPU profile attributes 13.23%
-of total sampled CPU cumulatively to background canonical flush work, with root publication,
-allocation, and point-read/seek paths also visible. This evidence establishes a live-workload
-source-fan-in and flush/publication residual; it does not yet prove that one leaf function alone
-owns the full 29% gap.
+per call. The median process-lifetime source high-water is 92 across the three rows; the highest
+observed row reaches 103. The separate relaxed CPU profile attributes 13.23% of total sampled CPU
+cumulatively to background canonical flush work, with root publication, allocation, and
+point-read/seek paths also visible. This evidence establishes a live-workload source-fan-in and
+flush/publication residual; it does not yet prove that one leaf function alone owns the full 29%
+gap.
 
 The adapter microbenchmarks show near-neutral generic interface overhead for random seeks and
 batches after state buildup. That narrows both residuals to concrete storage-path and

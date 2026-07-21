@@ -29,7 +29,7 @@ TreeDB durability diagnostics (timed-phase deltas unless marked high-water):
 | --------------: | -------------: | ---------------------: | -----------: | ----------: | --------------------------: | ---------------------: | ----------------------: | -------------------: |
 |      1013 (3/3) |        0 (3/3) |      0 (3/3) / 0 (3/3) |      0 (3/3) |     0 (3/3) |                     0 (3/3) |                0 (3/3) |                 0 (3/3) |              0 (3/3) |
 
-| point-successor calls | point sources | sources/call | max sources (high-water) | iterator snapshot rotations | leaf-log segment rotations |
+| point-successor calls | point sources | sources/call | source high-water median | iterator snapshot rotations | leaf-log segment rotations |
 | --------------------: | ------------: | -----------: | -----------------------: | --------------------------: | -------------------------: |
 |            2400 (3/3) |   62525 (3/3) | 26.052 (3/3) |                 92 (3/3) |                     0 (3/3) |                    0 (3/3) |
 
@@ -53,7 +53,7 @@ TreeDB durability diagnostics (timed-phase deltas unless marked high-water):
 | --------------: | -------------: | ---------------------: | -----------: | ----------: | --------------------------: | ---------------------: | ----------------------: | -------------------: |
 |         0 (3/3) |      862 (3/3) |      0 (3/3) / 0 (3/3) |      0 (3/3) |     0 (3/3) |                     0 (3/3) |              862 (3/3) |                 0 (3/3) |              0 (3/3) |
 
-| point-successor calls | point sources | sources/call | max sources (high-water) | iterator snapshot rotations | leaf-log segment rotations |
+| point-successor calls | point sources | sources/call | source high-water median | iterator snapshot rotations | leaf-log segment rotations |
 | --------------------: | ------------: | -----------: | -----------------------: | --------------------------: | -------------------------: |
 |            2400 (3/3) |   45041 (3/3) | 18.767 (3/3) |                 54 (3/3) |                     0 (3/3) |                    0 (3/3) |
 

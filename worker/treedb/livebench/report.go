@@ -161,7 +161,7 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 			metricSummary(treeResults, "treedb_command_wal_file_syncs", 0),
 			metricSummary(treeResults, "treedb_value_log_syncs", 0),
 			metricSummary(treeResults, "treedb_value_log_file_syncs", 0))
-		b.WriteString("\n| point-successor calls | point sources | sources/call | max sources (high-water) | iterator snapshot rotations | leaf-log segment rotations |\n| ---: | ---: | ---: | ---: | ---: | ---: |\n")
+		b.WriteString("\n| point-successor calls | point sources | sources/call | source high-water median | iterator snapshot rotations | leaf-log segment rotations |\n| ---: | ---: | ---: | ---: | ---: | ---: |\n")
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s |\n",
 			metricSummary(treeResults, "treedb_point_successor_calls", 0),
 			metricSummary(treeResults, "treedb_point_successor_sources", 0),
