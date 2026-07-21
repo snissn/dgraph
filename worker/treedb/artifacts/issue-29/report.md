@@ -23,10 +23,13 @@
 | badger  |            0.9 (3/3) |          919.1 (3/3) |              2177.0 (3/3) |                   0.4 (3/3) |                141.9 (3/3) | unavailable (0/3) | 1.0 (3/3) | unavailable (0/3) | unavailable (0/3) |
 | treedb  |            1.4 (3/3) |         1220.8 (3/3) |                29.8 (3/3) |                  29.9 (3/3) |          unavailable (0/3) | unavailable (0/3) | 0.0 (3/3) | 1041.0 (3/3)      | 0.0 (3/3)         |
 
-The relaxed TreeDB direct-point route bypasses the public-batch logical-write counter retained in
-the raw schema. Its raw zero is therefore a missing/miswired measurement, not evidence of zero
-logical writes. The 1041 flush median is an engine flush count; without a valid foreground-write
-counter it cannot establish publications per application write.
+Post-run code-path audit found that TreeDB's direct-point route bypasses the public-batch
+logical-write counter. The frozen JSON does not retain the point-append coverage counter needed to
+prove whether that route was active in these rows. As a conservative erratum, this normalized report
+therefore treats the raw zero as unavailable rather than as evidence of zero logical writes. This is
+a later inference about counter coverage, not a fact independently established by the retained raw
+rows. The 1041 flush median is an engine flush count and cannot establish publications per
+application write.
 
 TreeDB durability diagnostics (timed-phase deltas unless marked high-water):
 
@@ -134,7 +137,9 @@ Excluded runs are rejected by aggregation. Alpha CPU is a timed-phase `/proc` de
 `VmHWM` and therefore includes setup. Disk metrics cover the postings directory. Badger's large
 logical size with small allocated size comes from sparse preallocated files, so logical and
 allocated bytes must be read together. TreeDB durable logical write bytes use its public durable
-write counter. The relaxed direct-point route bypasses the retained public-batch counter, so its raw
-zero is normalized above as unavailable. Write amplification remains unavailable because an
-equivalent physical-byte counter is not exposed. Badger flush and checkpoint counts are unavailable
-because no equivalent semantic counters are exposed; vlog writes are not relabeled as flushes.
+write counter. A post-run code-path audit found that the relaxed direct-point route can bypass the
+retained public-batch counter, while the frozen rows lack the point-append coverage counter. The raw
+zero is therefore conservatively normalized above as unavailable and explicitly treated as a later
+counter-coverage inference. Write amplification remains unavailable because an equivalent physical-
+byte counter is not exposed. Badger flush and checkpoint counts are unavailable because no
+equivalent semantic counters are exposed; vlog writes are not relabeled as flushes.
