@@ -191,6 +191,24 @@ func TestTreeDBDiagnosticMetricsPreserveDeltasAndHighWaterGauges(t *testing.T) {
 	}
 }
 
+func TestTreeDBLogicalWriteBytesFailClosedWhenDirectPointRouteIsActive(t *testing.T) {
+	before := map[string]float64{
+		"treedb.command_wal.public_batch.set.bytes_total": 10,
+		"treedb.command_wal.append.point.count_total":     5,
+	}
+	after := map[string]float64{
+		"treedb.command_wal.public_batch.set.bytes_total": 20,
+		"treedb.command_wal.append.point.count_total":     6,
+	}
+	got := metrics("treedb", 1, 2, 3, 4, nil, nil, before, after)
+	if metric := got["write_bytes"]; metric.Available || !strings.Contains(metric.Reason, "direct-point") {
+		t.Fatalf("logical write bytes = %+v", metric)
+	}
+	if metric := got["treedb_command_wal_append_point_calls"]; !metric.Available || metric.Value != 1 {
+		t.Fatalf("point append calls = %+v", metric)
+	}
+}
+
 func TestBadgerTreeDBDiagnosticsAreExplicitlyUnavailable(t *testing.T) {
 	got := metrics("badger", 1, 2, 3, 4, nil, nil, nil, nil)
 	for _, diagnostic := range treeDBDiagnostics {

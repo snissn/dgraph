@@ -1,0 +1,263 @@
+{
+  "schema_version": 3,
+  "run_id": "badger-durable-r2",
+  "repeat": 2,
+  "config": {
+    "backend": "badger",
+    "durability_class": "durable",
+    "posting_store": "backend=badger; tier=production; durability=durable; events=false",
+    "badger": "syncwrites=true",
+    "dataset_nodes": 500,
+    "concurrency": 4,
+    "warmup_ops": 100,
+    "timed_ops": 2000,
+    "query_mix_percent": {
+      "one_hop_read": 20,
+      "point_read": 60,
+      "write": 20
+    },
+    "topology": "single-zero-single-alpha",
+    "seed": 20260711
+  },
+  "context": {
+    "dgraph_sha": "7722f69b06ba85d13b6fb28a7b57a8e6d711677b",
+    "gomap_version": "v0.6.2-0.20260721120929-84e3f6652651",
+    "dirty": false,
+    "go_version": "go1.26.4",
+    "host": "mikers-B560-DS3H-AC-Y1",
+    "kernel": "Linux 6.8.0-124-generic #124~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 21:05:19 UTC  x86_64 GNU/Linux",
+    "cpu": "11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz",
+    "total_ram_bytes": 33512771584,
+    "storage": {
+      "scope": "artifact_and_posting",
+      "source": "/dev/nvme1n1p1",
+      "model": "Samsung SSD 990 PRO 4TB",
+      "size_bytes": 4000787030016,
+      "filesystem": "ext4",
+      "mountpoint": "/mnt/fast4tb"
+    },
+    "environment": {
+      "GOFLAGS": "",
+      "GOMAXPROCS": "",
+      "GOWORK": "off",
+      "TMPDIR": "/mnt/fast4tb/tmp"
+    },
+    "exact_command": [
+      "/mnt/fast4tb/dgraph-29-84e3f665-artifacts/bin/livebench",
+      "--dgraph-bin",
+      "/mnt/fast4tb/dgraph-29-84e3f665-artifacts/bin/dgraph",
+      "--artifact-dir",
+      "/mnt/fast4tb/dgraph-29-84e3f665-artifacts/live/badger-durable-r2",
+      "--backend",
+      "badger",
+      "--durability",
+      "durable",
+      "--repeat",
+      "2",
+      "--dataset-nodes",
+      "500",
+      "--warmup-ops",
+      "100",
+      "--timed-ops",
+      "2000",
+      "--concurrency",
+      "4",
+      "--zero-port-offset",
+      "23204",
+      "--alpha-port-offset",
+      "23244"
+    ],
+    "raw_path": "/mnt/fast4tb/dgraph-29-84e3f665-artifacts/live/badger-durable-r2/result.json",
+    "contaminants": null,
+    "excluded": false
+  },
+  "setup_started": "2026-07-21T12:25:33.656190208Z",
+  "setup_finished": "2026-07-21T12:25:34.92827149Z",
+  "timed_started": "2026-07-21T12:25:34.932111135Z",
+  "timed_finished": "2026-07-21T12:25:36.721180636Z",
+  "throughput_ops_s": 1117.899555541079,
+  "latency_ms": {
+    "p50": 2.196,
+    "p95": 9.718,
+    "p99": 12.693
+  },
+  "metrics": {
+    "checkpoints": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "backend diagnostics",
+      "reason": "counter unavailable for selected backend"
+    },
+    "cpu_seconds": {
+      "available": true,
+      "value": 1.08,
+      "unit": "seconds",
+      "source": "/proc alpha utime+stime"
+    },
+    "disk_allocated_bytes": {
+      "available": true,
+      "value": 376832,
+      "unit": "bytes",
+      "source": "posting directory stat blocks"
+    },
+    "disk_logical_bytes": {
+      "available": true,
+      "value": 2282750002,
+      "unit": "bytes",
+      "source": "posting directory walk"
+    },
+    "flushes": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "Badger diagnostics",
+      "reason": "Badger exposes badger_write_num_vlog, which is not a semantic flush counter"
+    },
+    "gc_cycles": {
+      "available": true,
+      "value": 1,
+      "unit": "count",
+      "source": "Prometheus Go runtime GC"
+    },
+    "recovery_seconds": {
+      "available": true,
+      "value": 1.505579078,
+      "unit": "seconds",
+      "source": "alpha process restart to healthy"
+    },
+    "rss_peak_bytes": {
+      "available": true,
+      "value": 963084288,
+      "unit": "bytes",
+      "source": "/proc alpha VmHWM"
+    },
+    "treedb_command_wal_file_syncs": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.file_sync.calls_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_group_commit_commits": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.group_commit.commits_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_group_commit_group_size_max": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.group_commit.group_size_max",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_group_commit_groups": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.group_commit.groups_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_group_commit_participants": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.group_commit.participants_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_group_commit_syncs": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.group_commit.syncs_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_iterator_snapshot_rotations": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.iterator.snapshot_rotations_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_leaf_log_segment_rotations": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.leaf_log_lanes.segment_rotations_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_point_successor_calls": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.point_successor.calls_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_point_successor_sources": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.point_successor.sources_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_point_successor_sources_max": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.point_successor.sources_max",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_public_batch_write_calls": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.public.batch.write.calls_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_public_batch_write_sync_calls": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.public.batch.write_sync.calls_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_value_log_file_syncs": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.value_log.file_sync.calls_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "treedb_value_log_syncs": {
+      "available": false,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.value_log.sync.calls_total",
+      "reason": "TreeDB-only diagnostic"
+    },
+    "write_amplification": {
+      "available": false,
+      "value": 0,
+      "unit": "ratio",
+      "source": "backend diagnostics",
+      "reason": "equivalent physical write-byte counter unavailable or logical write bytes zero"
+    },
+    "write_bytes": {
+      "available": true,
+      "value": 148426,
+      "unit": "bytes",
+      "source": "Badger Prometheus badger_write_bytes_user"
+    }
+  },
+  "validation": {
+    "backend_observed": "badger",
+    "durability_observed": "syncwrites=true",
+    "schema_ok": true,
+    "posting_checksum": "2e08caad769d3f0f221ddeaaa36e528ae1b4764fefdc27df3913a788474074d8",
+    "node_count": 920,
+    "restart_ok": true,
+    "unsupported_ok": true
+  }
+}

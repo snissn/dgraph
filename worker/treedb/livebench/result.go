@@ -18,7 +18,12 @@ import (
 	"time"
 )
 
-const SchemaVersion = 3
+const (
+	legacySchemaVersion = 3
+	SchemaVersion       = 4
+
+	pointAppendCoverageMetric = "treedb_command_wal_append_point_calls"
+)
 
 type Config struct {
 	Backend         string         `json:"backend"`
@@ -98,6 +103,7 @@ type Result struct {
 
 var requiredTreeDBMetrics = []string{
 	"treedb_public_batch_write_calls", "treedb_public_batch_write_sync_calls",
+	pointAppendCoverageMetric,
 	"treedb_group_commit_groups", "treedb_group_commit_commits", "treedb_group_commit_participants",
 	"treedb_group_commit_syncs", "treedb_group_commit_group_size_max",
 	"treedb_command_wal_file_syncs", "treedb_value_log_syncs", "treedb_value_log_file_syncs",
@@ -120,8 +126,8 @@ func (c Config) Fingerprint() string {
 
 func (r Result) Validate() error {
 	var errs []error
-	if r.SchemaVersion != SchemaVersion {
-		errs = append(errs, fmt.Errorf("schema_version=%d, want %d", r.SchemaVersion, SchemaVersion))
+	if r.SchemaVersion != SchemaVersion && r.SchemaVersion != legacySchemaVersion {
+		errs = append(errs, fmt.Errorf("schema_version=%d, want %d or legacy %d", r.SchemaVersion, SchemaVersion, legacySchemaVersion))
 	}
 	if r.RunID == "" || r.Repeat < 1 {
 		errs = append(errs, errors.New("run_id and positive repeat are required"))
@@ -166,6 +172,9 @@ func (r Result) Validate() error {
 	}
 	for _, name := range requiredMetrics {
 		m, ok := r.Metrics[name]
+		if r.SchemaVersion == legacySchemaVersion && name == pointAppendCoverageMetric && !ok {
+			continue
+		}
 		if !ok {
 			errs = append(errs, fmt.Errorf("missing metric %q", name))
 			continue
@@ -179,11 +188,21 @@ func (r Result) Validate() error {
 	}
 	for _, name := range requiredTreeDBMetrics {
 		m, ok := r.Metrics[name]
+		legacyOptional := r.SchemaVersion == legacySchemaVersion && name == pointAppendCoverageMetric
 		if r.Config.Backend == "treedb" && (!ok || !m.Available) {
-			errs = append(errs, fmt.Errorf("TreeDB diagnostic %q must be available", name))
+			if !legacyOptional {
+				errs = append(errs, fmt.Errorf("TreeDB diagnostic %q must be available", name))
+			}
 		}
 		if r.Config.Backend == "badger" && ok && m.Available {
 			errs = append(errs, fmt.Errorf("TreeDB-only diagnostic %q must be unavailable for Badger", name))
+		}
+	}
+	if r.Config.Backend == "treedb" {
+		pointAppends, pointOK := r.Metrics[pointAppendCoverageMetric]
+		logicalBytes, logicalOK := r.Metrics["write_bytes"]
+		if pointOK && pointAppends.Available && pointAppends.Value > 0 && logicalOK && logicalBytes.Available {
+			errs = append(errs, errors.New("TreeDB logical write bytes must be unavailable when direct-point appends are present"))
 		}
 	}
 	for _, name := range []string{"cpu_seconds", "rss_peak_bytes", "disk_logical_bytes", "disk_allocated_bytes", "recovery_seconds"} {

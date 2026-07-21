@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -111,6 +112,17 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 	if err := ValidateSet(results, repeats); err != nil {
 		return "", err
 	}
+	legacyPointCoverageGap := hasLegacyPointAppendCoverageGap(results)
+	results = normalizeLegacyPointAppendCoverage(results)
+	sort.SliceStable(results, func(i, j int) bool {
+		left, right := results[i], results[j]
+		leftKey := reportOrderKey(left)
+		rightKey := reportOrderKey(right)
+		if leftKey != rightKey {
+			return leftKey < rightKey
+		}
+		return left.Repeat < right.Repeat
+	})
 	by := map[string][]Result{}
 	for _, r := range results {
 		by[r.Config.Backend+"/"+r.Config.DurabilityClass] = append(by[r.Config.Backend+"/"+r.Config.DurabilityClass], r)
@@ -147,12 +159,16 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 				metricSummaryScaled(rs, "write_bytes", 1024, 1), metricSummary(rs, "write_amplification", 2),
 				metricSummary(rs, "gc_cycles", 1), metricSummary(rs, "flushes", 1), metricSummary(rs, "checkpoints", 1))
 		}
+		if class == "relaxed" && legacyPointCoverageGap {
+			b.WriteString("\nThe public-batch call counters below are valid measured zeros. The schema-v3 rows predate the point-append coverage diagnostic, so they cannot establish whether direct-point appends bypassed the public-batch logical-byte counter. As a conservative compatibility erratum, this report therefore treats the raw relaxed logical-byte zero as unavailable rather than as evidence of zero logical writes. This is a later counter-coverage inference, not a fact independently established by the retained raw rows. The engine flush median cannot establish publications per application write.\n")
+		}
 		treeResults := by["treedb/"+class]
-		b.WriteString("\nTreeDB durability diagnostics (timed-phase deltas unless marked high-water):\n\n")
-		b.WriteString("| ordinary writes | durable writes | group commits / groups | participants | group syncs | max group size (high-water) | command-WAL file syncs | value-log logical syncs | value-log file syncs |\n| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
-		fmt.Fprintf(&b, "| %s | %s | %s / %s | %s | %s | %s | %s | %s | %s |\n",
+		fmt.Fprintf(&b, "\nTreeDB durability diagnostics (timed-phase deltas unless marked high-water):\n\nEach value below is an independent per-metric median across the %d accepted repeats. The row is not one observed repeat.\n\n", repeats)
+		b.WriteString("| public batch writes | public batch durable writes | point appends | group commits / groups | participants | group syncs | max group size (high-water) | command-WAL file syncs | value-log logical syncs | value-log file syncs |\n| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
+		fmt.Fprintf(&b, "| %s | %s | %s | %s / %s | %s | %s | %s | %s | %s | %s |\n",
 			metricSummary(treeResults, "treedb_public_batch_write_calls", 0),
 			metricSummary(treeResults, "treedb_public_batch_write_sync_calls", 0),
+			metricSummary(treeResults, "treedb_command_wal_append_point_calls", 0),
 			metricSummary(treeResults, "treedb_group_commit_commits", 0),
 			metricSummary(treeResults, "treedb_group_commit_groups", 0),
 			metricSummary(treeResults, "treedb_group_commit_participants", 0),
@@ -191,8 +207,56 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 	for _, r := range results {
 		fmt.Fprintf(&b, "- `%s`: `live/%s/result.json`; Dgraph `%s`; gomap `%s`; dirty `%t`\n", r.RunID, r.RunID, r.Context.DgraphSHA, r.Context.GomapVersion, r.Context.Dirty)
 	}
-	b.WriteString("\nExcluded runs are rejected by aggregation. Alpha CPU is a timed-phase `/proc` delta; RSS is Alpha `VmHWM` and therefore includes setup. Disk metrics cover the postings directory. Badger's large logical size with small allocated size comes from sparse preallocated files, so logical and allocated bytes must be read together. TreeDB logical write bytes use its public-batch counter, but write amplification remains unavailable because an equivalent physical-byte counter is not exposed. Badger flush and checkpoint counts are unavailable because no equivalent semantic counters are exposed; vlog writes are not relabeled as flushes.\n")
+	if legacyPointCoverageGap {
+		b.WriteString("\nExcluded runs are rejected by aggregation. Alpha CPU is a timed-phase `/proc` delta; RSS is Alpha `VmHWM` and therefore includes setup. Disk metrics cover the postings directory. Badger's large logical size with small allocated size comes from sparse preallocated files, so logical and allocated bytes must be read together. TreeDB durable logical write bytes use the durable route's public-batch set-byte counter. The relaxed public-batch call counters remain valid measured zeros. The schema-v3 relaxed rows lack the point-append coverage counter, so their raw logical-byte zero is conservatively normalized above as unavailable and explicitly treated as a later counter-coverage inference. Write amplification remains unavailable because an equivalent physical-byte counter is not exposed. Badger flush and checkpoint counts are unavailable because no equivalent semantic counters are exposed; vlog writes are not relabeled as flushes.\n")
+	} else {
+		b.WriteString("\nExcluded runs are rejected by aggregation. Alpha CPU is a timed-phase `/proc` delta; RSS is Alpha `VmHWM` and therefore includes setup. Disk metrics cover the postings directory. Badger's large logical size with small allocated size comes from sparse preallocated files, so logical and allocated bytes must be read together. TreeDB logical write bytes use its public-batch counter only when the point-append counter proves no direct-point writes occurred; otherwise they fail closed as unavailable. Write amplification remains unavailable because an equivalent physical-byte counter is not exposed. Badger flush and checkpoint counts are unavailable because no equivalent semantic counters are exposed; vlog writes are not relabeled as flushes.\n")
+	}
 	return b.String(), nil
+}
+
+func reportOrderKey(r Result) int {
+	class, backend := 1, 1
+	if r.Config.DurabilityClass == "relaxed" {
+		class = 0
+	}
+	if r.Config.Backend == "badger" {
+		backend = 0
+	}
+	return class*2 + backend
+}
+
+func hasLegacyPointAppendCoverageGap(results []Result) bool {
+	for _, r := range results {
+		coverage, ok := r.Metrics[pointAppendCoverageMetric]
+		if r.SchemaVersion == legacySchemaVersion && r.Config.Backend == "treedb" && r.Config.DurabilityClass == "relaxed" && (!ok || !coverage.Available) {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeLegacyPointAppendCoverage keeps frozen schema-v3 matrices reportable without allowing
+// their public-batch logical-byte counter to masquerade as total logical-write coverage. Schema v4
+// requires the point-append diagnostic and therefore never takes this compatibility path.
+func normalizeLegacyPointAppendCoverage(results []Result) []Result {
+	normalized := append([]Result(nil), results...)
+	for i := range normalized {
+		r := &normalized[i]
+		if r.SchemaVersion != legacySchemaVersion || r.Config.Backend != "treedb" || r.Config.DurabilityClass != "relaxed" {
+			continue
+		}
+		coverage, ok := r.Metrics[pointAppendCoverageMetric]
+		if ok && coverage.Available {
+			continue
+		}
+		r.Metrics = maps.Clone(r.Metrics)
+		logical := r.Metrics["write_bytes"]
+		logical.Available = false
+		logical.Reason = "legacy schema lacks the point-append counter needed for total logical-write coverage"
+		r.Metrics["write_bytes"] = logical
+	}
+	return normalized
 }
 
 func metricSummary(results []Result, name string, precision int) string {

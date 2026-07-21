@@ -71,7 +71,7 @@ func TestRenderReportIncludesTreeDBDurabilityAndPointSourceDiagnostics(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"TreeDB durability diagnostics", "group commits / groups", "point sources", "sources/call", "2.000 (1/1)"} {
+	for _, want := range []string{"TreeDB durability diagnostics", "public batch writes", "point appends", "independent per-metric median", "row is not one observed repeat", "group commits / groups", "point sources", "sources/call", "2.000 (1/1)"} {
 		if !strings.Contains(report, want) {
 			t.Fatalf("report missing %q:\n%s", want, report)
 		}
@@ -118,5 +118,34 @@ func TestRenderReportUsesExplicitStopOutcome(t *testing.T) {
 	}
 	if !strings.Contains(report, "STOP advancement/integration at this phase; keep Badger as the production default") {
 		t.Fatalf("missing explicit stop outcome:\n%s", report)
+	}
+}
+
+func TestIssue29LegacyArtifactsRemainReportable(t *testing.T) {
+	paths, err := filepath.Glob("../artifacts/issue-29/live/*/result.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 12 {
+		t.Fatalf("issue #29 result count=%d, want 12", len(paths))
+	}
+	results, err := LoadResults(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profiles, err := DiscoverProfileArtifacts("../artifacts/issue-29/profiles")
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := RenderReportWithProfiles(results, 3, profiles)
+	if err != nil {
+		t.Fatalf("render frozen schema-v%d evidence: %v", legacySchemaVersion, err)
+	}
+	want, err := os.ReadFile("../artifacts/issue-29/report.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report != string(want) {
+		t.Fatal("schema-v3 JSON and retained profiles did not reproduce the committed report byte for byte")
 	}
 }

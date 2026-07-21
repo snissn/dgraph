@@ -48,6 +48,9 @@ func validResult(backend, class string) Result {
 	for _, name := range requiredMetrics {
 		metrics[name] = Metric{Available: true, Value: 1, Unit: "count", Source: "test"}
 	}
+	pointCoverage := metrics[pointAppendCoverageMetric]
+	pointCoverage.Value = 0
+	metrics[pointAppendCoverageMetric] = pointCoverage
 	if backend == "badger" {
 		for _, name := range requiredTreeDBMetrics {
 			metrics[name] = Metric{Unit: "count", Source: "TreeDB test diagnostic", Reason: "TreeDB-only diagnostic"}
@@ -142,6 +145,46 @@ func TestResultFailsClosedOnTreeDBDiagnosticAvailability(t *testing.T) {
 	badger.Metrics["treedb_group_commit_commits"] = Metric{Available: true, Value: 1, Unit: "count", Source: "fabricated"}
 	if err := badger.Validate(); err == nil || !strings.Contains(err.Error(), "must be unavailable for Badger") {
 		t.Fatalf("Badger fabricated TreeDB diagnostic got %v", err)
+	}
+}
+
+func TestResultRequiresPointAppendCoverageDiagnostic(t *testing.T) {
+	tree := validResult("treedb", "relaxed")
+	delete(tree.Metrics, pointAppendCoverageMetric)
+	if err := tree.Validate(); err == nil || !strings.Contains(err.Error(), pointAppendCoverageMetric) {
+		t.Fatalf("missing point-append coverage diagnostic got %v", err)
+	}
+}
+
+func TestResultAllowsLegacySchemaWithoutPointAppendCoverageDiagnostic(t *testing.T) {
+	tree := validResult("treedb", "relaxed")
+	tree.SchemaVersion = legacySchemaVersion
+	delete(tree.Metrics, pointAppendCoverageMetric)
+	if err := tree.Validate(); err != nil {
+		t.Fatalf("legacy result rejected: %v", err)
+	}
+
+	delete(tree.Metrics, "treedb_group_commit_commits")
+	if err := tree.Validate(); err == nil || !strings.Contains(err.Error(), "treedb_group_commit_commits") {
+		t.Fatalf("legacy result accepted without non-legacy diagnostic: %v", err)
+	}
+}
+
+func TestResultRejectsLogicalBytesWhenPointAppendsArePresent(t *testing.T) {
+	tree := validResult("treedb", "relaxed")
+	pointAppends := tree.Metrics[pointAppendCoverageMetric]
+	pointAppends.Value = 1
+	tree.Metrics[pointAppendCoverageMetric] = pointAppends
+	if err := tree.Validate(); err == nil || !strings.Contains(err.Error(), "logical write bytes must be unavailable") {
+		t.Fatalf("point appends with available logical bytes got %v", err)
+	}
+
+	logicalBytes := tree.Metrics["write_bytes"]
+	logicalBytes.Available = false
+	logicalBytes.Reason = "direct-point appends bypass public-batch logical bytes"
+	tree.Metrics["write_bytes"] = logicalBytes
+	if err := tree.Validate(); err != nil {
+		t.Fatalf("fail-closed point-append result rejected: %v", err)
 	}
 }
 
