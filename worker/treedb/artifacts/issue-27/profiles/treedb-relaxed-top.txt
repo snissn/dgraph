@@ -1,0 +1,34 @@
+File: dgraph
+Build ID: 1b3b89c4f2c8d6edadb9d16568a5a569619b66e9
+Type: cpu
+Time: 2026-07-20 15:49:40 HST
+Duration: 5s, Total samples = 15.42s (308.38%)
+Showing nodes accounting for 6.99s, 45.33% of 15.42s total
+Dropped 1273 nodes (cum <= 0.08s)
+Showing top 25 nodes out of 431
+      flat  flat%   sum%        cum   cum%
+     3.23s 20.95% 20.95%      3.23s 20.95%  internal/runtime/syscall/linux.Syscall6
+     0.53s  3.44% 24.38%      0.53s  3.44%  runtime.memmove
+     0.35s  2.27% 26.65%      0.35s  2.27%  runtime.futex
+     0.31s  2.01% 28.66%      0.31s  2.01%  runtime.nextFreeFast (inline)
+     0.24s  1.56% 30.22%      0.27s  1.75%  runtime.(*mspan).writeHeapBitsSmall
+     0.24s  1.56% 31.78%      0.24s  1.56%  runtime.memclrNoHeapPointers
+     0.24s  1.56% 33.33%      0.24s  1.56%  runtime.usleep
+     0.17s  1.10% 34.44%      1.12s  7.26%  runtime.mallocgcSmallScanNoHeader
+     0.16s  1.04% 35.47%      1.99s 12.91%  runtime.mallocgc
+     0.16s  1.04% 36.51%      0.42s  2.72%  runtime.selectgo
+     0.12s  0.78% 37.29%      0.15s  0.97%  internal/runtime/maps.(*Iter).Next
+     0.12s  0.78% 38.07%      0.13s  0.84%  runtime.lock2
+     0.11s  0.71% 38.78%      0.11s  0.71%  runtime.(*mspan).init
+     0.10s  0.65% 39.43%      0.45s  2.92%  runtime.growslice
+     0.10s  0.65% 40.08%      0.10s  0.65%  runtime.nanotime (inline)
+     0.10s  0.65% 40.73%      1.12s  7.26%  runtime.newobject
+     0.09s  0.58% 41.31%      0.09s  0.58%  internal/runtime/atomic.(*Uint32).CompareAndSwap (inline)
+     0.09s  0.58% 41.89%      0.09s  0.58%  internal/runtime/maps.ctrlGroup.matchH2
+     0.09s  0.58% 42.48%      0.16s  1.04%  internal/sync.(*Mutex).Lock
+     0.08s  0.52% 43.00%      0.08s  0.52%  runtime.(*spanSet).push
+     0.08s  0.52% 43.51%      1.42s  9.21%  runtime.findRunnable
+     0.08s  0.52% 44.03%      0.08s  0.52%  runtime.findfunc
+     0.08s  0.52% 44.55%      0.48s  3.11%  runtime.mallocgcSmallNoscan
+     0.07s  0.45% 45.01%      0.43s  2.79%  runtime.stealWork
+     0.05s  0.32% 45.33%      0.08s  0.52%  context.value

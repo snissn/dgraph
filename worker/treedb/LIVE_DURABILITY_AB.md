@@ -47,6 +47,12 @@ The issue #17 decision evidence produced from Dgraph commit
 [`artifacts/issue-17`](artifacts/issue-17/README.md). The committed report uses paths relative to
 that directory; each raw result retains the original absolute command and scratch path for audit.
 
+Issue #27 repeated the unchanged decision matrix after pinning the exact power-loss-certified Gomap
+candidate `121462d80f1f11190776b4d54cab7ed34e413963`. Its schema-v3 raw results retain command-WAL,
+value-log, group-commit, point-successor, and rotation diagnostics. The final report, profiles,
+microbenchmarks, exact provenance, STOP decision, and measured residuals are committed under
+[`artifacts/issue-27`](artifacts/issue-27/README.md). Badger remains the production default.
+
 Non-smoke decision runs automatically capture separate relaxed and durable TreeDB CPU profiles after
 the matrix. Profile-run throughput is never treated as benchmark evidence, and the report links only
 artifacts verified to exist. To reproduce one profile manually, reuse the committed runner binary
