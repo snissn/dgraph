@@ -37,7 +37,7 @@ func validResult(backend, class string) Result {
 		badger = "syncwrites=false"
 		observed = "wal_on_sync"
 		if class == "relaxed" {
-			observed = "wal_on_relaxed_sync+no_read_checksum"
+			observed = "wal_on_relaxed_sync"
 		}
 	}
 	if backend == "badger" && class == "durable" {
@@ -53,6 +53,17 @@ func validResult(backend, class string) Result {
 		Context:      Context{DgraphSHA: "abc", GomapVersion: "v1", GoVersion: "go1", Host: "host", Kernel: "kernel", CPU: "cpu", TotalRAMBytes: 1024, Storage: StorageContext{Scope: "artifact_and_posting", Source: "/dev/test", Model: "test", SizeBytes: 2048, Filesystem: "ext4", Mountpoint: "/mnt"}, Environment: map[string]string{"GOWORK": "off", "TMPDIR": "/tmp", "GOMAXPROCS": "", "GOFLAGS": ""}, ExactCommand: []string{"bench"}, RawPath: "/raw"},
 		SetupStarted: now, SetupFinished: now.Add(time.Second), TimedStarted: now.Add(2 * time.Second), TimedFinished: now.Add(3 * time.Second), Throughput: 10, LatencyMS: map[string]float64{"p50": 1, "p95": 2, "p99": 3}, Metrics: metrics,
 		Validation: Validation{BackendObserved: backend, DurabilityObserved: observed, SchemaOK: true, PostingChecksum: "same", NodeCount: 12, RestartOK: true, UnsupportedOK: true}}
+}
+
+func TestExpectedObservedUsesCanonicalTreeDBProfileIntegrity(t *testing.T) {
+	config := validResult("treedb", "relaxed").Config
+	backend, durability, err := expectedObserved(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backend != "treedb" || durability != "wal_on_relaxed_sync" {
+		t.Fatalf("observed contract=(%q, %q), want (treedb, wal_on_relaxed_sync)", backend, durability)
+	}
 }
 
 func TestResultRejectsWrongBackendDurabilityMissingMetricAndSetupLeakage(t *testing.T) {

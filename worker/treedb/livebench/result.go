@@ -217,7 +217,7 @@ func expectedObserved(c Config) (string, string, error) {
 			return "", "", fmt.Errorf("posting-store selector: %w", err)
 		}
 		if c.DurabilityClass == "relaxed" {
-			return "treedb", "wal_on_relaxed_sync+no_read_checksum", nil
+			return "treedb", "wal_on_relaxed_sync", nil
 		}
 		return "treedb", "wal_on_sync", nil
 	default:
