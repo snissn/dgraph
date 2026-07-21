@@ -34,24 +34,28 @@ accepted repeats per cell are unchanged from issue #27.
 
 ## Measured residual
 
-The median durable TreeDB row records 811 public durable store writes for 400 timed application
-writes. Only 327 writes participate in 174 groups; 635 command-WAL file syncs remain. This is an
-improvement over issue #27's complete serialization, but it is insufficient: the median durable
-throughput remains 47.57% behind Badger and its p95/p99 latencies are materially higher. Value-log
-logical and file syncs are both zero, so the remaining barrier is not value-log synchronization.
+Independent per-metric medians across the durable TreeDB rows record 811 public durable store writes
+for 400 timed application writes, 327 group participants, 174 groups, and 635 command-WAL file
+syncs. These values summarize separate metric columns; they are not a tuple from one observed
+repeat. This improves on issue #27's complete serialization, but it is insufficient: the median
+durable throughput remains 47.57% behind Badger and its p95/p99 latencies are materially higher.
+Value-log logical and file syncs are both zero, so the remaining barrier is not value-log
+synchronization.
 
-The median relaxed row has no foreground command-WAL or value-log syncs, yet records 1041 flushes
-for the same 400 timed application writes. Its 2400 point-successor calls inspect 6648 sources, or
-2.770 sources per call, with no iterator-snapshot or leaf-log-segment rotations. Issue #3941
-substantially reduced the earlier source-fan-in residual, but that reduction did not close the
-unchanged terminal workload's performance gate.
+The relaxed rows have no foreground command-WAL or value-log syncs and record a median 1041 engine
+flushes. Their retained public-batch logical-write counter is not valid for the direct-point route,
+so its raw zero is normalized as unavailable and the flush count is not interpreted as publications
+per application write. The 2400 point-successor calls inspect a median 6648 sources, or 2.770
+sources per call, with no iterator-snapshot or leaf-log-segment rotations. Issue #3941 substantially
+reduced the earlier source-fan-in residual, but that reduction did not close the unchanged terminal
+workload's performance gate.
 
-Taken together, the next bounded target is the Dgraph transaction-to-store publication fan-out:
-classify why one application mutation crosses multiple TreeDB write/publication boundaries, expose
-group eligibility and rejection reasons, and coalesce only boundaries proven to have identical
-ordering and acknowledgement semantics. This work is tracked by
-[#34](https://github.com/snissn/dgraph/issues/34). The evidence does not justify speculative
-value-log, checkpoint, iterator-rotation, or durability-weakening work.
+The next bounded target is therefore the measured durable residual: classify why durable Dgraph
+store calls fail to join a group, expose group eligibility and rejection reasons, and overlap or
+coalesce only calls proven to have independent or identical ordering and acknowledgement semantics.
+This work is tracked by [#34](https://github.com/snissn/dgraph/issues/34). The current evidence does
+not support a relaxed publication-fan-out claim or justify speculative value-log, checkpoint,
+iterator-rotation, or durability-weakening work.
 
 The profiles show syscall, allocation, and runtime costs but are not sufficient alone to assign the
 entire gap to one leaf function or to distinguish CPU execution from I/O wait. The decision rests on

@@ -21,13 +21,18 @@
 | Backend | Alpha CPU median (s) | RSS/HWM median (MiB) | disk logical median (MiB) | disk allocated median (MiB) | logical write median (KiB) | write amp         | GC cycles | flushes           | checkpoints       |
 | ------- | -------------------: | -------------------: | ------------------------: | --------------------------: | -------------------------: | ----------------- | --------- | ----------------- | ----------------- |
 | badger  |            0.9 (3/3) |          919.1 (3/3) |              2177.0 (3/3) |                   0.4 (3/3) |                141.9 (3/3) | unavailable (0/3) | 1.0 (3/3) | unavailable (0/3) | unavailable (0/3) |
-| treedb  |            1.4 (3/3) |         1220.8 (3/3) |                29.8 (3/3) |                  29.9 (3/3) |                  0.0 (3/3) | unavailable (0/3) | 0.0 (3/3) | 1041.0 (3/3)      | 0.0 (3/3)         |
+| treedb  |            1.4 (3/3) |         1220.8 (3/3) |                29.8 (3/3) |                  29.9 (3/3) |          unavailable (0/3) | unavailable (0/3) | 0.0 (3/3) | 1041.0 (3/3)      | 0.0 (3/3)         |
+
+The relaxed TreeDB direct-point route bypasses the public-batch logical-write counter retained in
+the raw schema. Its raw zero is therefore a missing/miswired measurement, not evidence of zero
+logical writes. The 1041 flush median is an engine flush count; without a valid foreground-write
+counter it cannot establish publications per application write.
 
 TreeDB durability diagnostics (timed-phase deltas unless marked high-water):
 
-| ordinary writes | durable writes | group commits / groups | participants | group syncs | max group size (high-water) | command-WAL file syncs | value-log logical syncs | value-log file syncs |
-| --------------: | -------------: | ---------------------: | -----------: | ----------: | --------------------------: | ---------------------: | ----------------------: | -------------------: |
-|         0 (3/3) |        0 (3/3) |      0 (3/3) / 0 (3/3) |      0 (3/3) |     0 (3/3) |                     0 (3/3) |                0 (3/3) |                 0 (3/3) |              0 (3/3) |
+| public batch writes | public batch durable writes |     point appends | group commits / groups | participants | group syncs | max group size (high-water) | command-WAL file syncs | value-log logical syncs | value-log file syncs |
+| ------------------: | --------------------------: | ----------------: | ---------------------: | -----------: | ----------: | --------------------------: | ---------------------: | ----------------------: | -------------------: |
+|   unavailable (0/3) |           unavailable (0/3) | unavailable (0/3) |      0 (3/3) / 0 (3/3) |      0 (3/3) |     0 (3/3) |                     0 (3/3) |                0 (3/3) |                 0 (3/3) |              0 (3/3) |
 
 | point-successor calls | point sources | sources/call | source high-water median | iterator snapshot rotations | leaf-log segment rotations |
 | --------------------: | ------------: | -----------: | -----------------------: | --------------------------: | -------------------------: |
@@ -49,9 +54,12 @@ TreeDB throughput delta versus durability-matched Badger: **-18.61%** (gate: no 
 
 TreeDB durability diagnostics (timed-phase deltas unless marked high-water):
 
-| ordinary writes | durable writes | group commits / groups | participants | group syncs | max group size (high-water) | command-WAL file syncs | value-log logical syncs | value-log file syncs |
-| --------------: | -------------: | ---------------------: | -----------: | ----------: | --------------------------: | ---------------------: | ----------------------: | -------------------: |
-|         0 (3/3) |      811 (3/3) |  327 (3/3) / 174 (3/3) |    327 (3/3) |   174 (3/3) |                     8 (3/3) |              635 (3/3) |                 0 (3/3) |              0 (3/3) |
+Each value below is an independent per-metric median across the three accepted repeats. The row is
+not one observed repeat.
+
+| public batch writes | public batch durable writes |     point appends | group commits / groups | participants | group syncs | max group size (high-water) | command-WAL file syncs | value-log logical syncs | value-log file syncs |
+| ------------------: | --------------------------: | ----------------: | ---------------------: | -----------: | ----------: | --------------------------: | ---------------------: | ----------------------: | -------------------: |
+|             0 (3/3) |                   811 (3/3) | unavailable (0/3) |  327 (3/3) / 174 (3/3) |    327 (3/3) |   174 (3/3) |                     8 (3/3) |              635 (3/3) |                 0 (3/3) |              0 (3/3) |
 
 | point-successor calls | point sources | sources/call | source high-water median | iterator snapshot rotations | leaf-log segment rotations |
 | --------------------: | ------------: | -----------: | -----------------------: | --------------------------: | -------------------------: |
@@ -125,7 +133,8 @@ and raw path.
 Excluded runs are rejected by aggregation. Alpha CPU is a timed-phase `/proc` delta; RSS is Alpha
 `VmHWM` and therefore includes setup. Disk metrics cover the postings directory. Badger's large
 logical size with small allocated size comes from sparse preallocated files, so logical and
-allocated bytes must be read together. TreeDB logical write bytes use its public-batch counter, but
-write amplification remains unavailable because an equivalent physical-byte counter is not exposed.
-Badger flush and checkpoint counts are unavailable because no equivalent semantic counters are
-exposed; vlog writes are not relabeled as flushes.
+allocated bytes must be read together. TreeDB durable logical write bytes use its public durable
+write counter. The relaxed direct-point route bypasses the retained public-batch counter, so its raw
+zero is normalized above as unavailable. Write amplification remains unavailable because an
+equivalent physical-byte counter is not exposed. Badger flush and checkpoint counts are unavailable
+because no equivalent semantic counters are exposed; vlog writes are not relabeled as flushes.

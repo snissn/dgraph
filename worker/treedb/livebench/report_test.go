@@ -71,7 +71,7 @@ func TestRenderReportIncludesTreeDBDurabilityAndPointSourceDiagnostics(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"TreeDB durability diagnostics", "group commits / groups", "point sources", "sources/call", "2.000 (1/1)"} {
+	for _, want := range []string{"TreeDB durability diagnostics", "public batch writes", "point appends", "independent per-metric median", "row is not one observed repeat", "group commits / groups", "point sources", "sources/call", "2.000 (1/1)"} {
 		if !strings.Contains(report, want) {
 			t.Fatalf("report missing %q:\n%s", want, report)
 		}

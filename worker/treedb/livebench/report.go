@@ -148,11 +148,12 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 				metricSummary(rs, "gc_cycles", 1), metricSummary(rs, "flushes", 1), metricSummary(rs, "checkpoints", 1))
 		}
 		treeResults := by["treedb/"+class]
-		b.WriteString("\nTreeDB durability diagnostics (timed-phase deltas unless marked high-water):\n\n")
-		b.WriteString("| ordinary writes | durable writes | group commits / groups | participants | group syncs | max group size (high-water) | command-WAL file syncs | value-log logical syncs | value-log file syncs |\n| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
-		fmt.Fprintf(&b, "| %s | %s | %s / %s | %s | %s | %s | %s | %s | %s |\n",
+		b.WriteString("\nTreeDB durability diagnostics (timed-phase deltas unless marked high-water):\n\nEach value below is an independent per-metric median across the accepted repeats. The row is not one observed repeat.\n\n")
+		b.WriteString("| public batch writes | public batch durable writes | point appends | group commits / groups | participants | group syncs | max group size (high-water) | command-WAL file syncs | value-log logical syncs | value-log file syncs |\n| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
+		fmt.Fprintf(&b, "| %s | %s | %s | %s / %s | %s | %s | %s | %s | %s | %s |\n",
 			metricSummary(treeResults, "treedb_public_batch_write_calls", 0),
 			metricSummary(treeResults, "treedb_public_batch_write_sync_calls", 0),
+			metricSummary(treeResults, "treedb_command_wal_append_point_calls", 0),
 			metricSummary(treeResults, "treedb_group_commit_commits", 0),
 			metricSummary(treeResults, "treedb_group_commit_groups", 0),
 			metricSummary(treeResults, "treedb_group_commit_participants", 0),
@@ -191,7 +192,7 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 	for _, r := range results {
 		fmt.Fprintf(&b, "- `%s`: `live/%s/result.json`; Dgraph `%s`; gomap `%s`; dirty `%t`\n", r.RunID, r.RunID, r.Context.DgraphSHA, r.Context.GomapVersion, r.Context.Dirty)
 	}
-	b.WriteString("\nExcluded runs are rejected by aggregation. Alpha CPU is a timed-phase `/proc` delta; RSS is Alpha `VmHWM` and therefore includes setup. Disk metrics cover the postings directory. Badger's large logical size with small allocated size comes from sparse preallocated files, so logical and allocated bytes must be read together. TreeDB logical write bytes use its public-batch counter, but write amplification remains unavailable because an equivalent physical-byte counter is not exposed. Badger flush and checkpoint counts are unavailable because no equivalent semantic counters are exposed; vlog writes are not relabeled as flushes.\n")
+	b.WriteString("\nExcluded runs are rejected by aggregation. Alpha CPU is a timed-phase `/proc` delta; RSS is Alpha `VmHWM` and therefore includes setup. Disk metrics cover the postings directory. Badger's large logical size with small allocated size comes from sparse preallocated files, so logical and allocated bytes must be read together. TreeDB logical write bytes use its public-batch counter only when the point-append counter proves no direct-point writes occurred; otherwise they fail closed as unavailable. Write amplification remains unavailable because an equivalent physical-byte counter is not exposed. Badger flush and checkpoint counts are unavailable because no equivalent semantic counters are exposed; vlog writes are not relabeled as flushes.\n")
 	return b.String(), nil
 }
 

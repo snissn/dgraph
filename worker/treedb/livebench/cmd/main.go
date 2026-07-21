@@ -809,11 +809,21 @@ func metrics(backend string, cpu, hwm, diskLogical, diskAllocated float64, pb, p
 	}
 	writeBytes, writeAvail := delta(pa, pb, "badger_write_bytes_user")
 	writeSource := "Badger Prometheus badger_write_bytes_user"
+	writeReason := ""
 	if backend == "treedb" {
 		writeBytes, writeAvail = delta(sa, sb, "treedb.command_wal.public_batch.set.bytes_total")
 		writeSource = "TreeDB /debug/store public batch set bytes"
+		pointAppends, pointAppendOK := delta(sa, sb, "treedb.command_wal.append.point.count_total")
+		switch {
+		case !pointAppendOK:
+			writeAvail = false
+			writeReason = "TreeDB point-append coverage counter unavailable"
+		case pointAppends > 0:
+			writeAvail = false
+			writeReason = "TreeDB direct-point appends bypass the public-batch logical-byte counter"
+		}
 	}
-	m["write_bytes"] = livebench.Metric{Available: writeAvail, Value: writeBytes, Unit: "bytes", Source: writeSource}
+	m["write_bytes"] = livebench.Metric{Available: writeAvail, Value: writeBytes, Unit: "bytes", Source: writeSource, Reason: writeReason}
 	physical := 0.0
 	physicalOK := backend == "badger"
 	for _, name := range []string{"badger_write_bytes_l0", "badger_write_bytes_vlog", "badger_write_bytes_compaction"} {
@@ -859,6 +869,7 @@ type treeDBDiagnostic struct {
 var treeDBDiagnostics = []treeDBDiagnostic{
 	{metric: "treedb_public_batch_write_calls", stat: "treedb.public.batch.write.calls_total"},
 	{metric: "treedb_public_batch_write_sync_calls", stat: "treedb.public.batch.write_sync.calls_total"},
+	{metric: "treedb_command_wal_append_point_calls", stat: "treedb.command_wal.append.point.count_total"},
 	{metric: "treedb_group_commit_groups", stat: "treedb.command_wal.group_commit.groups_total"},
 	{metric: "treedb_group_commit_commits", stat: "treedb.command_wal.group_commit.commits_total"},
 	{metric: "treedb_group_commit_participants", stat: "treedb.command_wal.group_commit.participants_total"},
