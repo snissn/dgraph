@@ -237,7 +237,7 @@ func TestTreeDBStoreTxnWriterPipelinesAndCloseWaitsForAdmittedCommit(t *testing.
 }
 
 func TestTreeDBStoreDurableSchedulerOverlapsIndependentCommitsForGroupCommit(t *testing.T) {
-	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
+	store, opts := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
 	before, err := store.Stats()
 	require.NoError(t, err)
 
@@ -283,6 +283,18 @@ func TestTreeDBStoreDurableSchedulerOverlapsIndependentCommitsForGroupCommit(t *
 	require.Less(t, syncs, uint64(commits), "a grouped durable acknowledgement must share command-WAL syncs")
 	require.Greater(t, treeDBStatUint(t, after, "treedb.command_wal.group_commit.group_size_max"), uint64(1))
 	require.NoError(t, store.Close())
+	reopened, err := OpenTreeDBStore(opts, TreeDBCommitDurable)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, reopened.Close()) }()
+	read := reopened.NewReadTxn(math.MaxUint64)
+	defer read.Discard()
+	for i := 0; i < commits; i++ {
+		item, err := read.Get([]byte(fmt.Sprintf("independent-%d", i)))
+		require.NoError(t, err, "acknowledged grouped key %d must survive reopen", i)
+		value, err := item.ValueCopy(nil)
+		require.NoError(t, err)
+		require.Equal(t, []byte("value"), value)
+	}
 }
 
 func TestTreeDBStoreSchedulerOnlyOvertakesIndependentMultiKeyBatches(t *testing.T) {
@@ -332,6 +344,88 @@ func TestTreeDBStoreSchedulerOnlyOvertakesIndependentMultiKeyBatches(t *testing.
 		require.NoError(t, <-done)
 	}
 	require.NoError(t, store.Close())
+}
+
+func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t *testing.T) {
+	t.Run("callback", func(t *testing.T) {
+		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+		firstStarted := make(chan struct{})
+		releaseFirst := make(chan struct{})
+		secondFinished := make(chan error, 1)
+		store.commitStartedForTest = func(timestamp uint64, _ []mvcc.Mutation) {
+			if timestamp == 1 {
+				close(firstStarted)
+				<-releaseFirst
+			}
+		}
+		store.commitFinishedForTest = func(timestamp uint64, err error) {
+			if timestamp == 2 {
+				secondFinished <- err
+			}
+		}
+
+		first := store.NewWriteTxn()
+		require.NoError(t, first.SetEntry(Entry{Key: []byte("first"), Value: []byte("one")}))
+		firstDone := make(chan error, 1)
+		require.NoError(t, first.CommitAt(1, func(err error) { firstDone <- err }))
+		<-firstStarted
+		second := store.NewWriteTxn()
+		require.NoError(t, second.SetEntry(Entry{Key: []byte("second"), Value: []byte("two")}))
+		secondDone := make(chan error, 1)
+		require.NoError(t, second.CommitAt(2, func(err error) { secondDone <- err }))
+		require.NoError(t, <-secondFinished)
+		select {
+		case err := <-secondDone:
+			t.Fatalf("later callback acknowledged before earlier result: %v", err)
+		default:
+		}
+		close(releaseFirst)
+		require.NoError(t, <-firstDone)
+		require.NoError(t, <-secondDone)
+	})
+
+	t.Run("first error then synchronous", func(t *testing.T) {
+		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+		firstStarted := make(chan struct{})
+		releaseFirst := make(chan struct{})
+		secondFinished := make(chan error, 1)
+		store.commitStartedForTest = func(timestamp uint64, _ []mvcc.Mutation) {
+			if timestamp == 0 {
+				close(firstStarted)
+				<-releaseFirst
+			}
+		}
+		store.commitFinishedForTest = func(timestamp uint64, err error) {
+			if timestamp == 2 {
+				secondFinished <- err
+			}
+		}
+
+		first := store.NewWriteTxn()
+		require.NoError(t, first.SetEntry(Entry{Key: []byte("bad"), Value: []byte("value")}))
+		firstDone := make(chan error, 1)
+		require.NoError(t, first.CommitAt(0, func(err error) { firstDone <- err }))
+		<-firstStarted
+		second := store.NewWriteTxn()
+		require.NoError(t, second.SetEntry(Entry{Key: []byte("good"), Value: []byte("value")}))
+		secondReturned := make(chan error, 1)
+		go func() { secondReturned <- second.CommitAt(2, nil) }()
+		require.NoError(t, <-secondFinished)
+		read := store.NewReadTxn(2)
+		item, err := read.Get([]byte("good"))
+		require.NoError(t, err, "later independent commit must have physically published")
+		_, err = item.ValueCopy(nil)
+		require.NoError(t, err)
+		read.Discard()
+		select {
+		case err := <-secondReturned:
+			t.Fatalf("later synchronous acknowledgement escaped before earlier error delivery: %v", err)
+		default:
+		}
+		close(releaseFirst)
+		require.ErrorIs(t, <-firstDone, mvcc.ErrZeroTimestamp)
+		require.NoError(t, <-secondReturned)
+	})
 }
 
 func treeDBStatDelta(t *testing.T, before, after map[string]string, key string) uint64 {

@@ -92,6 +92,9 @@ type TreeDBStore struct {
 	// to TreeDB. It is deliberately test-only so production scheduling does not
 	// acquire an extra lock or copy mutation keys.
 	commitStartedForTest func(uint64, []mvcc.Mutation)
+	// commitFinishedForTest observes the storage result before the scheduler
+	// delivers an acknowledgement. Production stores leave it nil.
+	commitFinishedForTest func(uint64, error)
 }
 
 // OpenTreeDBStore opens and owns a TreeDB posting store. The adapter commit
@@ -636,7 +639,11 @@ func (s *TreeDBStore) commitAtAdmitted(commitTs uint64, mutations []mvcc.Mutatio
 	if s.commitStartedForTest != nil {
 		s.commitStartedForTest(commitTs, mutations)
 	}
-	if err := s.mvcc.CommitAt(commitTs, mutations, s.commitMode); err != nil {
+	err := s.mvcc.CommitAt(commitTs, mutations, s.commitMode)
+	if s.commitFinishedForTest != nil {
+		s.commitFinishedForTest(commitTs, err)
+	}
+	if err != nil {
 		return fmt.Errorf("commit posting TreeDB transaction: %w", err)
 	}
 	return nil
