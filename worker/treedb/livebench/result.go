@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 type Config struct {
 	Backend         string         `json:"backend"`
@@ -99,6 +99,12 @@ type Result struct {
 var requiredMetrics = []string{
 	"cpu_seconds", "rss_peak_bytes", "disk_logical_bytes", "disk_allocated_bytes",
 	"write_bytes", "write_amplification", "gc_cycles", "flushes", "checkpoints", "recovery_seconds",
+	"treedb_public_batch_write_calls", "treedb_public_batch_write_sync_calls",
+	"treedb_group_commit_groups", "treedb_group_commit_commits", "treedb_group_commit_participants",
+	"treedb_group_commit_syncs", "treedb_group_commit_group_size_max",
+	"treedb_command_wal_file_syncs", "treedb_value_log_syncs", "treedb_value_log_file_syncs",
+	"treedb_point_successor_calls", "treedb_point_successor_sources", "treedb_point_successor_sources_max",
+	"treedb_iterator_snapshot_rotations", "treedb_leaf_log_segment_rotations",
 }
 
 func (c Config) Fingerprint() string {

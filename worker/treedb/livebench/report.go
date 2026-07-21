@@ -147,6 +147,28 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 				metricSummaryScaled(rs, "write_bytes", 1024, 1), metricSummary(rs, "write_amplification", 2),
 				metricSummary(rs, "gc_cycles", 1), metricSummary(rs, "flushes", 1), metricSummary(rs, "checkpoints", 1))
 		}
+		treeResults := by["treedb/"+class]
+		b.WriteString("\nTreeDB durability diagnostics (timed-phase deltas unless marked high-water):\n\n")
+		b.WriteString("| ordinary writes | durable writes | group commits / groups | participants | group syncs | max group size (high-water) | command-WAL file syncs | value-log logical syncs | value-log file syncs |\n| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
+		fmt.Fprintf(&b, "| %s | %s | %s / %s | %s | %s | %s | %s | %s | %s |\n",
+			metricSummary(treeResults, "treedb_public_batch_write_calls", 0),
+			metricSummary(treeResults, "treedb_public_batch_write_sync_calls", 0),
+			metricSummary(treeResults, "treedb_group_commit_commits", 0),
+			metricSummary(treeResults, "treedb_group_commit_groups", 0),
+			metricSummary(treeResults, "treedb_group_commit_participants", 0),
+			metricSummary(treeResults, "treedb_group_commit_syncs", 0),
+			metricSummary(treeResults, "treedb_group_commit_group_size_max", 0),
+			metricSummary(treeResults, "treedb_command_wal_file_syncs", 0),
+			metricSummary(treeResults, "treedb_value_log_syncs", 0),
+			metricSummary(treeResults, "treedb_value_log_file_syncs", 0))
+		b.WriteString("\n| point-successor calls | point sources | sources/call | max sources (high-water) | iterator snapshot rotations | leaf-log segment rotations |\n| ---: | ---: | ---: | ---: | ---: | ---: |\n")
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s |\n",
+			metricSummary(treeResults, "treedb_point_successor_calls", 0),
+			metricSummary(treeResults, "treedb_point_successor_sources", 0),
+			metricRatioSummary(treeResults, "treedb_point_successor_sources", "treedb_point_successor_calls", 3),
+			metricSummary(treeResults, "treedb_point_successor_sources_max", 0),
+			metricSummary(treeResults, "treedb_iterator_snapshot_rotations", 0),
+			metricSummary(treeResults, "treedb_leaf_log_segment_rotations", 0))
 		delta := (med["treedb"]/med["badger"] - 1) * 100
 		if delta < -3 {
 			proceed = false
@@ -182,6 +204,21 @@ func metricSummaryScaled(results []Result, name string, scale float64, precision
 		m := r.Metrics[name]
 		if m.Available {
 			values = append(values, m.Value/scale)
+		}
+	}
+	if len(values) == 0 {
+		return fmt.Sprintf("unavailable (0/%d)", len(results))
+	}
+	return fmt.Sprintf("%.*f (%d/%d)", precision, summarize(values).median, len(values), len(results))
+}
+
+func metricRatioSummary(results []Result, numerator, denominator string, precision int) string {
+	values := make([]float64, 0, len(results))
+	for _, r := range results {
+		n, nok := r.Metrics[numerator]
+		d, dok := r.Metrics[denominator]
+		if nok && dok && n.Available && d.Available && d.Value > 0 {
+			values = append(values, n.Value/d.Value)
 		}
 	}
 	if len(values) == 0 {

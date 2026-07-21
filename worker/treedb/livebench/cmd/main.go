@@ -846,8 +846,50 @@ func metrics(backend string, cpu, hwm, diskLogical, diskAllocated float64, pb, p
 	m["gc_cycles"] = availability(gc, gcOK, "count", gcSource, "counter unavailable")
 	m["flushes"] = availability(flush, flushOK, "count", flushSource, flushReason)
 	m["checkpoints"] = availability(check, checkOK, "count", checkSource, "counter unavailable for selected backend")
+	addTreeDBDiagnostics(m, backend, sb, sa)
 	return m
 }
+
+type treeDBDiagnostic struct {
+	metric string
+	stat   string
+	gauge  bool
+}
+
+var treeDBDiagnostics = []treeDBDiagnostic{
+	{metric: "treedb_public_batch_write_calls", stat: "treedb.public.batch.write.calls_total"},
+	{metric: "treedb_public_batch_write_sync_calls", stat: "treedb.public.batch.write_sync.calls_total"},
+	{metric: "treedb_group_commit_groups", stat: "treedb.command_wal.group_commit.groups_total"},
+	{metric: "treedb_group_commit_commits", stat: "treedb.command_wal.group_commit.commits_total"},
+	{metric: "treedb_group_commit_participants", stat: "treedb.command_wal.group_commit.participants_total"},
+	{metric: "treedb_group_commit_syncs", stat: "treedb.command_wal.group_commit.syncs_total"},
+	{metric: "treedb_group_commit_group_size_max", stat: "treedb.command_wal.group_commit.group_size_max", gauge: true},
+	{metric: "treedb_command_wal_file_syncs", stat: "treedb.command_wal.file_sync.calls_total"},
+	{metric: "treedb_value_log_syncs", stat: "treedb.cache.value_log.sync.calls_total"},
+	{metric: "treedb_value_log_file_syncs", stat: "treedb.cache.value_log.file_sync.calls_total"},
+	{metric: "treedb_point_successor_calls", stat: "treedb.cache.point_successor.calls_total"},
+	{metric: "treedb_point_successor_sources", stat: "treedb.cache.point_successor.sources_total"},
+	{metric: "treedb_point_successor_sources_max", stat: "treedb.cache.point_successor.sources_max", gauge: true},
+	{metric: "treedb_iterator_snapshot_rotations", stat: "treedb.cache.iterator.snapshot_rotations_total"},
+	{metric: "treedb_leaf_log_segment_rotations", stat: "treedb.cache.leaf_log_lanes.segment_rotations_total"},
+}
+
+func addTreeDBDiagnostics(out map[string]livebench.Metric, backend string, before, after map[string]float64) {
+	for _, diagnostic := range treeDBDiagnostics {
+		source := "TreeDB /debug/store timed-phase delta: " + diagnostic.stat
+		if backend != "treedb" {
+			out[diagnostic.metric] = availability(0, false, "count", source, "TreeDB-only diagnostic")
+			continue
+		}
+		value, ok := delta(after, before, diagnostic.stat)
+		if diagnostic.gauge {
+			value, ok = after[diagnostic.stat]
+			source = "TreeDB /debug/store process-lifetime high-water: " + diagnostic.stat
+		}
+		out[diagnostic.metric] = availability(value, ok, "count", source, "TreeDB diagnostic counter unavailable")
+	}
+}
+
 func availability(v float64, ok bool, unit, source, reason string) livebench.Metric {
 	return livebench.Metric{Available: ok, Value: v, Unit: unit, Source: source, Reason: map[bool]string{true: "", false: reason}[ok]}
 }
