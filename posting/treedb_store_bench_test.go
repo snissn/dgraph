@@ -12,6 +12,10 @@ import (
 	"io/fs"
 	"math"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -207,6 +211,107 @@ func BenchmarkTreeDBStoreCallbackPipeline(b *testing.B) {
 			}
 		})
 	}
+}
+
+// BenchmarkTreeDBStoreDurableCallbackGroupCommit is the Dgraph-shaped durable
+// callback path: independent TxnWriter.SetAt calls share the adapter's bounded
+// scheduler, and every writer drains its callbacks before submitting its next
+// small window. It reports the public Gomap counters needed to distinguish
+// scheduler overlap from a merely fast single-commit path.
+func BenchmarkTreeDBStoreDurableCallbackGroupCommit(b *testing.B) {
+	store := openTreeDBAdapterBenchStoreMode(b, TreeDBCommitDurable)
+	before, err := store.Stats()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	var timestamp atomic.Uint64
+	var submitted atomic.Uint64
+	var latencyMu sync.Mutex
+	latencies := make([]time.Duration, 0, 1024)
+	const window = 8
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		writer := NewTxnWriterForStore(store)
+		pending := 0
+		started := time.Now()
+		for pb.Next() {
+			sequence := timestamp.Add(1)
+			var key [16]byte
+			binary.LittleEndian.PutUint64(key[:8], sequence)
+			binary.LittleEndian.PutUint64(key[8:], sequence^0x9e3779b97f4a7c15)
+			if err := writer.SetAt(key[:], []byte("durable-group-value"), BitDeltaPosting, sequence); err != nil {
+				b.Error(err)
+				return
+			}
+			submitted.Add(1)
+			pending++
+			if pending != window {
+				continue
+			}
+			if err := writer.Wait(); err != nil {
+				b.Error(err)
+				return
+			}
+			latencyMu.Lock()
+			latencies = append(latencies, time.Since(started)/time.Duration(pending))
+			latencyMu.Unlock()
+			pending = 0
+			started = time.Now()
+		}
+		if pending != 0 {
+			if err := writer.Wait(); err != nil {
+				b.Error(err)
+				return
+			}
+			latencyMu.Lock()
+			latencies = append(latencies, time.Since(started)/time.Duration(pending))
+			latencyMu.Unlock()
+		}
+	})
+	b.StopTimer()
+
+	after, err := store.Stats()
+	if err != nil {
+		b.Fatal(err)
+	}
+	publicWrites := treeDBBenchStatDelta(b, before, after, "treedb.public.batch.write_sync.calls_total")
+	groups := treeDBBenchStatDelta(b, before, after, "treedb.command_wal.group_commit.groups_total")
+	participants := treeDBBenchStatDelta(b, before, after, "treedb.command_wal.group_commit.participants_total")
+	groupSyncs := treeDBBenchStatDelta(b, before, after, "treedb.command_wal.group_commit.syncs_total")
+	fileSyncs := treeDBBenchStatDelta(b, before, after, "treedb.command_wal.file_sync.calls_total")
+	b.ReportMetric(float64(submitted.Load()), "public-writes")
+	b.ReportMetric(float64(groups), "groups")
+	b.ReportMetric(float64(participants), "participants")
+	b.ReportMetric(float64(groupSyncs), "group-syncs")
+	b.ReportMetric(float64(fileSyncs), "file-syncs")
+	b.ReportMetric(float64(treeDBBenchStatUint(b, after, "treedb.command_wal.group_commit.group_size_max")), "group-size-max")
+	if fileSyncs != 0 {
+		b.ReportMetric(float64(publicWrites)/float64(fileSyncs), "commits/sync")
+	}
+	if len(latencies) != 0 {
+		sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
+		b.ReportMetric(float64(latencies[len(latencies)/2].Microseconds()), "p50-us")
+		b.ReportMetric(float64(latencies[(len(latencies)*95+99)/100-1].Microseconds()), "p95-us")
+	}
+}
+
+func treeDBBenchStatDelta(b *testing.B, before, after map[string]string, key string) uint64 {
+	b.Helper()
+	return treeDBBenchStatUint(b, after, key) - treeDBBenchStatUint(b, before, key)
+}
+
+func treeDBBenchStatUint(b *testing.B, stats map[string]string, key string) uint64 {
+	b.Helper()
+	value, ok := stats[key]
+	if !ok {
+		b.Fatalf("missing TreeDB stat %q", key)
+	}
+	parsed, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		b.Fatalf("parse TreeDB stat %q=%q: %v", key, value, err)
+	}
+	return parsed
 }
 
 func benchmarkTreeDBStoreWrites(b *testing.B, batchSize int) {
@@ -461,13 +566,28 @@ func benchmarkTreeDBStoreReopen(b *testing.B) {
 
 func openTreeDBAdapterBenchStore(b *testing.B) *TreeDBStore {
 	b.Helper()
-	return openTreeDBAdapterBenchStoreAt(b, b.TempDir())
+	return openTreeDBAdapterBenchStoreMode(b, TreeDBCommitRelaxed)
+}
+
+func openTreeDBAdapterBenchStoreMode(b *testing.B, mode TreeDBCommitMode) *TreeDBStore {
+	b.Helper()
+	return openTreeDBAdapterBenchStoreAtMode(b, b.TempDir(), mode)
 }
 
 func openTreeDBAdapterBenchStoreAt(b *testing.B, dir string) *TreeDBStore {
+	return openTreeDBAdapterBenchStoreAtMode(b, dir, TreeDBCommitRelaxed)
+}
+
+func openTreeDBAdapterBenchStoreAtMode(b *testing.B, dir string, mode TreeDBCommitMode) *TreeDBStore {
 	b.Helper()
-	opts := treeDBAdapterBenchOptions(dir)
-	store, err := OpenTreeDBStore(opts, TreeDBCommitRelaxed)
+	profile := treedb.ProfileCommandWALRelaxed
+	if mode == TreeDBCommitDurable {
+		profile = treedb.ProfileCommandWALDurable
+	}
+	opts := treedb.OptionsFor(profile, dir)
+	opts.DisableSideStores = true
+	opts.BackgroundCheckpointInterval = -1
+	store, err := OpenTreeDBStore(opts, mode)
 	if err != nil {
 		b.Fatal(err)
 	}
