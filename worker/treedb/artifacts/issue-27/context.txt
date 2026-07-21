@@ -1,0 +1,24 @@
+utc=2026-07-21T01:46:40Z
+dgraph_sha=6bfe9e7b6d3e60c3147581af12db4443bd810809
+dirty=false
+gomap=github.com/snissn/gomap v0.6.2-0.20260721010427-121462d80f1f
+host=mikers-B560-DS3H-AC-Y1
+kernel=Linux 6.8.0-124-generic #124~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 21:05:19 UTC  x86_64 GNU/Linux
+go=go version go1.26.4 linux/amd64
+cpu=11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz
+ram_total_bytes=33512771584
+storage_scope=artifact_and_posting
+storage_source=/dev/nvme1n1p1
+storage_model=Samsung SSD 990 PRO 4TB
+storage_size_bytes=4000787030016
+storage_filesystem=ext4
+storage_mountpoint=/mnt/fast4tb
+environment_GOWORK=off
+environment_TMPDIR=/mnt/fast4tb/tmp
+environment_GOMAXPROCS=
+environment_GOFLAGS=
+construction_audit=
+loadavg=4.21 4.32 5.07 2/4641 2507761
+micro_command=GOWORK=off go test ./posting -run ^$ -bench Benchmark(BadgerStoreSeam|TreeDBStoreAdapterOverhead|CommitEventDisabledAndUnsubscribed)$ -benchmem -benchtime 1s -count 5
+live_shape=repeats=3 dataset=500 warmup=100 timed=2000 concurrency=4 seed=20260711 topology=single-zero-single-alpha mix=60-point/20-one-hop/20-write
+measurement_boundary=database creation, schema, load, and warmup precede timed operations; restart recovery is measured separately

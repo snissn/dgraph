@@ -1,0 +1,33 @@
+File: dgraph
+Build ID: 1b3b89c4f2c8d6edadb9d16568a5a569619b66e9
+Type: cpu
+Time: 2026-07-20 15:50:12 HST
+Duration: 5s, Total samples = 1.49s (29.80%)
+Showing nodes accounting for 0.78s, 52.35% of 1.49s total
+Showing top 25 nodes out of 608
+      flat  flat%   sum%        cum   cum%
+     0.31s 20.81% 20.81%      0.31s 20.81%  internal/runtime/syscall/linux.Syscall6
+     0.06s  4.03% 24.83%      0.06s  4.03%  runtime.futex
+     0.06s  4.03% 28.86%      0.06s  4.03%  runtime.memmove
+     0.04s  2.68% 31.54%      0.04s  2.68%  runtime.heapSetTypeSmallHeader
+     0.03s  2.01% 33.56%      0.03s  2.01%  github.com/snissn/gomap/TreeDB/freelist.(*stateChunk).retiredSummary
+     0.03s  2.01% 35.57%      0.03s  2.01%  runtime.usleep
+     0.02s  1.34% 36.91%      0.02s  1.34%  aeshashbody
+     0.02s  1.34% 38.26%      0.02s  1.34%  github.com/snissn/gomap/TreeDB/page.(*PageHeader).Encode
+     0.02s  1.34% 39.60%      0.02s  1.34%  go.opentelemetry.io/otel/baggage.Baggage.String
+     0.02s  1.34% 40.94%      0.02s  1.34%  runtime.memclrNoHeapPointers
+     0.02s  1.34% 42.28%      0.06s  4.03%  runtime.newobject
+     0.02s  1.34% 43.62%      0.02s  1.34%  runtime.nextFreeFast (inline)
+     0.01s  0.67% 44.30%      0.01s  0.67%  context.(*cancelCtx).Done
+     0.01s  0.67% 44.97%      0.01s  0.67%  context.(*valueCtx).Value
+     0.01s  0.67% 45.64%      0.01s  0.67%  context.parentCancelCtx
+     0.01s  0.67% 46.31%      0.01s  0.67%  fmt.(*fmt).fmtInteger
+     0.01s  0.67% 46.98%      0.04s  2.68%  fmt.(*pp).doPrintf
+     0.01s  0.67% 47.65%      0.01s  0.67%  github.com/dgraph-io/dgraph/v25/dql.lexTopLevel
+     0.01s  0.67% 48.32%      0.01s  0.67%  github.com/dgraph-io/dgraph/v25/lex.(*Lexer).Emit
+     0.01s  0.67% 48.99%      0.03s  2.01%  github.com/dgraph-io/dgraph/v25/query.(*Request).ProcessQuery
+     0.01s  0.67% 49.66%      0.01s  0.67%  github.com/dgraph-io/dgraph/v25/query.(*encoder).fixOrder
+     0.01s  0.67% 50.34%      0.01s  0.67%  github.com/dgraph-io/dgraph/v25/query.ExpandEdges
+     0.01s  0.67% 51.01%      0.01s  0.67%  github.com/dgraph-io/dgraph/v25/raftwal.(*metaFile).StoreSnapshot
+     0.01s  0.67% 51.68%      0.04s  2.68%  github.com/dgraph-io/dgraph/v25/worker.(*node).processApplyCh.func1
+     0.01s  0.67% 52.35%      0.03s  2.01%  github.com/dgraph-io/dgraph/v25/worker.(*queryState).helpProcessTask

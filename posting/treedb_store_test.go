@@ -841,15 +841,35 @@ func TestTreeDBStoreLifecycleStatusAndDurabilityModes(t *testing.T) {
 	require.Equal(t, []byte("reopen"), value)
 	require.NoError(t, reopened.Close())
 
-	_, err = OpenTreeDBStore(opts, TreeDBCommitDurable)
-	require.ErrorIs(t, err, mvcc.ErrDurabilityUnavailable)
+	durableOptUp, err := OpenTreeDBStore(opts, TreeDBCommitDurable)
+	require.NoError(t, err)
+	commitStoreEntry(t, durableOptUp, 8, Entry{Key: []byte("durable-opt-up"), Value: []byte("synced")})
+	require.NoError(t, durableOptUp.Close())
+	durableOptUp, err = OpenTreeDBStore(opts, TreeDBCommitDurable)
+	require.NoError(t, err)
+	read = durableOptUp.NewReadTxn(8)
+	item, err = read.Get([]byte("durable-opt-up"))
+	require.NoError(t, err)
+	value, err = item.ValueCopy(nil)
+	require.NoError(t, err)
+	require.Equal(t, []byte("synced"), value)
+	read.Discard()
+	require.NoError(t, durableOptUp.Close())
 	_, err = OpenTreeDBStore(opts, TreeDBCommitMode(99))
 	require.ErrorIs(t, err, ErrTreeDBCommitMode)
 }
 
 func TestTreeDBStoreDurableCrashReopen(t *testing.T) {
-	if os.Getenv("DGRAPH_TREEDB_CRASH_CHILD") == "1" {
-		if err := writeTreeDBCrashFixture(os.Getenv("DGRAPH_TREEDB_CRASH_DIR")); err != nil {
+	testTreeDBStoreDurableCrashReopen(t, treedb.ProfileCommandWALDurable)
+}
+
+func TestTreeDBStoreRelaxedProfileDurableOptUpCrashReopen(t *testing.T) {
+	testTreeDBStoreDurableCrashReopen(t, treedb.ProfileCommandWALRelaxed)
+}
+
+func testTreeDBStoreDurableCrashReopen(t *testing.T, profile treedb.Profile) {
+	if os.Getenv("DGRAPH_TREEDB_CRASH_CHILD") == t.Name() {
+		if err := writeTreeDBCrashFixture(os.Getenv("DGRAPH_TREEDB_CRASH_DIR"), profile); err != nil {
 			_, _ = fmt.Fprintln(os.Stderr, err)
 			os.Exit(2)
 		}
@@ -858,15 +878,15 @@ func TestTreeDBStoreDurableCrashReopen(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	cmd := exec.Command(os.Args[0], "-test.run=^TestTreeDBStoreDurableCrashReopen$")
+	cmd := exec.Command(os.Args[0], "-test.run=^"+t.Name()+"$")
 	cmd.Env = append(os.Environ(),
-		"DGRAPH_TREEDB_CRASH_CHILD=1",
+		"DGRAPH_TREEDB_CRASH_CHILD="+t.Name(),
 		"DGRAPH_TREEDB_CRASH_DIR="+dir,
 	)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "crash writer failed: %s", output)
 
-	opts := treedb.OptionsFor(treedb.ProfileCommandWALDurable, dir)
+	opts := treedb.OptionsFor(profile, dir)
 	opts.DisableSideStores = true
 	opts.BackgroundCheckpointInterval = -1
 	store, err := OpenTreeDBStore(opts, TreeDBCommitDurable)
@@ -884,8 +904,8 @@ func TestTreeDBStoreDurableCrashReopen(t *testing.T) {
 	require.Equal(t, sha256.Sum256([]byte("durable-envelope-payload")), sha256.Sum256(value))
 }
 
-func writeTreeDBCrashFixture(dir string) error {
-	opts := treedb.OptionsFor(treedb.ProfileCommandWALDurable, dir)
+func writeTreeDBCrashFixture(dir string, profile treedb.Profile) error {
+	opts := treedb.OptionsFor(profile, dir)
 	opts.DisableSideStores = true
 	opts.BackgroundCheckpointInterval = -1
 	store, err := OpenTreeDBStore(opts, TreeDBCommitDurable)

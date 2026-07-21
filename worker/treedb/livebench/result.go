@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 type Config struct {
 	Backend         string         `json:"backend"`
@@ -96,10 +96,19 @@ type Result struct {
 	Validation    Validation         `json:"validation"`
 }
 
-var requiredMetrics = []string{
+var requiredTreeDBMetrics = []string{
+	"treedb_public_batch_write_calls", "treedb_public_batch_write_sync_calls",
+	"treedb_group_commit_groups", "treedb_group_commit_commits", "treedb_group_commit_participants",
+	"treedb_group_commit_syncs", "treedb_group_commit_group_size_max",
+	"treedb_command_wal_file_syncs", "treedb_value_log_syncs", "treedb_value_log_file_syncs",
+	"treedb_point_successor_calls", "treedb_point_successor_sources", "treedb_point_successor_sources_max",
+	"treedb_iterator_snapshot_rotations", "treedb_leaf_log_segment_rotations",
+}
+
+var requiredMetrics = append([]string{
 	"cpu_seconds", "rss_peak_bytes", "disk_logical_bytes", "disk_allocated_bytes",
 	"write_bytes", "write_amplification", "gc_cycles", "flushes", "checkpoints", "recovery_seconds",
-}
+}, requiredTreeDBMetrics...)
 
 func (c Config) Fingerprint() string {
 	copy := c
@@ -168,6 +177,15 @@ func (r Result) Validate() error {
 			errs = append(errs, fmt.Errorf("metric %q has invalid available value %v", name, m.Value))
 		}
 	}
+	for _, name := range requiredTreeDBMetrics {
+		m, ok := r.Metrics[name]
+		if r.Config.Backend == "treedb" && (!ok || !m.Available) {
+			errs = append(errs, fmt.Errorf("TreeDB diagnostic %q must be available", name))
+		}
+		if r.Config.Backend == "badger" && ok && m.Available {
+			errs = append(errs, fmt.Errorf("TreeDB-only diagnostic %q must be unavailable for Badger", name))
+		}
+	}
 	for _, name := range []string{"cpu_seconds", "rss_peak_bytes", "disk_logical_bytes", "disk_allocated_bytes", "recovery_seconds"} {
 		m, ok := r.Metrics[name]
 		invalidZero := name != "cpu_seconds" && m.Value <= 0
@@ -217,7 +235,7 @@ func expectedObserved(c Config) (string, string, error) {
 			return "", "", fmt.Errorf("posting-store selector: %w", err)
 		}
 		if c.DurabilityClass == "relaxed" {
-			return "treedb", "wal_on_relaxed_sync+no_read_checksum", nil
+			return "treedb", "wal_on_relaxed_sync", nil
 		}
 		return "treedb", "wal_on_sync", nil
 	default:

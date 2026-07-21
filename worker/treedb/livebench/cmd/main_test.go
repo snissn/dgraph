@@ -165,6 +165,42 @@ func TestBadgerFlushMetricIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestTreeDBDiagnosticMetricsPreserveDeltasAndHighWaterGauges(t *testing.T) {
+	before := map[string]float64{
+		"treedb.command_wal.group_commit.commits_total":  10,
+		"treedb.command_wal.group_commit.group_size_max": 2,
+		"treedb.cache.point_successor.calls_total":       20,
+	}
+	after := map[string]float64{
+		"treedb.command_wal.group_commit.commits_total":  17,
+		"treedb.command_wal.group_commit.group_size_max": 4,
+		"treedb.cache.point_successor.calls_total":       25,
+	}
+	got := metrics("treedb", 1, 2, 3, 4, nil, nil, before, after)
+	if metric := got["treedb_group_commit_commits"]; !metric.Available || metric.Value != 7 || !strings.Contains(metric.Source, "timed-phase delta") {
+		t.Fatalf("group commits = %+v", metric)
+	}
+	if metric := got["treedb_group_commit_group_size_max"]; !metric.Available || metric.Value != 4 || !strings.Contains(metric.Source, "process-lifetime high-water") {
+		t.Fatalf("group size high-water = %+v", metric)
+	}
+	if metric := got["treedb_point_successor_calls"]; !metric.Available || metric.Value != 5 {
+		t.Fatalf("point successor calls = %+v", metric)
+	}
+	if metric := got["treedb_value_log_syncs"]; metric.Available || metric.Reason == "" {
+		t.Fatalf("missing TreeDB diagnostic did not fail closed: %+v", metric)
+	}
+}
+
+func TestBadgerTreeDBDiagnosticsAreExplicitlyUnavailable(t *testing.T) {
+	got := metrics("badger", 1, 2, 3, 4, nil, nil, nil, nil)
+	for _, diagnostic := range treeDBDiagnostics {
+		metric := got[diagnostic.metric]
+		if metric.Available || metric.Reason != "TreeDB-only diagnostic" {
+			t.Fatalf("%s = %+v", diagnostic.metric, metric)
+		}
+	}
+}
+
 func TestUnsupportedOKRequiresExactExpectedTokenSet(t *testing.T) {
 	want := "backup,export,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality"
 	for _, tokens := range []string{want, "inequality,count,sort,badger_subscribe,ttl,in_memory,encryption,restore,import,export,backup"} {

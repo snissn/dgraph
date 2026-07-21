@@ -56,6 +56,28 @@ func TestRenderReportSeparatesDurabilityClassesAndMakesDecision(t *testing.T) {
 	}
 }
 
+func TestRenderReportIncludesTreeDBDurabilityAndPointSourceDiagnostics(t *testing.T) {
+	set := validSet(1)
+	for i := range set {
+		if set[i].Config.Backend != "treedb" {
+			continue
+		}
+		set[i].Metrics["treedb_group_commit_commits"] = Metric{Available: true, Value: 8, Unit: "count", Source: "test"}
+		set[i].Metrics["treedb_group_commit_groups"] = Metric{Available: true, Value: 4, Unit: "count", Source: "test"}
+		set[i].Metrics["treedb_point_successor_sources"] = Metric{Available: true, Value: 6, Unit: "count", Source: "test"}
+		set[i].Metrics["treedb_point_successor_calls"] = Metric{Available: true, Value: 3, Unit: "count", Source: "test"}
+	}
+	report, err := RenderReport(set, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"TreeDB durability diagnostics", "group commits / groups", "point sources", "sources/call", "2.000 (1/1)"} {
+		if !strings.Contains(report, want) {
+			t.Fatalf("report missing %q:\n%s", want, report)
+		}
+	}
+}
+
 func TestRenderReportIncludesOnlySuppliedProfileArtifactsWithoutFindings(t *testing.T) {
 	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
 	dir := t.TempDir()

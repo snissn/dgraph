@@ -81,9 +81,10 @@ type TreeDBStore struct {
 	beforeCommitForTest func()
 }
 
-// OpenTreeDBStore opens and owns a TreeDB posting store. opts.Durability must
-// match mode: durable commits require TreeDB's durable mode, while relaxed
-// commits may use either relaxed TreeDB profile.
+// OpenTreeDBStore opens and owns a TreeDB posting store. The adapter commit
+// mode selects whether each MVCC commit uses Write or WriteSync. TreeDB's
+// canonical production profiles all support an explicit WriteSync opt-up even
+// when their ordinary acknowledgement policy is relaxed.
 func OpenTreeDBStore(opts treedb.Options, mode TreeDBCommitMode) (*TreeDBStore, error) {
 	commitMode, err := toMVCCCommitMode(mode)
 	if err != nil {
@@ -103,13 +104,6 @@ func OpenTreeDBStore(opts treedb.Options, mode TreeDBCommitMode) (*TreeDBStore, 
 			mutations: make([]mvcc.Mutation, 0, 16),
 			arena:     make([]byte, 0, 4<<10),
 		}
-	}
-	// Use TreeDB's exported configuration contract here. DurabilityMode is an
-	// operator-facing diagnostic string; opts.Durability is the stable typed
-	// capability that controls whether WriteSync is available.
-	if commitMode == mvcc.CommitDurable && opts.Durability != treedb.DurabilityDurable {
-		_ = store.Close()
-		return nil, fmt.Errorf("%w: durable adapter with TreeDB mode %q", mvcc.ErrDurabilityUnavailable, db.DurabilityMode())
 	}
 	return store, nil
 }
