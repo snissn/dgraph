@@ -90,20 +90,20 @@ stream/import/export, subscription, protobuf, monitoring, or encryption semantic
 ### Snapshot publication and discard floors
 
 Applying a Raft snapshot preserves Badger's `SetDiscardTs` hint. It does not advance TreeDB's
-persisted discard floor: snapshot `ReadTs` is the maximum published commit timestamp observed in
-the scanned Raft logs, not the minimum timestamp still needed by readers or posting dependencies.
-TreeDB rejects fresh reads and commits at or below its floor even before pruning any versions.
-Posting lists can lazily read split parts at an older root `minTs`, and a cold rollup can publish an
-older represented commit timestamp despite unrelated newer commits. These paths must remain
-admitted after snapshot application.
+persisted discard floor: snapshot `ReadTs` is the maximum published commit timestamp observed in the
+scanned Raft logs, not the minimum timestamp still needed by readers or posting dependencies. TreeDB
+rejects fresh reads and commits at or below its floor even before pruning any versions. Posting
+lists can lazily read split parts at an older root `minTs`, and a cold rollup can publish an older
+represented commit timestamp despite unrelated newer commits. These paths must remain admitted after
+snapshot application.
 
 The explicit `TreeDBStore.AdvanceDiscardFloor` API remains available to a caller that proves a safe
-reader, dependency and late-publication boundary. Automatic history pruning remains disabled.
-M8 must also prove complete/delta-chain reconstruction, root/split dependency closure and whole
-rollup-output acknowledgement before reclamation can be enabled. Value-log segment deletion
-remains reachability-based. Stopping automatic advancement cannot repair an already raised
-monotonic floor; TreeDB is pre-alpha, so affected experiments should rebuild their DB directories
-rather than attempt to lower persisted floors.
+reader, dependency and late-publication boundary. Automatic history pruning remains disabled. M8
+must also prove complete/delta-chain reconstruction, root/split dependency closure and whole
+rollup-output acknowledgement before reclamation can be enabled. Value-log segment deletion remains
+reachability-based. Stopping automatic advancement cannot repair an already raised monotonic floor;
+TreeDB is pre-alpha, so affected experiments should rebuild their DB directories rather than attempt
+to lower persisted floors.
 
 ## Compatibility blocker matrix
 
