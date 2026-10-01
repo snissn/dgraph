@@ -782,13 +782,10 @@ func (n *node) applyCommitted(proposal *pb.Proposal, key uint64) error {
 			}
 			glog.Warningf("Error while calling CreateSnapshot: %v. Retrying...", err)
 		}
-		// We can now discard all invalid versions of keys below this ts.
+		// Preserve Badger's discard hint. Snapshot ReadTs is publication progress,
+		// not a safe TreeDB floor: older reads and cold rollup writes remain possible.
 		if pstore != nil {
 			pstore.SetDiscardTs(snap.ReadTs)
-		} else if State.TreeDBStore != nil {
-			if err := State.TreeDBStore.AdvanceDiscardFloor(snap.ReadTs); err != nil {
-				return errors.Wrap(err, "advance TreeDB discard floor")
-			}
 		}
 		return nil
 	case proposal.Restore != nil:
