@@ -271,7 +271,9 @@ func (s *TreeDBStore) DiscardFloor() (uint64, error) {
 }
 
 // AdvanceDiscardFloor persists a monotonic discard floor using the adapter's
-// configured acknowledgement boundary.
+// configured acknowledgement boundary. The caller must establish that reads,
+// posting dependencies and future commits no longer need timestamps at or below
+// this floor; Raft snapshot publication alone does not establish that boundary.
 func (s *TreeDBStore) AdvanceDiscardFloor(timestamp uint64) error {
 	if s == nil {
 		return fmt.Errorf("advance discard floor posting TreeDB: %w", treedb.ErrClosed)
