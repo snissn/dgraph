@@ -156,3 +156,18 @@ no resource limits. Its owned process is stopped within bounded cleanup; test fa
 is preserved. Abrupt host loss may leave observations missing. These are causal observations, not an
 OOM diagnosis or a remedy for the retained runner shutdowns. Hosted full CI remains required; all
 four M3 performance HOLDs and the absence of performance qualification remain unchanged.
+
+The same public-personal guard sets `DGRAPH_CI_PUBLIC_NATIVE=1` for load CI. The existing
+`ComposeFileArgs` hook adds one overlay only for `systest/21million/live/docker-compose.yml`; its
+Alpha receives `DGRAPH_ALPHA_CACHE=size-mb=1024;percentage=40,40,20;remove-on-update=false`. Other
+fixtures and nonpublic runs retain their original configuration. Public integration2 adds
+`go test -p=1` to serialize packages, retaining every package, assertion and 90-minute timeout. This
+reduces configured cache allowance and package overlap; it does not cap RSS or a package's internal
+cluster concurrency, and neither capacity nor deadline success is proven. Full native CI remains
+required. A repeated resource shutdown or unchanged deadline failure requires a capacity decision
+rather than another blind tuning head.
+
+The committed root `go.sum` is the reproducible checksum-only output of the build's existing
+`go mod tidy`, with unchanged `go.mod`, selected module versions and replacements. All three native
+workflows require committed module inputs to remain unchanged after build and before test admission.
+ARM keeps its exact source identity and coverage comparison against the aggregate checkout.

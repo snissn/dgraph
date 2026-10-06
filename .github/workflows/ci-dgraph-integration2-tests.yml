@@ -51,6 +51,9 @@ jobs:
           # clean cache
           go clean -testcache
 
+      - name: Require stable committed module inputs
+        run: git diff --exit-code HEAD -- go.mod go.sum
+
       - name: Run Integration2 Tests
         run: |
           #!/bin/bash
@@ -60,7 +63,7 @@ jobs:
           cp dgraph/dgraph ~/go/bin/dgraph
           # run the tests
           if ${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) == 'false' }}; then
-            python3 t/ci-native/observe.py --ticks 180 --output "$RUNNER_TEMP/native-integration2.jsonl" -- go test -v -timeout=90m -failfast -tags=integration2 ./...
+            python3 t/ci-native/observe.py --ticks 180 --output "$RUNNER_TEMP/native-integration2.jsonl" -- go test -p=1 -v -timeout=90m -failfast -tags=integration2 ./...
           else
             go test -v -timeout=90m -failfast -tags=integration2 ./...
           fi

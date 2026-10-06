@@ -80,6 +80,9 @@ jobs:
           # clean up docker containers before test execution
           cd t; ./t -r
 
+      - name: Require stable committed module inputs
+        run: git diff --exit-code HEAD -- go.mod go.sum
+
       - name: Run Integration Tests
         run: |
           #!/bin/bash

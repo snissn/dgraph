@@ -123,6 +123,36 @@ class CoverageTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_module_admission_precedes_native_tests_and_rejects_drift(self):
+        repo = pathlib.Path(__file__).resolve().parents[2]
+        command = "git diff --exit-code HEAD -- go.mod go.sum"
+        for name, test_name in (("ci-dgraph-tests-arm64.yml", "Run Integration Tests"),
+                                ("ci-dgraph-integration2-tests.yml", "Run Integration2 Tests"),
+                                ("ci-dgraph-load-tests.yml", "Run Load Tests")):
+            workflow = (repo / ".github/workflows" / name).read_text()
+            step = "      - name: Require stable committed module inputs\n        run: " + command
+            self.assertEqual(workflow.count(step), 1)
+            self.assertLess(workflow.index("Make Linux Build and Docker Image"), workflow.index(step))
+            self.assertLess(workflow.index(step), workflow.index("      - name: " + test_name))
+            self.assertNotIn("continue-on-error", step)
+        git_dir = subprocess.check_output(["git", "rev-parse", "--absolute-git-dir"], cwd=repo, text=True).strip()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            originals = {name: subprocess.check_output(["git", "show", "HEAD:" + name], cwd=repo) for name in ("go.mod", "go.sum")}
+            index = root / "fixture-index"
+            index.write_bytes((pathlib.Path(git_dir) / "index").read_bytes())
+            env = dict(os.environ, GIT_DIR=git_dir, GIT_WORK_TREE=str(root), GIT_INDEX_FILE=str(index))
+            for name, data in originals.items():
+                (root / name).write_bytes(data)
+            result = subprocess.run(["bash", "-eo", "pipefail", "-c", command], cwd=root, env=env, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            for name, data in originals.items():
+                with self.subTest(drift=name):
+                    (root / name).write_bytes(data + b"\n")
+                    result = subprocess.run(["bash", "-eo", "pipefail", "-c", command], cwd=root, env=env, capture_output=True)
+                    self.assertNotEqual(result.returncode, 0)
+                    (root / name).write_bytes(data)
+
     def test_failed_arm_shard_runs_independent_cleanup(self):
         workflow = (pathlib.Path(__file__).resolve().parents[2] / ".github/workflows/ci-dgraph-tests-arm64.yml").read_text()
         test_step = workflow.split("      - name: Run Integration Tests\n", 1)[1].split("\n      - ", 1)[0]
