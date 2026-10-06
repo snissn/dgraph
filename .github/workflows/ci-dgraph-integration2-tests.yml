@@ -37,6 +37,14 @@ jobs:
       - name: Make Linux Build and Docker Image
         run: make docker-image
 
+      - name: Prepare pinned MinIO source images for public personal repositories
+        if:
+          github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) ==
+          'false'
+        run: |
+          contrib/ci-minio/build.sh "$RUNNER_TEMP/ci-minio"
+          echo 'MINIO_CURRENT_IMAGE=dgraph/ci-minio:2025-source' >> "$GITHUB_ENV"
+
       - name: Clean Up Environment
         run: |
           #!/bin/bash

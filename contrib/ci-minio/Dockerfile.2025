@@ -1,0 +1,19 @@
+# CI-only packaging for the existing root/default-user test fixtures.
+# The helper fences the native runtime ID and verifies inherited content layers.
+ARG RUNTIME_IMAGE
+FROM ${RUNTIME_IMAGE}
+WORKDIR /
+ENV GODEBUG=""
+COPY minio /usr/bin/minio
+COPY docker-entrypoint.sh /usr/bin/docker-entrypoint.sh
+COPY LICENSE CREDITS /licenses/
+RUN chmod 0755 /usr/bin/minio /usr/bin/docker-entrypoint.sh && \
+    printf '%s\n' '#!/bin/sh' 'set -eu' \
+    'if [ -n "${MINIO_USERNAME:-}" ] && [ -n "${MINIO_GROUPNAME:-}" ]; then' \
+    '  echo "CI MinIO supports only root/default-user fixtures" >&2; exit 1' \
+    'fi' 'exec /usr/bin/docker-entrypoint.sh "$@"' > /usr/bin/ci-minio-entrypoint && \
+    chmod 0755 /usr/bin/ci-minio-entrypoint
+EXPOSE 9000
+VOLUME ["/data"]
+ENTRYPOINT ["/usr/bin/ci-minio-entrypoint"]
+CMD ["minio"]
