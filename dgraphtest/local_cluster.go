@@ -90,6 +90,10 @@ func (u UpgradeStrategy) String() string {
 
 // NewLocalCluster creates a new local dgraph cluster with given configuration
 func NewLocalCluster(conf ClusterConfig) (*LocalCluster, error) {
+	conf, err := localClusterCacheProfile(conf, os.Getenv("DGRAPH_CI_LOCAL_ALPHA_CACHE_MB"))
+	if err != nil {
+		return nil, err
+	}
 	c := &LocalCluster{conf: conf}
 	if err := c.init(); err != nil {
 		c.Cleanup(true)

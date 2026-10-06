@@ -78,7 +78,8 @@ var (
 		"Keep the clusters running on program end.")
 	clear = pflag.BoolP("clear", "r", false,
 		"Clear all the test clusters.")
-	dry = pflag.BoolP("dry", "", false,
+	listPackages = pflag.Bool("list-packages", false, "List selected packages without runner setup or execution.")
+	dry          = pflag.BoolP("dry", "", false,
 		"Just show how the packages would be executed, without running tests.")
 	// earlier default was true, want to use binary we build manually
 	rebuildBinary = pflag.BoolP("rebuild-binary", "", false,
@@ -1405,6 +1406,16 @@ func executePreRunSteps() error {
 }
 
 func run() error {
+	if *listPackages {
+		if *clear || *rebuildBinary || *race || *runCoverage || *keepCluster || *tmp != "" || *useExisting != "" {
+			return fmt.Errorf("--list-packages cannot be combined with mutating runner options")
+		}
+		if len(*runPkg) > 0 && len(*runTest) > 0 {
+			return fmt.Errorf("both pkg and test cannot be set")
+		}
+		getPackages()
+		return nil
+	}
 	if tc := os.Getenv("TEAMCITY_VERSION"); len(tc) > 0 {
 		fmt.Printf("Found Teamcity: %s\n", tc)
 		isTeamcity = true
@@ -1559,7 +1570,9 @@ func main() {
 	procId = rand.Intn(1000)
 
 	err := run()
-	_ = os.RemoveAll(*tmp)
+	if !*listPackages {
+		_ = os.RemoveAll(*tmp)
+	}
 	if err != nil {
 		os.Exit(1)
 	}

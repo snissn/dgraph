@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -273,4 +274,49 @@ func (cc ClusterConfig) WithSnapshotConfig(snapShotAfterEntries uint64,
 	cc.snapShotAfterEntries = snapShotAfterEntries
 	cc.snapshotAfterDuration = snapshotAfterDuration
 	return cc
+}
+
+// localClusterCacheProfile is opt-in for public CI fixtures. Alpha merges the size-only
+// SuperFlag with its own cache defaults; caller-supplied controls take precedence.
+func localClusterCacheProfile(cc ClusterConfig, profile string) (ClusterConfig, error) {
+	if profile == "" {
+		return cc, nil
+	}
+	if profile != "512" {
+		return cc, fmt.Errorf("DGRAPH_CI_LOCAL_ALPHA_CACHE_MB must be empty or 512")
+	}
+	count := 0
+	for _, arg := range cc.startupArgs {
+		if arg == "--cache" {
+			return cc, fmt.Errorf("cache control must use --cache=<SuperFlag>")
+		}
+		if !strings.HasPrefix(arg, "--cache=") {
+			continue
+		}
+		count++
+		seen := make(map[string]bool)
+		for _, item := range strings.Split(strings.TrimPrefix(arg, "--cache="), ";") {
+			if strings.TrimSpace(item) == "" {
+				continue
+			}
+			key, value, ok := strings.Cut(item, "=")
+			key = strings.ReplaceAll(strings.ToLower(strings.TrimSpace(key)), "_", "-")
+			if !ok || key == "" || strings.TrimSpace(value) == "" || seen[key] {
+				return cc, fmt.Errorf("invalid or duplicate caller cache control")
+			}
+			seen[key] = true
+		}
+		if len(seen) == 0 {
+			return cc, fmt.Errorf("empty caller cache control")
+		}
+	}
+	if count > 1 {
+		return cc, fmt.Errorf("multiple caller cache flags")
+	}
+	if count == 0 {
+		// The value-copied config still shares caller-owned slice storage.
+		cc.startupArgs = append([]string(nil), cc.startupArgs...)
+		cc = cc.WithStartupArg("cache", "size-mb=512;")
+	}
+	return cc, nil
 }

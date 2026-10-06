@@ -5,6 +5,11 @@
 
 package main
 
+import (
+	"os"
+	"path/filepath"
+)
+
 // This file declares public extensibility hooks for the t test runner.
 // See testutil/hooks.go for the full convention.
 
@@ -16,10 +21,9 @@ var EnvForCompose = defaultEnvForCompose
 
 // ComposeFileArgs returns the file-selector args docker-compose receives
 // for the given compose-file path. The baseDir argument is the repo
-// root (t's --base flag), passed explicitly so the hook is pure and
-// shares no package state with t/t.go. Default: returns "-f <path>"
-// unchanged, matching upstream behavior where the pristine compose file
-// passes straight through.
+// root (t's --base flag), passed explicitly so the hook shares no
+// package state with t/t.go. Default: returns "-f <path>", except the
+// explicit public native CI cache profile below.
 //
 // A fork may override this to layer additional `-f <overlay>` files,
 // switch the compose-file path, or add `--project-directory <dir>` so
@@ -29,9 +33,13 @@ var ComposeFileArgs = defaultComposeFileArgs
 
 func defaultEnvForCompose() []string { return nil }
 
-// defaultComposeFileArgs ignores baseDir; it exists in the signature so
-// overrides that need it (to resolve paths relative to the repo root)
-// do not have to thread it through some other channel.
-func defaultComposeFileArgs(path, _ string) []string {
-	return []string{"-f", path}
+// The public native CI profile changes only this load fixture's Alpha cache.
+// The workflow enables it only under the existing public-personal runner guard.
+func defaultComposeFileArgs(path, baseDir string) []string {
+	args := []string{"-f", path}
+	if os.Getenv("DGRAPH_CI_PUBLIC_NATIVE") == "1" && filepath.Clean(path) ==
+		filepath.Join(filepath.Clean(baseDir), "systest", "21million", "live", "docker-compose.yml") {
+		args = append(args, "-f", filepath.Join(baseDir, "t", "ci-native", "21million-live-cache.yml"))
+	}
+	return args
 }

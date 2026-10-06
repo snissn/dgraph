@@ -69,3 +69,98 @@ ARTIFACT=/mnt/fast4tb/dgraph-treedb-ab/FINAL_RUN
 go tool pprof -top "$ARTIFACT/bin/dgraph" \
   "$ARTIFACT/profiles/treedb-durable.pprof"
 ```
+
+For a separate TreeDB CPU-profile diagnostic, add
+`--endpoint-diagnostic "$ARTIFACT/profiles/treedb-durable.endpoint.json"` to the manual command
+above. The sidecar path must be new, outside the posting directory, and separate from the native
+result, logs, and CPU profile. The flag requires `--backend treedb` and either `--cpu-profile` or
+the explicitly excluded `--operation-diagnostic` run described below. Without the operation flag,
+the original CPU-profile requirement is unchanged. Every endpoint-diagnostic run is explicitly
+excluded from performance acceptance, including CPU-only endpoint runs. CPU profiling without an
+endpoint or other diagnostic flag retains its existing behavior.
+
+The immutable schema-v1 sidecar records posting-directory relative filenames, logical sizes, stat
+blocks and allocated bytes, modification times, and existing `/debug/store` status and numeric
+counters. Its two observations target workload completion before profile wait, and exactly
+`TimedFinished + 5s` before validation or restart. No foreground operations or checkpoint run
+between them. Each observation retains start/end timestamps and delay from its target, with separate
+file-finish and status-start timestamps. Background publication can continue; these sequential
+metadata/status reads are not atomic snapshots. Observation overhead and the passive wait belong
+only to the diagnostic run and must not replace acceptance measurements or revise their original
+storage endpoints.
+
+For operation-kind and server-phase diagnosis on either backend, use a separate run with
+`--operation-diagnostic "$ARTIFACT/operations.json"`. Its new immutable schema-v1 sidecar retains
+every deterministic operation index and worker, kind (`point_read`, `one_hop_read`, `write`),
+start/RPC-return/end timestamps, monotonic RPC/full-wall nanoseconds, outcome, and copied optional
+`api.Latency` scalars. Full wall includes client response validation; RPC duration includes the
+existing client wrapper and transport. Server phases are not independent additive timings. No keys,
+responses or payloads are retained. Rows are preallocated only when opted in and written by their
+owning workers, outside the native sample channel.
+
+The sidecar also retains the raw bodies and request timestamps of the existing before-workload and
+native-after-metrics `/debug/store` and labeled Prometheus fetches. No per-operation polling or
+extra requests are added. The after boundary can follow profile completion or the endpoint passive
+interval; it is not called an immediate workload-end cut. A failed workload cancels promptly, drains
+its workers, and retains the operation rows with `workload_succeeded=false`; its after boundary
+remains absent (empty timestamps/body). Row outcomes describe RPC/read validation, while aggregate
+write-UID validation can also fail the workload.
+
+Serialization follows `TimedFinished`. Operation instrumentation, observer overhead, and any passive
+wait remain diagnostic only: native result schema and the existing microsecond-rounded latency
+calculation are unchanged, but these runs explicitly set `Context.Excluded` and an overhead reason.
+Native acceptance aggregation rejects them. The flag is optional and does not enable runtime
+tracing.
+
+## Native-boundary storage attribution (separate diagnostic only)
+
+Use `--storage-diagnostic /new/path/storage.json` on a separately admitted run to attribute the
+native logical and allocated posting totals to files. The new flag works with either backend, alone
+or with `--operation-diagnostic`; it rejects `--cpu-profile` and `--endpoint-diagnostic`, whose
+waits can delay this boundary. In particular, the older endpoint diagnostic waits until
+`TimedFinished + 5s` before the native disk walk. Its native totals and per-file cuts cannot be
+substituted for the original unprofiled storage boundary.
+
+The immutable schema-v1 storage sidecar records the run/backend/durability, posting directory,
+`TimedFinished`, `native_posting_disk_usage_prevalidation` boundary, walk start/finish and
+serialization start, completion/error, observed regular-file count, native logical/allocated totals,
+and relative per-file names, sizes, stat blocks, allocated bytes and modification times. Rows and
+native totals use the same `FileInfo` from the SAME existing walk, after the existing CPU/HWM reads
+and before post-metric requests, schema/posting validation or restart. There is no second walk,
+extra stat, status request, passive wait, checkpoint or file deletion. Only regular files
+contribute, as in the original native measurement.
+
+This is a sequential metadata walk while Alpha/background publication may continue. The envelope
+brackets the walk; it does not timestamp each filesystem change or establish an atomic/quiescent
+snapshot. Files created after a directory was enumerated may be absent, and mutation between
+observations remains possible. Modification times are metadata, not observation timestamps. These
+limits apply to both the native sums and their same-observation file attribution.
+
+`validateStorageDiagnostic` compares the sidecar against the paired native result: identity, posting
+root, named boundary, ordered envelope, diagnostic exclusion, complete/error-free nonempty rows
+matching the walk count, unique confined relative paths, nonnegative sizes/blocks,
+allocated=blocks\*512, and exact file-sum/native totals. The diagnostic requires byte totals at most
+2^53-1 to preserve exact equality with the existing float64 native metrics. It does not infer
+allocated<=logical: sparse and block-rounded files can differ in either direction. Missing, partial,
+sum-inconsistent or boundary-inconsistent observations refuse validation. Failed/partial raw
+observations remain immutable sidecars with an error or an invalid/incomplete contract, and cannot
+produce a successful native result. Successful sidecar validation is a storage-observer check;
+native checksum, schema, restart and provenance validation are separately required. Internal
+consistency does not authenticate a coordinated rewrite of an entire packet.
+
+The path must be new, outside the entire run cluster (postings and Alpha/Zero WAL directories), and
+separate from native results, logs and other sidecars. A destination cannot be the cluster directory
+or any ancestor that the run must create. Ordinary sidecars beside the cluster within the artifact
+directory remain valid. Storage, operation and endpoint sidecar guards resolve existing ancestor
+symlinks for both the posting root and destination, including future nonexistent suffixes. Aliases
+into postings or reserved outputs refuse before artifact creation/process launch. Dangling/cyclic
+aliases and inaccessible ancestors also refuse. Each observer rechecks at its write boundary and
+writes to the resolved destination; immutable creation still uses O_EXCL. This prevents silently
+following a changed caller alias, but does not claim immunity to adversarial concurrent replacement
+of resolved parent directories. Keep runner paths under exclusive ownership through the run. The
+opt-in observer explicitly excludes the native result from performance acceptance. Default-off
+behavior, native result schema, durability, WAL and persistent value-log semantics remain unchanged.
+Historical endpoint and operation sidecars keep their existing schemas and measurement identities.
+This flag grants no collection campaign and clears none of M3's four original HOLDs; future
+collection needs exact source/tool/binary bindings, independent review and root runner admission
+under the unchanged policy.

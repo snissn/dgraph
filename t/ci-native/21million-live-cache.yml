@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+services:
+  alpha1:
+    environment:
+      DGRAPH_ALPHA_CACHE: size-mb=1024;percentage=40,40,20;remove-on-update=false

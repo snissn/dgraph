@@ -18,11 +18,26 @@ jobs:
   changes:
     uses: ./.github/workflows/detect-changes.yml
 
-  dgraph-integration2-tests:
+  dgraph-integration2-shards:
+    name: integration2-${{ matrix.shard }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          ${{ fromJSON(github.event.repository.owner.type == 'User' &&
+          toJSON(github.event.repository.private) == 'false' && '["namespace","remainder"]' ||
+          '["full"]') }}
     needs: changes
     if: github.event.pull_request.draft == false && needs.changes.outputs.code == 'true'
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on:
+      ${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) ==
+      'false' && 'ubuntu-24.04' || 'blacksmith-16vcpu-ubuntu-2404' }}
     timeout-minutes: 90
+    env:
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
+      DGRAPH_CI_LOCAL_ALPHA_CACHE_MB:
+        ${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private)
+        == 'false' && '512' || '' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -35,11 +50,22 @@ jobs:
       - name: Make Linux Build and Docker Image
         run: make docker-image
 
+      - name: Prepare pinned MinIO source images for public personal repositories
+        if:
+          github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) ==
+          'false'
+        run: |
+          contrib/ci-minio/build.sh "$RUNNER_TEMP/ci-minio"
+          echo 'MINIO_CURRENT_IMAGE=dgraph/ci-minio:2025-source' >> "$GITHUB_ENV"
+
       - name: Clean Up Environment
         run: |
           #!/bin/bash
           # clean cache
           go clean -testcache
+
+      - name: Require stable committed module inputs
+        run: git diff --exit-code HEAD -- go.mod go.sum
 
       - name: Run Integration2 Tests
         run: |
@@ -49,8 +75,45 @@ jobs:
           # move the binary
           cp dgraph/dgraph ~/go/bin/dgraph
           # run the tests
-          go test -v -timeout=90m -failfast -tags=integration2 ./...
-          # clean up docker containers after test execution
+          python3 t/ci-native/integration2.py run --shard "${{ matrix.shard }}" --output "$RUNNER_TEMP/integration2-coverage" --public "${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) == 'false' }}"
+
+      - name: Clean Up Environment After Tests
+        if: always()
+        run: |
           go clean -testcache
-          # sleep
           sleep 5
+
+      - name: Retain exact integration2 coverage, results and observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration2-coverage-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/integration2-coverage
+          if-no-files-found: error
+
+  dgraph-integration2-tests:
+    needs: [changes, dgraph-integration2-shards]
+    if: always() && github.event.pull_request.draft == false && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check native CI helper contracts
+        run: python3 -m unittest discover -s t/ci-native -p 'test_*.py'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: integration2-coverage-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/integration2-coverage
+      - name: Require every full-universe shard and original whole-gate deadline
+        env:
+          SHARDS_RESULT: ${{ needs.dgraph-integration2-shards.result }}
+        run: |
+          test "$SHARDS_RESULT" = success
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" > "$RUNNER_TEMP/integration2-jobs.json"
+          python3 t/ci-native/integration2.py gate --artifacts "$RUNNER_TEMP/integration2-coverage" --jobs "$RUNNER_TEMP/integration2-jobs.json" --public "${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) == 'false' }}"
