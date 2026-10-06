@@ -21,7 +21,9 @@ jobs:
   dgraph-tests:
     needs: changes
     if: github.event.pull_request.draft == false && needs.changes.outputs.code == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
+    runs-on:
+      ${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) ==
+      'false' && 'ubuntu-24.04-arm' || 'blacksmith-4vcpu-ubuntu-2404-arm' }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5

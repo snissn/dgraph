@@ -21,7 +21,9 @@ jobs:
   dgraph-integration2-tests:
     needs: changes
     if: github.event.pull_request.draft == false && needs.changes.outputs.code == 'true'
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on:
+      ${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) ==
+      'false' && 'ubuntu-24.04' || 'blacksmith-16vcpu-ubuntu-2404' }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
