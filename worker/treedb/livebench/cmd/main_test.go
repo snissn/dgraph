@@ -351,7 +351,7 @@ func TestCaptureCPUProfileWritesImmutableArtifact(t *testing.T) {
 
 func TestEndpointDiagnosticCapturesOrderedFilesAndStatusWithoutOverwrite(t *testing.T) {
 	base := t.TempDir()
-	postings := filepath.Join(base, "p")
+	postings := filepath.Join(base, "cluster", "p")
 	if err := os.MkdirAll(filepath.Join(postings, "maindb"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1116,5 +1116,111 @@ func TestDiagnosticResolvedWritesAndFailures(t *testing.T) {
 	}
 	if _, err := diagnosticOutputPath(filepath.Join(cycle, "output.json"), postings, nil); err == nil {
 		t.Fatal("cyclic parent admitted")
+	}
+}
+
+func TestDiagnosticExcludesRunCluster(t *testing.T) {
+	for _, kind := range []string{"storage", "operation", "endpoint"} {
+		for _, location := range []string{"artifact", "cluster", "w", "zw", "aliased-w"} {
+			t.Run(kind+"/"+location, func(t *testing.T) {
+				base := t.TempDir()
+				artifact := filepath.Join(base, "future-run")
+				alias := filepath.Join(base, "alias")
+				if err := os.Symlink(base, alias); err != nil {
+					t.Fatal(err)
+				}
+				target := artifact
+				switch location {
+				case "cluster":
+					target = filepath.Join(artifact, "cluster")
+				case "w", "zw":
+					target = filepath.Join(artifact, "cluster", location, "observer.json")
+				case "aliased-w":
+					target = filepath.Join(alias, "future-run", "cluster", "w", "observer.json")
+				}
+				o := options{artifactDir: artifact, backend: "treedb", class: "relaxed", dgraphBin: "/must-not-run", repeat: 1, dataset: 1, concurrency: 1, warmup: 1, timed: 1}
+				switch kind {
+				case "storage":
+					o.storageDiagnostic = target
+				case "operation":
+					o.operationDiagnostic = target
+				case "endpoint":
+					o.endpointDiagnostic = target
+					o.operationDiagnostic = filepath.Join(base, "operation.json")
+				}
+				if err := run(o); err == nil || !strings.Contains(err.Error(), "cluster directory") {
+					t.Fatalf("wrong cluster admission: %v", err)
+				}
+				if _, err := os.Lstat(artifact); !os.IsNotExist(err) {
+					t.Fatalf("preflight created run directory: %v", err)
+				}
+			})
+		}
+	}
+	// The resolved parent of postings defines the entire run cluster, including
+	// aliases of the posting root and existing ancestor directories.
+	base := t.TempDir()
+	real := filepath.Join(base, "real")
+	if err := os.Mkdir(real, 0755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(base, "alias")
+	if err := os.Symlink(real, alias); err != nil {
+		t.Fatal(err)
+	}
+	postings := filepath.Join(alias, "future", "cluster", "p")
+	for _, output := range []string{real, filepath.Join(real, "future"), filepath.Join(real, "future", "cluster", "zw", "observer.json")} {
+		if _, err := diagnosticOutputPath(output, postings, nil); err == nil {
+			t.Fatalf("cluster ancestor or root alias admitted: %s", output)
+		}
+	}
+	// Ordinary sidecars within artifactDir but outside cluster remain valid.
+	if _, err := diagnosticOutputPath(filepath.Join(real, "future", "observer.json"), postings, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDiagnosticWritersRecheckRunCluster(t *testing.T) {
+	for _, kind := range []string{"storage", "operation", "endpoint"} {
+		t.Run(kind, func(t *testing.T) {
+			base := t.TempDir()
+			postings := filepath.Join(base, "run", "cluster", "p")
+			wal := filepath.Join(base, "run", "cluster", "w")
+			outside := filepath.Join(base, "outside")
+			for _, dir := range []string{postings, wal, outside} {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			alias := filepath.Join(base, "alias")
+			if err := os.Symlink(outside, alias); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(alias, "observer.json")
+			if _, err := diagnosticOutputPath(path, postings, nil); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(alias); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(wal, alias); err != nil {
+				t.Fatal(err)
+			}
+			var err error
+			switch kind {
+			case "storage":
+				err = writeStorageDiagnostic(path, &storageDiagnostic{}, storageTestResult(postings))
+			case "operation":
+				err = writeOperationDiagnostic(path, &operationDiagnostic{}, postings)
+			case "endpoint":
+				err = captureEndpointDiagnostic(context.Background(), path, postings, "http://must-not-request", "run", time.Now())
+			}
+			if err == nil || !strings.Contains(err.Error(), "cluster directory") {
+				t.Fatalf("write bypassed cluster confinement: %v", err)
+			}
+			if _, err := os.Lstat(filepath.Join(wal, "observer.json")); !os.IsNotExist(err) {
+				t.Fatalf("WAL mutated: %v", err)
+			}
+		})
 	}
 }

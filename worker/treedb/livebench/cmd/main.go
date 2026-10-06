@@ -1597,6 +1597,21 @@ func diagnosticOutputPath(path, postings string, reserved []string) (string, err
 	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", errors.New("diagnostic must be outside the posting directory")
 	}
+	cluster, err := resolveDiagnosticPath(filepath.Dir(postings))
+	if err != nil {
+		return "", err
+	}
+	// Sidecars cannot occupy any live cluster state (posting, Alpha WAL or
+	// Zero WAL), nor a directory that the run must create above that state.
+	for _, pair := range [][2]string{{cluster, output}, {output, cluster}} {
+		rel, err := filepath.Rel(pair[0], pair[1])
+		if err != nil {
+			return "", err
+		}
+		if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", errors.New("diagnostic must not be inside or above the run cluster directory")
+		}
+	}
 	artifactDir := filepath.Dir(filepath.Dir(postings))
 	reserved = append(append([]string{}, reserved...), filepath.Join(artifactDir, "result.json"),
 		filepath.Join(artifactDir, "zero.log"), filepath.Join(artifactDir, "alpha.log"), filepath.Join(artifactDir, "alpha-restart.log"))
