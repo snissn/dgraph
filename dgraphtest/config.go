@@ -314,6 +314,8 @@ func localClusterCacheProfile(cc ClusterConfig, profile string) (ClusterConfig, 
 		return cc, fmt.Errorf("multiple caller cache flags")
 	}
 	if count == 0 {
+		// The value-copied config still shares caller-owned slice storage.
+		cc.startupArgs = append([]string(nil), cc.startupArgs...)
 		cc = cc.WithStartupArg("cache", "size-mb=512;")
 	}
 	return cc, nil

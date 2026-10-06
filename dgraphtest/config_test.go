@@ -5,6 +5,7 @@ import (
 	"github.com/dgraph-io/dgraph/v25/worker"
 	"github.com/dgraph-io/ristretto/v2/z"
 	"reflect"
+	"sync"
 	"testing"
 )
 
@@ -63,4 +64,64 @@ func TestLocalClusterRejectsCacheProfileBeforeDocker(t *testing.T) {
 	if err == nil || cluster != nil || err.Error() != "DGRAPH_CI_LOCAL_ALPHA_CACHE_MB must be empty or 512" {
 		t.Fatalf("admission reached Docker: %v, %v", cluster, err)
 	}
+}
+
+func TestLocalClusterCacheProfileOwnsStartupArgs(t *testing.T) {
+	baseConfig := func() ClusterConfig {
+		cc := NewClusterConfig()
+		cc.startupArgs = make([]string, 1, 2)
+		cc.startupArgs[0] = "--limit=query-edge=1000;"
+		return cc
+	}
+	t.Run("sibling before profile", func(t *testing.T) {
+		base := baseConfig()
+		sibling := base.WithStartupArg("cache", "size-mb=768;")
+		got, err := localClusterCacheProfile(base, "512")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sibling.startupArgs[1] != "--cache=size-mb=768;" || got.startupArgs[1] != "--cache=size-mb=512;" {
+			t.Fatalf("profile overwrote sibling: sibling=%v profile=%v", sibling.startupArgs, got.startupArgs)
+		}
+	})
+	t.Run("sibling after profile", func(t *testing.T) {
+		base := baseConfig()
+		got, err := localClusterCacheProfile(base, "512")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sibling := base.WithStartupArg("cache", "size-mb=768;")
+		if sibling.startupArgs[1] != "--cache=size-mb=768;" || got.startupArgs[1] != "--cache=size-mb=512;" {
+			t.Fatalf("sibling overwrote profile: sibling=%v profile=%v", sibling.startupArgs, got.startupArgs)
+		}
+	})
+	t.Run("concurrent caller reuse", func(t *testing.T) {
+		base := baseConfig()
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			for i := 0; i < 1000; i++ {
+				base.WithStartupArg("cache", "size-mb=768;")
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			for i := 0; i < 1000; i++ {
+				got, err := localClusterCacheProfile(base, "512")
+				if err != nil || got.startupArgs[1] != "--cache=size-mb=512;" {
+					t.Errorf("concurrent profile changed: %v, %v", got.startupArgs, err)
+					return
+				}
+			}
+		}()
+		close(start)
+		wg.Wait()
+		if len(base.startupArgs) != 1 || base.startupArgs[0] != "--limit=query-edge=1000;" || base.startupArgs[:2][1] != "--cache=size-mb=768;" {
+			t.Fatalf("caller backing storage changed: %v", base.startupArgs[:2])
+		}
+	})
 }
