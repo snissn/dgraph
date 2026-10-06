@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from unittest import mock
 
@@ -121,7 +122,89 @@ class CoverageTests(unittest.TestCase):
                 arm.load_manifests(path.parent)
 
 
+class WorkflowTests(unittest.TestCase):
+    def test_failed_arm_shard_runs_independent_cleanup(self):
+        workflow = (pathlib.Path(__file__).resolve().parents[2] / ".github/workflows/ci-dgraph-tests-arm64.yml").read_text()
+        test_step = workflow.split("      - name: Run Integration Tests\n", 1)[1].split("\n      - ", 1)[0]
+        cleanup_step = workflow.split("      - name: Clean Up Environment After Tests\n", 1)[1].split("\n      - ", 1)[0]
+        self.assertIn("        if: always()\n", cleanup_step)
+        self.assertNotIn("continue-on-error", test_step + cleanup_step)
+        self.assertNotIn("./t -r", test_step)
+        self.assertIn('run --shard "${{ matrix.shard }}"', test_step)
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            for path in ("bin", "home/go/bin", "dgraph", "t", "results"):
+                (root / path).mkdir(parents=True)
+            (root / "dgraph/dgraph").write_text("fixture binary\n")
+            scripts = {"bin/python3": '#!/bin/bash\nexit "$SHARD_EXIT"\n',
+                       "bin/sleep": "#!/bin/bash\nexit 0\n",
+                       "t/t": '#!/bin/bash\ntest "$1" = -r\nprintf "cleaned\\n" >> "$RUNNER_TEMP/cleanup"\n'}
+            for name, content in scripts.items():
+                path = root / name
+                path.write_text(content)
+                path.chmod(0o755)
+            env = dict(os.environ, HOME=str(root / "home"), PATH=str(root / "bin") + os.pathsep + os.environ["PATH"], RUNNER_TEMP=str(root / "results"))
+            for status in (0, 7):
+                with self.subTest(status=status):
+                    env["SHARD_EXIT"] = str(status)
+                    test_script = textwrap.dedent(test_step.split("        run: |\n", 1)[1]).replace("${{ matrix.shard }}", "vectors")
+                    cleanup_script = textwrap.dedent(cleanup_step.split("        run: |\n", 1)[1])
+                    result = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", test_script], cwd=root, env=env, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, status, result.stderr)
+                    # Execute the independent always() step even when the previous step failed.
+                    cleanup = subprocess.run(["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", cleanup_script], cwd=root, env=env, capture_output=True, text=True)
+                    self.assertEqual(cleanup.returncode, 0, cleanup.stderr)
+                    self.assertEqual((root / "results/cleanup").read_text(), "cleaned\n" * (1 if status == 0 else 2))
+                    self.assertEqual(result.returncode, status)
+
+
 class ObserverTests(unittest.TestCase):
+    def test_shutdown_record_after_two_seconds_and_timeout_fallback(self):
+        previous = {n: signal.getsignal(n) for n in (signal.SIGINT, signal.SIGTERM)}
+        try:
+            for shutdown_seconds, test_status in ((3, 0), (3, 7), (9, 7)):
+                with self.subTest(shutdown_seconds=shutdown_seconds, test_status=test_status):
+                    sampler = mock.Mock(pid=12345, returncode=None)
+                    child = mock.Mock()
+                    child.wait.return_value = test_status
+                    records = []
+
+                    def wait(timeout=None):
+                        if sampler.returncode == -signal.SIGKILL:
+                            return sampler.returncode
+                        if timeout is not None and timeout < shutdown_seconds:
+                            raise subprocess.TimeoutExpired("controlled sampler", timeout)
+                        records.append({"kind": "shutdown"})
+                        sampler.returncode = 0
+                        return 0
+
+                    def kill(pid, number):
+                        self.assertEqual((pid, number), (sampler.pid, signal.SIGKILL))
+                        sampler.returncode = -number
+
+                    sampler.wait.side_effect = wait
+                    with mock.patch.object(observe.subprocess, "Popen", side_effect=[sampler, child]), mock.patch.object(observe, "emit", side_effect=records.append), mock.patch.object(observe.os, "killpg", side_effect=kill) as killpg:
+                        self.assertEqual(observe.observe(1, ["controlled test"]), test_status)
+                    sampler.terminate.assert_called_once_with()
+                    child.wait.assert_called_once_with()
+                    self.assertEqual(sampler.wait.call_args_list[0], mock.call(timeout=8))
+                    self.assertEqual(records[-1]["test_exit"], test_status)
+                    if shutdown_seconds == 3:
+                        self.assertIn({"kind": "shutdown"}, records)
+                        killpg.assert_not_called()
+                        self.assertEqual(sampler.returncode, 0)
+                        self.assertEqual(sampler.wait.call_count, 1)
+                    else:
+                        self.assertNotIn({"kind": "shutdown"}, records)
+                        killpg.assert_called_once_with(sampler.pid, signal.SIGKILL)
+                        self.assertEqual(sampler.wait.call_args_list, [mock.call(timeout=8), mock.call()])
+                        self.assertTrue(any(r["kind"] == "observer_cleanup" and "unknown" in r for r in records))
+                        self.assertTrue(any(r["kind"] == "observer_exit" and "unknown" in r for r in records))
+        finally:
+            for n, handler in previous.items():
+                signal.signal(n, handler)
+
+
     def test_artifact_collision_cannot_mask_test_exit(self):
         previous = observe.OUTPUT
         try:

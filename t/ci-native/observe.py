@@ -165,7 +165,7 @@ def observe(ticks, argv):
         if observer is not None:
             observer.terminate()
             try:
-                observer.wait(timeout=2)
+                observer.wait(timeout=8)
             except subprocess.TimeoutExpired:
                 os.killpg(observer.pid, signal.SIGKILL)
                 observer.wait()

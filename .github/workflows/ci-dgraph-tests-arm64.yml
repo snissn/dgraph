@@ -89,6 +89,10 @@ jobs:
           cp dgraph/dgraph ~/go/bin/dgraph
           # run the tests
           python3 t/ci-native/arm.py run --shard "${{ matrix.shard }}" --output "$RUNNER_TEMP/arm-coverage"
+
+      - name: Clean Up Environment After Tests
+        if: always()
+        run: |
           cd t
           # clean up docker containers after test execution
           ./t -r
