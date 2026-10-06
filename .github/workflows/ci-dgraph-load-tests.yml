@@ -69,8 +69,23 @@ jobs:
           # move the binary
           cp dgraph/dgraph ~/go/bin/dgraph
           # run the load tests
-          cd t; ./t --suite=load
+          cd t
+          if ${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) == 'false' }}; then
+            python3 ../t/ci-native/observe.py --ticks 60 --output "$RUNNER_TEMP/native-load.jsonl" -- ./t --suite=load
+          else
+            ./t --suite=load
+          fi
           # clean up docker containers after test execution
           ./t -r
           # sleep
           sleep 5
+
+      - name: Retain bounded public-runner observations
+        if:
+          always() && github.event.repository.owner.type == 'User' &&
+          toJSON(github.event.repository.private) == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-load-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-load.jsonl
+          if-no-files-found: warn

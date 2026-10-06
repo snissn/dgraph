@@ -114,16 +114,8 @@ func run(o options) (err error) {
 	if err != nil {
 		return fmt.Errorf("collect reproduction context: %w", err)
 	}
-	initialContaminants := contaminants(o.maxLoad)
-	r.Context.Contaminants = initialContaminants
-	if len(initialContaminants) > 0 {
-		r.Context.Excluded = true
-		r.Context.ExclusionReason = strings.Join(initialContaminants, "; ")
-	}
-
-	if o.storageDiagnostic != "" {
-		markStorageDiagnostic(&r)
-	}
+	r.Context.Contaminants = contaminants(o.maxLoad)
+	markDiagnostics(&r, o)
 
 	zeroArgs := []string{"zero", "--wal", filepath.Join(runDir, "zw"), "--replicas=1", fmt.Sprintf("--port_offset=%d", o.zeroOffset)}
 	alphaArgs := []string{"alpha", "--zero", fmt.Sprintf("localhost:%d", 5080+o.zeroOffset), "--postings", filepath.Join(runDir, "p"), "--wal", filepath.Join(runDir, "w"), fmt.Sprintf("--port_offset=%d", o.alphaOffset), "--posting-store", posting, "--badger", badger}
@@ -170,7 +162,6 @@ func run(o options) (err error) {
 			After:  operationBoundary{Boundary: "native_metrics_after"}}
 		beforeStore, beforeProm = &diagnostic.Before.Store, &diagnostic.Before.Prometheus
 		afterStore, afterProm = &diagnostic.After.Store, &diagnostic.After.Prometheus
-		markOperationDiagnostic(&r)
 	}
 	_, storeBefore, storeErr := storeStatusObserved(httpBase, beforeStore)
 	promBefore, promErr := prometheusObserved(httpBase+"/debug/prometheus_metrics", beforeProm)
@@ -1500,11 +1491,21 @@ func finishOperation(row *operationRow, elapsed time.Duration, err error) {
 	}
 }
 
-func markOperationDiagnostic(r *livebench.Result) {
-	const reason = "operation diagnostic overhead; excluded from performance acceptance"
-	r.Context.Contaminants = append(r.Context.Contaminants, reason)
-	r.Context.Excluded = true
-	r.Context.ExclusionReason = strings.Join(r.Context.Contaminants, "; ")
+// Mark all diagnostics at run setup; CPU profiling alone keeps its existing behavior.
+func markDiagnostics(r *livebench.Result, o options) {
+	if o.storageDiagnostic != "" {
+		r.Context.Contaminants = append(r.Context.Contaminants, storageDiagnosticReason)
+	}
+	if o.operationDiagnostic != "" {
+		r.Context.Contaminants = append(r.Context.Contaminants, "operation diagnostic overhead; excluded from performance acceptance")
+	}
+	if o.endpointDiagnostic != "" {
+		r.Context.Contaminants = append(r.Context.Contaminants, "endpoint diagnostic observations and passive wait; excluded from performance acceptance")
+	}
+	if len(r.Context.Contaminants) != 0 {
+		r.Context.Excluded = true
+		r.Context.ExclusionReason = strings.Join(r.Context.Contaminants, "; ")
+	}
 }
 
 // Serialization is outside the measured operation and workload boundaries.
@@ -1671,12 +1672,6 @@ func newStorageDiagnostic(root string, r livebench.Result) *storageDiagnostic {
 	return &storageDiagnostic{SchemaVersion: 1, DiagnosticOnly: true, RunID: r.RunID, Backend: r.Config.Backend,
 		DurabilityClass: r.Config.DurabilityClass, PostingDir: root, Boundary: storageDiagnosticBoundary,
 		TimedFinished: r.TimedFinished, Files: []endpointFile{}}
-}
-
-func markStorageDiagnostic(r *livebench.Result) {
-	r.Context.Contaminants = append(r.Context.Contaminants, storageDiagnosticReason)
-	r.Context.Excluded = true
-	r.Context.ExclusionReason = strings.Join(r.Context.Contaminants, "; ")
 }
 
 // Validation is against the native result from this run, not a new filesystem

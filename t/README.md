@@ -38,8 +38,9 @@ test output and other advanced functions.
 ### protoc
 
 On non-Linux systems, protocol buffer tests are skipped. On Linux systems, instructions for
-installing and configuring protoc can be found [here](https://github.com/protocolbuffers/protobuf).
-Or, `sudo apt update && sudo apt install -y protobuf-compiler`.
+installing and configuring protoc can be found in the
+[Protocol Buffers repository](https://github.com/protocolbuffers/protobuf). Or,
+`sudo apt update && sudo apt install -y protobuf-compiler`.
 
 ## Running Tests
 
@@ -128,3 +129,30 @@ cd t && make check && go build .
 
 If tests fail to start, run `make check` to verify all dependencies are installed and the dgraph
 binaries are properly built.
+
+## Discovery and public ARM CI
+
+`./t --list-packages --suite=integration` lists the existing selected package universe and returns
+before plugin generation, binary rebuild, workers, cluster startup or cleanup. Package/suite/tag
+filters remain the existing runner filters. Mutating runner options cannot accompany discovery.
+`--dry` retains its existing behavior, including cluster setup.
+
+Public personal-repository ARM CI discovers that same integration universe and selects two isolated
+jobs by exact full package IDs: `/vector` packages and the complete remainder. Other repositories
+retain the full `./t` invocation and existing native runner selector. Cluster concurrency remains
+one, package timeout 30 minutes, failfast remains enabled, and each native job retains 60 minutes.
+The stable `dgraph-tests` aggregate requires every expected job and source-bound query/result
+artifact, a disjoint complete union, and at most 60 minutes from the earliest native job start to
+the latest native job completion. Queue delays and duplicated setup therefore cannot silently extend
+the original whole-gate deadline. This scheduling change does not guarantee either shard finishes.
+
+Public-fallback integration2/load test steps keep their original commands and 90/30-minute job
+limits. A shared best-effort observer streams bounded 30-second resource records (at most 180/60
+ticks, 8 KiB per record), including available memory/swap, OOM counters, pressure, cgroup memory,
+filesystem bytes/inodes, process PID/name/RSS and bounded Docker status/memory. Shutdown readings
+include accessible kernel OOM victims and service state; inaccessible data is explicitly unknown.
+The observer collects no process arguments or environment, installs no monitoring stack and changes
+no resource limits. Its owned process is stopped within bounded cleanup; test failure/signal status
+is preserved. Abrupt host loss may leave observations missing. These are causal observations, not an
+OOM diagnosis or a remedy for the retained runner shutdowns. Hosted full CI remains required; all
+four M3 performance HOLDs and the absence of performance qualification remain unchanged.

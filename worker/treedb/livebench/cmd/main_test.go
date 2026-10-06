@@ -678,7 +678,7 @@ func TestOperationDiagnosticRetainsLabelledBoundariesAndWritesAfterTimedFinish(t
 
 func TestOperationDiagnosticMarkerAndPathGuard(t *testing.T) {
 	r := livebench.Result{}
-	markOperationDiagnostic(&r)
+	markDiagnostics(&r, options{operationDiagnostic: "operations.json"})
 	if !r.Context.Excluded || len(r.Context.Contaminants) != 1 || !strings.Contains(r.Context.ExclusionReason, "diagnostic") || len(r.Context.Profiles) != 0 {
 		t.Fatalf("marker %+v", r.Context)
 	}
@@ -899,7 +899,7 @@ func TestStorageDiagnosticOptionAndOriginalPosition(t *testing.T) {
 		t.Fatal("existing sidecar accepted")
 	}
 	r := livebench.Result{}
-	markStorageDiagnostic(&r)
+	markDiagnostics(&r, options{storageDiagnostic: "storage.json"})
 	if !r.Context.Excluded || !strings.Contains(r.Context.ExclusionReason, storageDiagnosticReason) {
 		t.Fatal("diagnostic not excluded")
 	}
@@ -1222,5 +1222,42 @@ func TestDiagnosticWritersRecheckRunCluster(t *testing.T) {
 				t.Fatalf("WAL mutated: %v", err)
 			}
 		})
+	}
+}
+
+func TestDiagnosticExclusionCoversEndpointWithoutOperations(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		options options
+		want    []string
+	}{
+		{"ordinary", options{}, nil},
+		{"CPU profile only", options{cpuProfile: "cpu.pprof"}, nil},
+		{"CPU-only endpoint", options{cpuProfile: "cpu.pprof", endpointDiagnostic: "endpoints.json"}, []string{"endpoint diagnostic"}},
+		{"operation-only endpoint", options{operationDiagnostic: "operations.json", endpointDiagnostic: "endpoints.json"}, []string{"operation diagnostic", "endpoint diagnostic"}},
+		{"operation", options{operationDiagnostic: "operations.json"}, []string{"operation diagnostic"}},
+		{"storage", options{storageDiagnostic: "storage.json"}, []string{storageDiagnosticReason}},
+		{"storage and operation", options{storageDiagnostic: "storage.json", operationDiagnostic: "operations.json"}, []string{storageDiagnosticReason, "operation diagnostic"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := livebench.Result{Context: livebench.Context{Profiles: []string{"existing.pprof"}}}
+			markDiagnostics(&r, tc.options)
+			if r.Context.Excluded != (len(tc.want) != 0) || len(r.Context.Contaminants) != len(tc.want) {
+				t.Fatalf("exclusion context: %+v", r.Context)
+			}
+			for _, reason := range tc.want {
+				if !strings.Contains(r.Context.ExclusionReason, reason) {
+					t.Fatalf("missing %q in %+v", reason, r.Context)
+				}
+			}
+			if len(r.Context.Profiles) != 1 || r.Context.Profiles[0] != "existing.pprof" {
+				t.Fatal("diagnostic marking changed profile artifacts")
+			}
+		})
+	}
+	r := livebench.Result{Context: livebench.Context{Contaminants: []string{"existing contamination"}}}
+	markDiagnostics(&r, options{cpuProfile: "cpu.pprof", endpointDiagnostic: "endpoints.json"})
+	if !r.Context.Excluded || len(r.Context.Contaminants) != 2 || !strings.HasPrefix(r.Context.ExclusionReason, "existing contamination; ") {
+		t.Fatalf("lost existing contamination: %+v", r.Context)
 	}
 }

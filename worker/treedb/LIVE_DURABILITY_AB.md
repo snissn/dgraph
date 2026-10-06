@@ -75,7 +75,9 @@ For a separate TreeDB CPU-profile diagnostic, add
 above. The sidecar path must be new, outside the posting directory, and separate from the native
 result, logs, and CPU profile. The flag requires `--backend treedb` and either `--cpu-profile` or
 the explicitly excluded `--operation-diagnostic` run described below. Without the operation flag,
-the original CPU-profile requirement is unchanged.
+the original CPU-profile requirement is unchanged. Every endpoint-diagnostic run is explicitly
+excluded from performance acceptance, including CPU-only endpoint runs. CPU profiling without an
+endpoint or other diagnostic flag retains its existing behavior.
 
 The immutable schema-v1 sidecar records posting-directory relative filenames, logical sizes, stat
 blocks and allocated bytes, modification times, and existing `/debug/store` status and numeric

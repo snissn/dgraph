@@ -18,13 +18,23 @@ jobs:
   changes:
     uses: ./.github/workflows/detect-changes.yml
 
-  dgraph-tests:
+  dgraph-test-shards:
+    name: arm-${{ matrix.shard }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          ${{ fromJSON(github.event.repository.owner.type == 'User' &&
+          toJSON(github.event.repository.private) == 'false' && '["vectors","remainder"]' ||
+          '["full"]') }}
     needs: changes
     if: github.event.pull_request.draft == false && needs.changes.outputs.code == 'true'
     runs-on:
       ${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) ==
       'false' && 'ubuntu-24.04-arm' || 'blacksmith-4vcpu-ubuntu-2404-arm' }}
     timeout-minutes: 60
+    env:
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@v5
 
@@ -70,7 +80,7 @@ jobs:
           # clean up docker containers before test execution
           cd t; ./t -r
 
-      - name: Run Unit Tests
+      - name: Run Integration Tests
         run: |
           #!/bin/bash
           # go env settings
@@ -78,8 +88,44 @@ jobs:
           # move the binary
           cp dgraph/dgraph ~/go/bin/dgraph
           # run the tests
-          cd t; ./t
+          python3 t/ci-native/arm.py run --shard "${{ matrix.shard }}" --output "$RUNNER_TEMP/arm-coverage"
+          cd t
           # clean up docker containers after test execution
           ./t -r
           # sleep
           sleep 5
+
+      - name: Retain exact ARM coverage and result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm-coverage-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/arm-coverage
+          if-no-files-found: error
+
+  dgraph-tests:
+    needs: [changes, dgraph-test-shards]
+    if: always() && github.event.pull_request.draft == false && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check native CI helper contracts
+        run: python3 -m unittest discover -s t/ci-native -p test_native.py
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: arm-coverage-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/arm-coverage
+      - name: Require every shard, exact coverage and original whole-gate deadline
+        env:
+          SHARDS_RESULT: ${{ needs.dgraph-test-shards.result }}
+        run: |
+          test "$SHARDS_RESULT" = success
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" > "$RUNNER_TEMP/arm-jobs.json"
+          python3 t/ci-native/arm.py gate --artifacts "$RUNNER_TEMP/arm-coverage" --jobs "$RUNNER_TEMP/arm-jobs.json" --public "${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) == 'false' }}"

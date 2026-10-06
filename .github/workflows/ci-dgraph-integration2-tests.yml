@@ -59,8 +59,22 @@ jobs:
           # move the binary
           cp dgraph/dgraph ~/go/bin/dgraph
           # run the tests
-          go test -v -timeout=90m -failfast -tags=integration2 ./...
+          if ${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) == 'false' }}; then
+            python3 t/ci-native/observe.py --ticks 180 --output "$RUNNER_TEMP/native-integration2.jsonl" -- go test -v -timeout=90m -failfast -tags=integration2 ./...
+          else
+            go test -v -timeout=90m -failfast -tags=integration2 ./...
+          fi
           # clean up docker containers after test execution
           go clean -testcache
           # sleep
           sleep 5
+
+      - name: Retain bounded public-runner observations
+        if:
+          always() && github.event.repository.owner.type == 'User' &&
+          toJSON(github.event.repository.private) == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-integration2-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-integration2.jsonl
+          if-no-files-found: warn

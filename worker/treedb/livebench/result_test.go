@@ -334,3 +334,20 @@ func TestWriteImmutableRefusesOverwrite(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestValidateSetRejectsEndpointDiagnosticEvenWithOnlyCPUProfile(t *testing.T) {
+	set := validSet(1)
+	set[0].Context.Profiles = []string{"cpu.pprof"}
+	if err := ValidateSet(set, 1); err != nil {
+		t.Fatalf("ordinary profile changed matrix acceptance: %v", err)
+	}
+	set[0].Context.Excluded = true
+	set[0].Context.Contaminants = []string{"endpoint diagnostic observations and passive wait; excluded from performance acceptance"}
+	set[0].Context.ExclusionReason = set[0].Context.Contaminants[0]
+	if err := set[0].Validate(); err != nil {
+		t.Fatalf("diagnostic raw result is invalid: %v", err)
+	}
+	if err := ValidateSet(set, 1); err == nil || !strings.Contains(err.Error(), "is excluded: endpoint diagnostic") {
+		t.Fatalf("CPU-only endpoint result admitted to matrix: %v", err)
+	}
+}
