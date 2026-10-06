@@ -111,29 +111,14 @@ def run(shard, destination):
     return receipt["exit"]
 
 
-def validate_gate(manifests, jobs, source, public, run_id, attempt):
-    expected = {"vectors", "remainder"} if public else {"full"}
-    if {m["shard"] for m in manifests} != expected or len(manifests) != len(expected):
-        raise ValueError("missing or duplicate shard manifests")
-    first = manifests[0]["universe"]
-    if not first or len(set(first)) != len(first):
-        raise ValueError("invalid full package universe")
-    combined = []
-    relevant = [j for j in jobs if j["name"].startswith("arm-")]
-    if {j["name"] for j in relevant} != {"arm-" + s for s in expected} or len(relevant) != len(expected):
+def validate_jobs(jobs, expected, source, run_id, attempt, prefix, deadline):
+    """Bind every required successful native job and its complete wall-clock span."""
+    relevant = [j for j in jobs if j["name"].startswith(prefix)]
+    if {j["name"] for j in relevant} != {prefix + s for s in expected} or len(relevant) != len(expected):
         raise ValueError("missing or duplicate shard jobs")
     starts, ends = [], []
-    for m in manifests:
-        if (m["schema"] != 1 or m["source"] != source or m["universe"] != first
-                or m["coverage_sha256"] != digest(first) or m["selected"] != selection(first, m["shard"])
-                or m["exit"] != 0 or m["signal"] is not None or "error" in m
-                or str(m["run_id"]) != str(run_id) or str(m["attempt"]) != str(attempt)):
-            raise ValueError("shard failed or source/coverage/run binding mismatch")
-        command = ["./t"] if m["shard"] == "full" else ["./t", "--suite=integration", "--pkg=" + ",".join(m["selected"])]
-        if m["command"] != command:
-            raise ValueError("test command mismatch")
-        combined.extend(m["selected"])
-        j = next(j for j in relevant if j["name"] == "arm-" + m["shard"])
+    for shard in expected:
+        j = next(j for j in relevant if j["name"] == prefix + shard)
         if (j["status"] != "completed" or j["conclusion"] != "success"
                 or j["head_sha"] != source["pr_head"] or str(j["run_id"]) != str(run_id)
                 or str(j["run_attempt"]) != str(attempt)):
@@ -144,11 +129,33 @@ def validate_gate(manifests, jobs, source, public, run_id, attempt):
             raise ValueError("invalid job clock")
         starts.append(start)
         ends.append(end)
+    span = (max(ends) - min(starts)).total_seconds()
+    if span > deadline:
+        raise ValueError("whole native gate exceeded original deadline")
+    return span
+
+
+def validate_gate(manifests, jobs, source, public, run_id, attempt):
+    expected = {"vectors", "remainder"} if public else {"full"}
+    if {m["shard"] for m in manifests} != expected or len(manifests) != len(expected):
+        raise ValueError("missing or duplicate shard manifests")
+    first = manifests[0]["universe"]
+    if not first or len(set(first)) != len(first):
+        raise ValueError("invalid full package universe")
+    combined = []
+    span = validate_jobs(jobs, expected, source, run_id, attempt, "arm-", 3600)
+    for m in manifests:
+        if (m["schema"] != 1 or m["source"] != source or m["universe"] != first
+                or m["coverage_sha256"] != digest(first) or m["selected"] != selection(first, m["shard"])
+                or m["exit"] != 0 or m["signal"] is not None or "error" in m
+                or str(m["run_id"]) != str(run_id) or str(m["attempt"]) != str(attempt)):
+            raise ValueError("shard failed or source/coverage/run binding mismatch")
+        command = ["./t"] if m["shard"] == "full" else ["./t", "--suite=integration", "--pkg=" + ",".join(m["selected"])]
+        if m["command"] != command:
+            raise ValueError("test command mismatch")
+        combined.extend(m["selected"])
     if sorted(combined) != first or len(combined) != len(set(combined)):
         raise ValueError("shards are not a disjoint complete union")
-    span = (max(ends) - min(starts)).total_seconds()
-    if span > 3600:
-        raise ValueError("whole ARM gate exceeded original 60-minute deadline")
     return {"status": "PASS", "packages": len(first), "shards": sorted(expected), "whole_gate_seconds": span}
 
 

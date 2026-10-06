@@ -171,3 +171,30 @@ The committed root `go.sum` is the reproducible checksum-only output of the buil
 `go mod tidy`, with unchanged `go.mod`, selected module versions and replacements. All three native
 workflows require committed module inputs to remain unchanged after build and before test admission.
 ARM keeps its exact source identity and coverage comparison against the aggregate checkout.
+
+## Public integration2 fixture capacity and complete execution
+
+For public personal repositories only, integration2 CI sets `DGRAPH_CI_LOCAL_ALPHA_CACHE_MB=512`.
+`NewLocalCluster` applies the actual Alpha `--cache=size-mb=512;` SuperFlag before startup. Alpha
+retains its default 40,40,20 cache percentages and `remove-on-update=false`. An explicit
+`WithStartupArg("cache", ...)` override takes precedence; ambiguous repeated flags or normalized
+SuperFlag keys and invalid profile values are refused before Docker preparation. Empty profile
+values preserve ordinary 4096 MiB defaults. This profile is independent of the load-only Compose
+overlay.
+
+`t/ci-native/integration2.py` discovers the full `go list -tags=integration2 ./...` universe,
+including ordinary packages. Public jobs run the namespace-aware restore package and its exact
+remainder, each package once with all original tests and `-p=1 -failfast`. Nonpublic jobs retain the
+full `go test -v -timeout=90m -failfast -tags=integration2 ./...` command.
+
+Public test binaries have a predeclared 40-minute Go stack timeout; the complete native Go
+invocation has a 45-minute cutoff and 90-second shutdown grace. These bounds fit inside the
+unchanged 90-minute job limit; slow preparation or hard runner shutdown can still prevent a stack
+from arriving. The stable integration2 aggregate requires successful source/head/run/attempt-bound
+native jobs, hash-bound separate query and test streams, identical complete discovery and a disjoint
+full union. It measures earliest native job start through latest completion, including preparation
+and teardown, and refuses a span exceeding the original 90-minute whole-gate limit. Missing,
+skipped, cancelled, failed or drifted shards cannot pass. ARM retains its original 60-minute gate.
+Native output and best-effort 30-second observations go to regular files; missing resource readings
+remain unknown. These controls do not prove hosted capacity, deadline success, a historical
+cancellation cause or performance.
