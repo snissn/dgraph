@@ -32,11 +32,11 @@ import (
 )
 
 type options struct {
-	dgraphBin, artifactDir, backend, class, cpuProfile                   string
-	repeat, dataset, concurrency, warmup, timed, zeroOffset, alphaOffset int
-	profileSeconds                                                       int
-	seed                                                                 int64
-	maxLoad                                                              float64
+	dgraphBin, artifactDir, backend, class, cpuProfile, endpointDiagnostic, operationDiagnostic, storageDiagnostic string
+	repeat, dataset, concurrency, warmup, timed, zeroOffset, alphaOffset                                           int
+	profileSeconds                                                                                                 int
+	seed                                                                                                           int64
+	maxLoad                                                                                                        float64
 }
 
 type process struct {
@@ -65,6 +65,9 @@ func main() {
 	flag.Int64Var(&o.seed, "seed", 20260711, "workload seed")
 	flag.StringVar(&o.cpuProfile, "cpu-profile", "", "new path for a separate-run Alpha CPU profile")
 	flag.IntVar(&o.profileSeconds, "profile-seconds", 5, "CPU profile duration")
+	flag.StringVar(&o.endpointDiagnostic, "endpoint-diagnostic", "", "new JSON sidecar for separate diagnostic-run posting endpoints; diagnostic overhead only")
+	flag.StringVar(&o.operationDiagnostic, "operation-diagnostic", "", "new operation/server-phase JSON sidecar; diagnostic overhead excluded from acceptance")
+	flag.StringVar(&o.storageDiagnostic, "storage-diagnostic", "", "new same-walk posting-file JSON sidecar; diagnostic overhead excluded from acceptance")
 	flag.Float64Var(&o.maxLoad, "max-load1", float64(runtime.NumCPU())*.75, "exclude a run if host load1 exceeds this")
 	flag.Parse()
 	if err := run(o); err != nil {
@@ -82,6 +85,15 @@ func run(o options) (err error) {
 	}
 	if o.cpuProfile != "" && o.profileSeconds < 1 {
 		return errors.New("--profile-seconds must be positive when --cpu-profile is set")
+	}
+	if err := validateEndpointDiagnostic(o); err != nil {
+		return err
+	}
+	if err := validateOperationDiagnostic(o); err != nil {
+		return err
+	}
+	if err := validateStorageDiagnosticOption(o); err != nil {
+		return err
 	}
 	if _, err := os.Stat(o.artifactDir); !os.IsNotExist(err) {
 		return fmt.Errorf("artifact directory must not exist: %s", o.artifactDir)
@@ -107,6 +119,10 @@ func run(o options) (err error) {
 	if len(initialContaminants) > 0 {
 		r.Context.Excluded = true
 		r.Context.ExclusionReason = strings.Join(initialContaminants, "; ")
+	}
+
+	if o.storageDiagnostic != "" {
+		markStorageDiagnostic(&r)
 	}
 
 	zeroArgs := []string{"zero", "--wal", filepath.Join(runDir, "zw"), "--replicas=1", fmt.Sprintf("--port_offset=%d", o.zeroOffset)}
@@ -144,8 +160,23 @@ func run(o options) (err error) {
 		return fmt.Errorf("warmup: %w", err)
 	}
 	r.SetupFinished = time.Now().UTC()
-	_, storeBefore, _ := storeStatus(httpBase)
-	promBefore, _ := prometheus(httpBase + "/debug/prometheus_metrics")
+	var diagnostic *operationDiagnostic
+	var beforeStore, beforeProm, afterStore, afterProm *operationRequest
+	if o.operationDiagnostic != "" {
+		diagnostic = &operationDiagnostic{SchemaVersion: 1, DiagnosticOnly: true, RunID: r.RunID,
+			Backend: o.backend, DurabilityClass: o.class, Seed: o.seed, Concurrency: o.concurrency,
+			ExpectedOperations: o.timed, Rows: make([]operationRow, o.timed),
+			Before: operationBoundary{Boundary: "before_workload"},
+			After:  operationBoundary{Boundary: "native_metrics_after"}}
+		beforeStore, beforeProm = &diagnostic.Before.Store, &diagnostic.Before.Prometheus
+		afterStore, afterProm = &diagnostic.After.Store, &diagnostic.After.Prometheus
+		markOperationDiagnostic(&r)
+	}
+	_, storeBefore, storeErr := storeStatusObserved(httpBase, beforeStore)
+	promBefore, promErr := prometheusObserved(httpBase+"/debug/prometheus_metrics", beforeProm)
+	if diagnostic != nil && (storeErr != nil || promErr != nil) {
+		return fmt.Errorf("operation diagnostic before boundary: %w", errors.Join(storeErr, promErr))
+	}
 	cpuBefore, err := procCPU(alpha.cmd.Process.Pid)
 	if err != nil {
 		return fmt.Errorf("collect alpha CPU before timed phase: %w", err)
@@ -157,10 +188,31 @@ func run(o options) (err error) {
 		go func() { profileDone <- captureCPUProfile(httpBase, o.cpuProfile, o.profileSeconds) }()
 		time.Sleep(100 * time.Millisecond)
 	}
-	latencies, timedWrites, err := exercise(ctx, dg, dataset, o.timed, o.concurrency, o.seed, 0x300000)
+	var operationRows []operationRow
+	if diagnostic != nil {
+		operationRows = diagnostic.Rows
+	}
+	latencies, timedWrites, err := exerciseWithOperations(ctx, dg, dataset, o.timed, o.concurrency, o.seed, 0x300000, operationRows)
 	r.TimedFinished = time.Now().UTC()
+	diagnosticWriteAttempted := false
+	if diagnostic != nil {
+		diagnostic.TimedStarted, diagnostic.TimedFinished = r.TimedStarted, r.TimedFinished
+		diagnostic.WorkloadSucceeded = err == nil
+		// Preserve drained rows if a later observer or validation fails. This
+		// defer precedes older process-cleanup defers and never retries a write.
+		defer func() {
+			if !diagnosticWriteAttempted {
+				err = errors.Join(err, writeOperationDiagnostic(o.operationDiagnostic, diagnostic, filepath.Join(runDir, "p")))
+			}
+		}()
+	}
 	if err != nil {
 		return fmt.Errorf("timed workload: %w", err)
+	}
+	if o.endpointDiagnostic != "" {
+		if err := captureEndpointDiagnostic(ctx, o.endpointDiagnostic, filepath.Join(runDir, "p"), httpBase, r.RunID, r.TimedFinished); err != nil {
+			return fmt.Errorf("endpoint diagnostic: %w", err)
+		}
 	}
 	if profileDone != nil {
 		if err := <-profileDone; err != nil {
@@ -181,16 +233,44 @@ func run(o options) (err error) {
 	if err != nil {
 		return fmt.Errorf("collect Alpha RSS HWM: %w", err)
 	}
-	diskLogical, diskAllocated, err := diskUsage(filepath.Join(runDir, "p"))
+	var storage *storageDiagnostic
+	storageWriteAttempted := false
+	if o.storageDiagnostic != "" {
+		storage = newStorageDiagnostic(filepath.Join(runDir, "p"), r)
+		// Retain partial observations on a walk or later metric failure before
+		// cleanup stops Alpha. Failed artifacts are rejected by the validator.
+		defer func() {
+			if !storageWriteAttempted {
+				storage.Error = fmt.Sprint(err)
+				err = errors.Join(err, writeStorageDiagnostic(o.storageDiagnostic, storage, r))
+			}
+		}()
+	}
+	diskLogical, diskAllocated, err := diskUsageObserved(filepath.Join(runDir, "p"), storage)
 	if err != nil {
 		return fmt.Errorf("collect posting disk usage: %w", err)
 	}
-	promAfter, _ := prometheus(httpBase + "/debug/prometheus_metrics")
-	statusAfter, storeAfter, err := storeStatus(httpBase)
+	promAfter, promErr := prometheusObserved(httpBase+"/debug/prometheus_metrics", afterProm)
+	statusAfter, storeAfter, err := storeStatusObserved(httpBase, afterStore)
+	if diagnostic != nil && promErr != nil {
+		return fmt.Errorf("operation diagnostic after Prometheus boundary: %w", promErr)
+	}
 	if err != nil {
 		return fmt.Errorf("collect posting-store status: %w", err)
 	}
 	r.Metrics = metrics(o.backend, cpuAfter-cpuBefore, hwm, diskLogical, diskAllocated, promBefore, promAfter, storeBefore, storeAfter)
+	if diagnostic != nil {
+		diagnosticWriteAttempted = true
+		if err := writeOperationDiagnostic(o.operationDiagnostic, diagnostic, filepath.Join(runDir, "p")); err != nil {
+			return fmt.Errorf("operation diagnostic: %w", err)
+		}
+	}
+	if storage != nil {
+		storageWriteAttempted = true
+		if err := writeStorageDiagnostic(o.storageDiagnostic, storage, r); err != nil {
+			return fmt.Errorf("storage diagnostic: %w", err)
+		}
+	}
 	r.Validation.BackendObserved = statusAfter["backend"]
 	r.Validation.DurabilityObserved = statusAfter["profile"]
 	r.Validation.UnsupportedOK = unsupportedOK(o.backend, statusAfter)
@@ -421,6 +501,13 @@ func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]expectedNode,
 }
 
 func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNode, ops, concurrency int, seed int64, writeBase int) ([]float64, map[string]expectedNode, error) {
+	return exerciseWithOperations(ctx, dg, dataset, ops, concurrency, seed, writeBase, nil)
+}
+
+func exerciseWithOperations(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNode, ops, concurrency int, seed int64, writeBase int, rows []operationRow) ([]float64, map[string]expectedNode, error) {
+	if rows != nil && len(rows) != ops {
+		return nil, nil, errors.New("operation diagnostic row count differs from workload")
+	}
 	exerciseCtx, cancelExercise := context.WithCancel(ctx)
 	defer cancelExercise()
 	type sample struct {
@@ -444,17 +531,32 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNo
 			for i := worker; i < ops; i += concurrency {
 				start := time.Now()
 				kind := (int(seed) + i*37) % 100
+				if rows != nil {
+					name := "write"
+					if kind < 60 {
+						name = "point_read"
+					} else if kind < 80 {
+						name = "one_hop_read"
+					}
+					rows[i] = operationRow{Index: i, Worker: worker, Kind: name, StartedAt: start, Outcome: "ok"}
+				}
 				uid := uids[(int(seed)+i*17)%len(uids)]
 				var err error
 				if kind < 60 {
 					var resp *api.Response
 					resp, err = dgraphQueryWithVars(exerciseCtx, dg, "query q($u: string) { q(func: uid($u)) { uid bench.value } }", map[string]string{"$u": uid})
+					if rows != nil {
+						observeOperationRPC(&rows[i], resp, err)
+					}
 					if err == nil {
 						err = validateReadResponse(resp.Json, uid, dataset[uid], false)
 					}
 				} else if kind < 80 {
 					var resp *api.Response
 					resp, err = dgraphQueryWithVars(exerciseCtx, dg, "query q($u: string) { q(func: uid($u)) { uid bench.value bench.next { uid bench.value } } }", map[string]string{"$u": uid})
+					if rows != nil {
+						observeOperationRPC(&rows[i], resp, err)
+					}
 					if err == nil {
 						err = validateReadResponse(resp.Json, uid, dataset[uid], true)
 					}
@@ -462,29 +564,57 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNo
 					writeID := writeBase + i
 					resp, mutErr := dgraphMutate(exerciseCtx, dg, &api.Mutation{SetNquads: []byte(fmt.Sprintf("_:w <bench.value> %q .", value(writeID))), CommitNow: true})
 					err = mutErr
+					if rows != nil {
+						observeOperationRPC(&rows[i], resp, err)
+					}
 					if err == nil {
-						out <- sample{ms: float64(time.Since(start).Microseconds()) / 1000, uid: resp.Uids["w"], value: value(writeID), write: true}
+						elapsed := time.Since(start)
+						if rows != nil {
+							finishOperation(&rows[i], elapsed, nil)
+						}
+						out <- sample{ms: float64(elapsed.Microseconds()) / 1000, uid: resp.Uids["w"], value: value(writeID), write: true}
 						continue
 					}
 				}
-				out <- sample{ms: float64(time.Since(start).Microseconds()) / 1000, err: err}
+				elapsed := time.Since(start)
+				if rows != nil {
+					finishOperation(&rows[i], elapsed, err)
+				}
+				out <- sample{ms: float64(elapsed.Microseconds()) / 1000, err: err}
 			}
 		}(worker)
 	}
 	go func() { wg.Wait(); close(out) }()
 	values := make([]float64, 0, ops)
 	writes := map[string]expectedNode{}
+	var workloadErr error
 	for s := range out {
 		if s.err != nil {
 			cancelExercise()
-			return nil, nil, s.err
+			if rows == nil {
+				return nil, nil, s.err
+			}
+			if workloadErr == nil {
+				workloadErr = s.err
+			}
+			continue
 		}
 		if s.write {
 			if err := recordExpectedWrite(writes, s.uid, s.value); err != nil {
-				return nil, nil, err
+				if rows == nil {
+					return nil, nil, err
+				}
+				cancelExercise()
+				if workloadErr == nil {
+					workloadErr = err
+				}
+				continue
 			}
 		}
 		values = append(values, s.ms)
+	}
+	if workloadErr != nil {
+		return nil, nil, workloadErr
 	}
 	return values, writes, nil
 }
@@ -708,11 +838,23 @@ func captureCPUProfile(base, path string, seconds int) error {
 	return livebench.WriteImmutableBytes(path, b)
 }
 func storeStatus(base string) (map[string]string, map[string]float64, error) {
+	return storeStatusObserved(base, nil)
+}
+func storeStatusObserved(base string, observation *operationRequest) (map[string]string, map[string]float64, error) {
+	if observation != nil {
+		observation.StartedAt = time.Now().UTC()
+	}
 	b, err := fetch(base+"/debug/store", 30*time.Second)
+	if observation != nil {
+		observation.FinishedAt = time.Now().UTC()
+	}
 	if err != nil {
 		return nil, nil, err
 	}
 	s := string(b)
+	if observation != nil {
+		observation.Body = s
+	}
 	status := parseMapSection(s, "status=map[")
 	stats := parseFloatMapSection(s, "stats=map[")
 	return status, stats, nil
@@ -773,12 +915,25 @@ func unsupportedOK(backend string, status map[string]string) bool {
 }
 
 func prometheus(url string) (map[string]float64, error) {
+	return prometheusObserved(url, nil)
+}
+func prometheusObserved(url string, observation *operationRequest) (map[string]float64, error) {
+	if observation != nil {
+		observation.StartedAt = time.Now().UTC()
+	}
 	b, err := fetch(url, 30*time.Second)
+	if observation != nil {
+		observation.FinishedAt = time.Now().UTC()
+	}
 	if err != nil {
 		return nil, err
 	}
 	out := map[string]float64{}
-	sc := bufio.NewScanner(strings.NewReader(string(b)))
+	raw := string(b)
+	if observation != nil {
+		observation.Body = raw
+	}
+	sc := bufio.NewScanner(strings.NewReader(raw))
 	for sc.Scan() {
 		line := sc.Text()
 		if line == "" || line[0] == '#' {
@@ -945,21 +1100,52 @@ func procHWM(pid int) (float64, error) {
 	return 0, errors.New("VmHWM unavailable")
 }
 func diskUsage(root string) (float64, float64, error) {
+	return diskUsageObserved(root, nil)
+}
+
+func diskUsageObserved(root string, observation *storageDiagnostic) (float64, float64, error) {
+	return diskUsageWalk(root, observation, filepath.Walk)
+}
+
+// The optional rows use the same FileInfo as the native sums, never another stat
+// or walk. Background writers can still change files during this sequential walk.
+func diskUsageWalk(root string, observation *storageDiagnostic, walk func(string, filepath.WalkFunc) error) (float64, float64, error) {
 	var logical, allocated float64
-	err := filepath.Walk(root, func(_ string, info os.FileInfo, err error) error {
+	if observation != nil {
+		observation.WalkStartedAt = time.Now().UTC()
+	}
+	err := walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if info.Mode().IsRegular() {
-			logical += float64(info.Size())
-			if st, ok := info.Sys().(*syscall.Stat_t); ok {
-				allocated += float64(st.Blocks * 512)
-			} else {
+			size := info.Size()
+			logical += float64(size)
+			st, ok := info.Sys().(*syscall.Stat_t)
+			if !ok {
 				return errors.New("filesystem stat does not expose allocated blocks")
+			}
+			allocated += float64(st.Blocks * 512)
+			if observation != nil {
+				observation.RegularFiles++
+				rel, err := filepath.Rel(root, path)
+				if err != nil {
+					return err
+				}
+				observation.Files = append(observation.Files, endpointFile{Path: filepath.ToSlash(rel),
+					LogicalBytes: size, AllocatedBytes: st.Blocks * 512, StatBlocks: st.Blocks, ModifiedAt: info.ModTime().UTC()})
 			}
 		}
 		return nil
 	})
+	if observation != nil {
+		observation.WalkFinishedAt = time.Now().UTC()
+		observation.WalkComplete = err == nil
+		observation.LogicalBytes, observation.AllocatedBytes = logical, allocated
+		if err != nil {
+			observation.Error = err.Error()
+		}
+	}
 	return logical, allocated, err
 }
 
@@ -1112,4 +1298,448 @@ func contains(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+const endpointQuiescence = 5 * time.Second
+
+type endpointFile struct {
+	Path           string    `json:"path"`
+	LogicalBytes   int64     `json:"logical_bytes"`
+	AllocatedBytes int64     `json:"allocated_bytes"`
+	StatBlocks     int64     `json:"stat_blocks"`
+	ModifiedAt     time.Time `json:"modified_at"`
+}
+
+type endpointObservation struct {
+	Boundary        string             `json:"boundary"`
+	TargetAt        time.Time          `json:"target_at"`
+	StartedAt       time.Time          `json:"started_at"`
+	FilesFinishedAt time.Time          `json:"files_finished_at"`
+	StatusStartedAt time.Time          `json:"status_started_at"`
+	FinishedAt      time.Time          `json:"finished_at"`
+	StartDelayNS    int64              `json:"start_delay_ns"`
+	EndDelayNS      int64              `json:"end_delay_ns"`
+	LogicalBytes    int64              `json:"logical_bytes"`
+	AllocatedBytes  int64              `json:"allocated_bytes"`
+	Files           []endpointFile     `json:"files"`
+	Status          map[string]string  `json:"status"`
+	Counters        map[string]float64 `json:"counters"`
+}
+
+type endpointDiagnostic struct {
+	SchemaVersion     int                   `json:"schema_version"`
+	DiagnosticOnly    bool                  `json:"diagnostic_only"`
+	RunID             string                `json:"run_id"`
+	PostingDir        string                `json:"posting_dir"`
+	TimedFinished     time.Time             `json:"timed_finished"`
+	QuiescenceSeconds int                   `json:"quiescence_seconds"`
+	Observations      []endpointObservation `json:"observations"`
+}
+
+// Endpoint observations are sequential metadata/status reads, not an atomic
+// filesystem snapshot. Background publication may proceed during either read.
+func observeEndpoint(root, httpBase, boundary string, target time.Time) (endpointObservation, error) {
+	o := endpointObservation{Boundary: boundary, TargetAt: target, StartedAt: time.Now().UTC(), Files: []endpointFile{}}
+	o.StartDelayNS = o.StartedAt.Sub(target).Nanoseconds()
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			return errors.New("filesystem stat does not expose allocated blocks")
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		f := endpointFile{Path: filepath.ToSlash(rel), LogicalBytes: info.Size(),
+			AllocatedBytes: st.Blocks * 512, StatBlocks: st.Blocks, ModifiedAt: info.ModTime().UTC()}
+		o.Files = append(o.Files, f)
+		o.LogicalBytes += f.LogicalBytes
+		o.AllocatedBytes += f.AllocatedBytes
+		return nil
+	})
+	o.FilesFinishedAt = time.Now().UTC()
+	if err != nil {
+		return o, fmt.Errorf("posting file metadata: %w", err)
+	}
+	o.StatusStartedAt = time.Now().UTC()
+	o.Status, o.Counters, err = storeStatus(httpBase)
+	o.FinishedAt = time.Now().UTC()
+	o.EndDelayNS = o.FinishedAt.Sub(target).Nanoseconds()
+	if err != nil {
+		return o, fmt.Errorf("posting-store status: %w", err)
+	}
+	if o.Status["backend"] != "treedb" || len(o.Counters) == 0 {
+		return o, errors.New("missing TreeDB status or numeric counters")
+	}
+	return o, nil
+}
+
+func captureEndpointDiagnostic(ctx context.Context, path, root, httpBase, runID string, finished time.Time) error {
+	if _, err := diagnosticOutputPath(path, root, nil); err != nil {
+		return err
+	}
+	d := endpointDiagnostic{SchemaVersion: 1, DiagnosticOnly: true, RunID: runID, PostingDir: root,
+		TimedFinished: finished, QuiescenceSeconds: int(endpointQuiescence / time.Second)}
+	for i, boundary := range []string{"timed_end", "quiescent"} {
+		target := finished.Add(time.Duration(i) * endpointQuiescence)
+		if delay := time.Until(target); delay > 0 {
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
+		}
+		o, err := observeEndpoint(root, httpBase, boundary, target)
+		if err != nil {
+			return fmt.Errorf("%s: %w", boundary, err)
+		}
+		d.Observations = append(d.Observations, o)
+	}
+	output, err := diagnosticOutputPath(path, root, nil)
+	if err != nil {
+		return err
+	}
+	return livebench.WriteImmutable(output, d)
+}
+
+// Validate before starting processes so a diagnostic cannot overwrite a native
+// result/profile or add its own bytes to the observed posting directory.
+func validateEndpointDiagnostic(o options) error {
+	if o.endpointDiagnostic == "" {
+		return nil
+	}
+	if (o.cpuProfile == "" && o.operationDiagnostic == "") || o.backend != "treedb" {
+		return errors.New("--endpoint-diagnostic requires --backend treedb and --cpu-profile or --operation-diagnostic; diagnostic overhead is excluded from acceptance")
+	}
+	_, err := diagnosticOutputPath(o.endpointDiagnostic, filepath.Join(o.artifactDir, "cluster", "p"),
+		[]string{o.cpuProfile, o.operationDiagnostic, o.storageDiagnostic})
+	return err
+}
+
+type operationServerLatency struct {
+	Available         bool   `json:"available"`
+	TotalNS           uint64 `json:"total_ns"`
+	AssignTimestampNS uint64 `json:"assign_timestamp_ns"`
+	ParsingNS         uint64 `json:"parsing_ns"`
+	ProcessingNS      uint64 `json:"processing_ns"`
+	EncodingNS        uint64 `json:"encoding_ns"`
+}
+
+type operationRow struct {
+	Index         int                    `json:"index"`
+	Worker        int                    `json:"worker"`
+	Kind          string                 `json:"kind"`
+	StartedAt     time.Time              `json:"started_at"`
+	RPCFinishedAt time.Time              `json:"rpc_finished_at"`
+	FinishedAt    time.Time              `json:"finished_at"`
+	RPCNS         int64                  `json:"rpc_ns"`
+	WallNS        int64                  `json:"wall_ns"`
+	ServerLatency operationServerLatency `json:"server_latency"`
+	Outcome       string                 `json:"outcome"`
+}
+
+type operationRequest struct {
+	StartedAt  time.Time `json:"started_at"`
+	FinishedAt time.Time `json:"finished_at"`
+	Body       string    `json:"body"`
+}
+
+type operationBoundary struct {
+	Boundary   string           `json:"boundary"`
+	Store      operationRequest `json:"store"`
+	Prometheus operationRequest `json:"prometheus"`
+}
+
+type operationDiagnostic struct {
+	SchemaVersion      int               `json:"schema_version"`
+	DiagnosticOnly     bool              `json:"diagnostic_only"`
+	RunID              string            `json:"run_id"`
+	Backend            string            `json:"backend"`
+	DurabilityClass    string            `json:"durability_class"`
+	Seed               int64             `json:"seed"`
+	Concurrency        int               `json:"concurrency"`
+	ExpectedOperations int               `json:"expected_operations"`
+	WorkloadSucceeded  bool              `json:"workload_succeeded"`
+	TimedStarted       time.Time         `json:"timed_started"`
+	TimedFinished      time.Time         `json:"timed_finished"`
+	WriteStartedAt     time.Time         `json:"write_started_at"`
+	Before             operationBoundary `json:"before"`
+	After              operationBoundary `json:"after"`
+	Rows               []operationRow    `json:"rows"`
+}
+
+// Each worker exclusively owns its deterministic indices. These rows never
+// retain the response, key or payload, and are inspected only after worker drain.
+func observeOperationRPC(row *operationRow, resp *api.Response, err error) {
+	row.RPCFinishedAt = time.Now()
+	row.RPCNS = row.RPCFinishedAt.Sub(row.StartedAt).Nanoseconds()
+	if err != nil {
+		row.Outcome = "rpc_error"
+	}
+	if resp != nil && resp.Latency != nil {
+		l := resp.Latency
+		row.ServerLatency = operationServerLatency{Available: true, TotalNS: l.TotalNs,
+			AssignTimestampNS: l.AssignTimestampNs, ParsingNS: l.ParsingNs,
+			ProcessingNS: l.ProcessingNs, EncodingNS: l.EncodingNs}
+	}
+}
+
+func finishOperation(row *operationRow, elapsed time.Duration, err error) {
+	row.WallNS = elapsed.Nanoseconds()
+	row.FinishedAt = row.StartedAt.Add(elapsed)
+	if err != nil && row.Outcome == "ok" {
+		row.Outcome = "validation_error"
+	}
+}
+
+func markOperationDiagnostic(r *livebench.Result) {
+	const reason = "operation diagnostic overhead; excluded from performance acceptance"
+	r.Context.Contaminants = append(r.Context.Contaminants, reason)
+	r.Context.Excluded = true
+	r.Context.ExclusionReason = strings.Join(r.Context.Contaminants, "; ")
+}
+
+// Serialization is outside the measured operation and workload boundaries.
+// A failed workload is retained only after cancellation and all workers drain.
+func writeOperationDiagnostic(path string, d *operationDiagnostic, postings string) error {
+	output, err := diagnosticOutputPath(path, postings, nil)
+	if err != nil {
+		return err
+	}
+	if len(d.Rows) != d.ExpectedOperations || d.Concurrency < 1 || !d.TimedFinished.After(d.TimedStarted) {
+		return errors.New("incomplete operation diagnostic")
+	}
+	for i, row := range d.Rows {
+		kind := (int(d.Seed) + i*37) % 100
+		name := "write"
+		if kind < 60 {
+			name = "point_read"
+		} else if kind < 80 {
+			name = "one_hop_read"
+		}
+		if row.Kind != name || (row.Outcome != "ok" && row.Outcome != "rpc_error" && row.Outcome != "validation_error") ||
+			row.RPCFinishedAt.Sub(row.StartedAt).Nanoseconds() != row.RPCNS ||
+			row.FinishedAt.Sub(row.StartedAt).Nanoseconds() != row.WallNS {
+			return fmt.Errorf("invalid operation diagnostic identity or duration %d", i)
+		}
+		if row.Index != i || row.Worker != i%d.Concurrency || row.StartedAt.Before(d.TimedStarted) ||
+			row.RPCFinishedAt.Before(row.StartedAt) || row.FinishedAt.Before(row.RPCFinishedAt) ||
+			row.FinishedAt.After(d.TimedFinished) || row.RPCNS < 0 || row.WallNS < row.RPCNS {
+			return fmt.Errorf("invalid operation diagnostic row %d", i)
+		}
+	}
+	d.WriteStartedAt = time.Now().UTC()
+	if d.WriteStartedAt.Before(d.TimedFinished) {
+		return errors.New("operation diagnostic cannot serialize before timed finish")
+	}
+	return livebench.WriteImmutable(output, d)
+}
+
+// Resolve existing ancestors, then append the not-yet-created suffix. Both the
+// posting root and outputs may have missing components at process preflight.
+// Dangling/cyclic aliases and inaccessible ancestors fail closed.
+func resolveDiagnosticPath(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	ancestor := absolute
+	var missing []string
+	for {
+		_, err := os.Lstat(ancestor)
+		if err == nil {
+			break
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			return "", err
+		}
+		missing = append(missing, filepath.Base(ancestor))
+		ancestor = parent
+	}
+	resolved, err := filepath.EvalSymlinks(ancestor)
+	if err != nil {
+		return "", err
+	}
+	for i := len(missing) - 1; i >= 0; i-- {
+		resolved = filepath.Join(resolved, missing[i])
+	}
+	return resolved, nil
+}
+
+// Return the resolved write destination, not the alias supplied by the caller.
+// Recheck at each observer write. O_EXCL still protects immutable files; this is
+// not a defense against adversarial concurrent replacement of parent directories.
+func diagnosticOutputPath(path, postings string, reserved []string) (string, error) {
+	output, err := resolveDiagnosticPath(path)
+	if err != nil {
+		return "", err
+	}
+	root, err := resolveDiagnosticPath(postings)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(root, output)
+	if err != nil {
+		return "", err
+	}
+	if rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", errors.New("diagnostic must be outside the posting directory")
+	}
+	artifactDir := filepath.Dir(filepath.Dir(postings))
+	reserved = append(append([]string{}, reserved...), filepath.Join(artifactDir, "result.json"),
+		filepath.Join(artifactDir, "zero.log"), filepath.Join(artifactDir, "alpha.log"), filepath.Join(artifactDir, "alpha-restart.log"))
+	for _, name := range reserved {
+		if name == "" {
+			continue
+		}
+		canonical, err := resolveDiagnosticPath(name)
+		if err != nil {
+			return "", err
+		}
+		if canonical == output {
+			return "", errors.New("diagnostic requires a separate sidecar filename")
+		}
+	}
+	if _, err := os.Lstat(output); err == nil {
+		return "", &os.PathError{Op: "create diagnostic", Path: output, Err: os.ErrExist}
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	return output, nil
+}
+
+func validateOperationDiagnostic(o options) error {
+	if o.operationDiagnostic == "" {
+		return nil
+	}
+	_, err := diagnosticOutputPath(o.operationDiagnostic, filepath.Join(o.artifactDir, "cluster", "p"),
+		[]string{o.cpuProfile, o.endpointDiagnostic, o.storageDiagnostic})
+	return err
+}
+
+const storageDiagnosticReason = "same-walk storage diagnostic overhead; excluded from performance acceptance"
+const storageDiagnosticBoundary = "native_posting_disk_usage_prevalidation"
+
+type storageDiagnostic struct {
+	SchemaVersion   int            `json:"schema_version"`
+	DiagnosticOnly  bool           `json:"diagnostic_only"`
+	RunID           string         `json:"run_id"`
+	Backend         string         `json:"backend"`
+	DurabilityClass string         `json:"durability_class"`
+	PostingDir      string         `json:"posting_dir"`
+	Boundary        string         `json:"boundary"`
+	TimedFinished   time.Time      `json:"timed_finished"`
+	WalkStartedAt   time.Time      `json:"walk_started_at"`
+	WalkFinishedAt  time.Time      `json:"walk_finished_at"`
+	WriteStartedAt  time.Time      `json:"write_started_at"`
+	WalkComplete    bool           `json:"walk_complete"`
+	Error           string         `json:"error"`
+	LogicalBytes    float64        `json:"logical_bytes"`
+	AllocatedBytes  float64        `json:"allocated_bytes"`
+	RegularFiles    int            `json:"regular_files"`
+	Files           []endpointFile `json:"files"`
+}
+
+func newStorageDiagnostic(root string, r livebench.Result) *storageDiagnostic {
+	return &storageDiagnostic{SchemaVersion: 1, DiagnosticOnly: true, RunID: r.RunID, Backend: r.Config.Backend,
+		DurabilityClass: r.Config.DurabilityClass, PostingDir: root, Boundary: storageDiagnosticBoundary,
+		TimedFinished: r.TimedFinished, Files: []endpointFile{}}
+}
+
+func markStorageDiagnostic(r *livebench.Result) {
+	r.Context.Contaminants = append(r.Context.Contaminants, storageDiagnosticReason)
+	r.Context.Excluded = true
+	r.Context.ExclusionReason = strings.Join(r.Context.Contaminants, "; ")
+}
+
+// Validation is against the native result from this run, not a new filesystem
+// observation. Incomplete raw artifacts are retained but cannot validate.
+func validateStorageDiagnostic(d *storageDiagnostic, r livebench.Result) error {
+	if d == nil || d.SchemaVersion != 1 || !d.DiagnosticOnly || !d.WalkComplete || d.Error != "" || len(d.Files) == 0 {
+		return errors.New("incomplete storage diagnostic")
+	}
+	if d.RegularFiles != len(d.Files) {
+		return errors.New("storage diagnostic file count mismatch")
+	}
+	if d.RunID == "" || d.RunID != r.RunID || d.Backend != r.Config.Backend || d.DurabilityClass != r.Config.DurabilityClass ||
+		(d.Backend != "treedb" && d.Backend != "badger") || (d.DurabilityClass != "relaxed" && d.DurabilityClass != "durable") ||
+		r.Context.RawPath == "" || d.PostingDir != filepath.Join(filepath.Dir(r.Context.RawPath), "cluster", "p") ||
+		d.Boundary != storageDiagnosticBoundary || !r.Context.Excluded || !strings.Contains(r.Context.ExclusionReason, storageDiagnosticReason) {
+		return errors.New("storage diagnostic identity or boundary mismatch")
+	}
+	if d.TimedFinished.IsZero() || !d.TimedFinished.Equal(r.TimedFinished) || d.WalkStartedAt.IsZero() ||
+		d.WalkStartedAt.Before(d.TimedFinished) || d.WalkFinishedAt.Before(d.WalkStartedAt) ||
+		d.WriteStartedAt.IsZero() || d.WriteStartedAt.Before(d.WalkFinishedAt) {
+		return errors.New("storage diagnostic walk envelope mismatch")
+	}
+	seen := make(map[string]bool, len(d.Files))
+	var logical, allocated float64
+	const maxExactBytes = 1<<53 - 1
+	for _, f := range d.Files {
+		if f.Path == "" || filepath.IsAbs(f.Path) || filepath.ToSlash(filepath.Clean(f.Path)) != f.Path || f.Path == "." ||
+			f.Path == ".." || strings.HasPrefix(f.Path, "../") || strings.ContainsRune(f.Path, 0) || seen[f.Path] ||
+			f.LogicalBytes < 0 || f.LogicalBytes > maxExactBytes || f.StatBlocks < 0 || f.StatBlocks > maxExactBytes/512 ||
+			f.AllocatedBytes != f.StatBlocks*512 || f.ModifiedAt.IsZero() {
+			return errors.New("invalid storage diagnostic file row")
+		}
+		seen[f.Path] = true
+		logical += float64(f.LogicalBytes)
+		allocated += float64(f.AllocatedBytes)
+		if logical > maxExactBytes || allocated > maxExactBytes {
+			return errors.New("storage diagnostic totals exceed exact native byte representation")
+		}
+	}
+	if logical != d.LogicalBytes || allocated != d.AllocatedBytes {
+		return errors.New("storage diagnostic file sum mismatch")
+	}
+	for name, want := range map[string]float64{"disk_logical_bytes": logical, "disk_allocated_bytes": allocated} {
+		metric, ok := r.Metrics[name]
+		source := "posting directory walk"
+		if name == "disk_allocated_bytes" {
+			source = "posting directory stat blocks"
+		}
+		if !ok || !metric.Available || metric.Unit != "bytes" || metric.Source != source || metric.Value != want {
+			return fmt.Errorf("storage diagnostic native metric mismatch: %s", name)
+		}
+	}
+	return nil
+}
+
+func writeStorageDiagnostic(path string, d *storageDiagnostic, r livebench.Result) error {
+	if d == nil {
+		return errors.New("missing storage diagnostic")
+	}
+	output, err := diagnosticOutputPath(path, filepath.Join(filepath.Dir(r.Context.RawPath), "cluster", "p"), nil)
+	if err != nil {
+		return err
+	}
+	d.WriteStartedAt = time.Now().UTC()
+	validationErr := validateStorageDiagnostic(d, r)
+	// Preserve even failed/partial raw observations with their error. Returning
+	// validationErr prevents a native success result from being published.
+	return errors.Join(validationErr, livebench.WriteImmutable(output, d))
+}
+
+func validateStorageDiagnosticOption(o options) error {
+	if o.storageDiagnostic == "" {
+		return nil
+	}
+	if o.cpuProfile != "" || o.endpointDiagnostic != "" {
+		return errors.New("--storage-diagnostic excludes --cpu-profile and --endpoint-diagnostic waits; use the original native disk boundary")
+	}
+	_, err := diagnosticOutputPath(o.storageDiagnostic, filepath.Join(o.artifactDir, "cluster", "p"),
+		[]string{o.cpuProfile, o.endpointDiagnostic, o.operationDiagnostic})
+	return err
 }
