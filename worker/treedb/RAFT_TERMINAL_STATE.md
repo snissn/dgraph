@@ -91,3 +91,37 @@ sealing then recovering the prior cut. Race controls include concurrent real Zer
 These are correctness evidence, not actual-server performance, power-loss qualification or a claim
 of bounded S=0 equilibrium. Final exact-source multiprocess/ACK crash qualification remains
 separate.
+
+`raftproduction/verify_retention_resources.py` is a bounded, actual-server diagnostic driver; landed
+source does not mean a resource campaign has run. It uses public HTTP operations, records the
+binary/driver hashes, resolved Alpha/Zero `HardSync:true`, COW activation, sampled process RSS and
+per-process high water, allocated/logical postings/WAL/private-temporary file bytes, raw
+`/debug/store`, and archived CURRENT-selected certificates. Default gates are combined sampled RSS
+<=4096 MiB, server plus scratch allocated file bytes <=8192 MiB, floor ACK including eligibility
+retries <=60 seconds, orderly Alpha Close <=30 seconds, post-retirement terminal rows <=4096 and
+retry signatures <=128, plus the source pending and metadata limits above. These are configurable
+diagnostic budgets, not promised product bounds. Eight rounds of 128 fixed-key overwrites include
+one newer pending transaction in each explicit operator-selected S certificate, low traffic, and
+pending commit after orderly Alpha reopen while Zero stays alive. The operator-supplied source
+revision is recorded, not independently attested. Sampling perturbs latency and can miss transient
+RSS or scratch peaks; schema rebuild and worst-case index/delete fanout are outside this workload.
+
+For example, from the Dgraph checkout, with an already built, source-qualified binary and an
+exclusive runtime grant:
+
+```sh
+python3 worker/treedb/raftproduction/verify_retention_resources.py \
+  --dgraph-bin /absolute/path/to/dgraph --source-revision FULL_BUILD_SHA \
+  --out /mnt/fast4tb/retention-resources-UNIQUE \
+  --maintenance-wait-seconds 310 --require-physical-floor-progress
+```
+
+The optional wait observes existing five-minute logical posting-history maintenance and requires a
+nonzero certified physical P, including a pass already completed during the workload. It does not
+invoke physical value-log GC or compaction: this source has no public HTTP/admin trigger for
+`RunPostingStoreGC` or `CompactStorage`. Their cycle results remain explicitly unavailable. Live
+Raft debt counters likewise remain null; certified retry/pending/terminal counts and observed WAL
+file bytes are separate evidence. `result.json`, `samples.jsonl`, per-phase store output, logs and
+certificate copies preserve the run, including failed gates. Even a successful finite run always
+reports `equilibrium_qualified=false`; it establishes neither sustained lifetime equilibrium,
+physical GC/compaction closure, power-loss durability nor performance acceptance.
