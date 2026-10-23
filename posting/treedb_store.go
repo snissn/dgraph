@@ -257,7 +257,20 @@ func (s *TreeDBStore) ValueLogGC(ctx context.Context, opts treedb.ValueLogGCOpti
 		return treedb.ValueLogGCStats{}, fmt.Errorf("value-log GC posting TreeDB: %w", treedb.ErrClosed)
 	}
 	if s.external != nil {
-		return treedb.ValueLogGCStats{}, fmt.Errorf("external recovery prototype: online GC is unsupported")
+		// GC changes physical reachability, not the semantic MVCC floor. The
+		// owner's current/previous retained roots participate in the maintained
+		// recoverable-root scan. Keep the DB pointer and owner lifecycle pinned
+		// for the whole pass, including any metadata publication.
+		var stats treedb.ValueLogGCStats
+		err := s.external.Apply(func() error {
+			var err error
+			stats, err = s.db.ValueLogGC(ctx, opts)
+			return err
+		})
+		if err != nil {
+			return stats, fmt.Errorf("value-log GC posting TreeDB: %w", err)
+		}
+		return stats, nil
 	}
 	stats, err := s.db.ValueLogGC(ctx, opts)
 	if err != nil {
@@ -277,7 +290,21 @@ func (s *TreeDBStore) CompactStorage(ctx context.Context, opts treedb.CompactSto
 		return treedb.CompactStorageStats{}, fmt.Errorf("compact posting TreeDB storage: %w", treedb.ErrClosed)
 	}
 	if s.external != nil {
-		return treedb.CompactStorageStats{}, fmt.Errorf("external recovery prototype: online compaction is unsupported")
+		if opts.UnsafeValueLogReclaimFencedUnreferenced {
+			return treedb.CompactStorageStats{}, fmt.Errorf("external recovery: unsafe fenced reclaim is unsupported")
+		}
+		// This API only reorganizes physical storage. Its maintained retained-root
+		// closure protects both certificates; no logical MVCC floor is advanced.
+		var stats treedb.CompactStorageStats
+		err := s.external.Apply(func() error {
+			var err error
+			stats, err = s.db.CompactStorage(ctx, opts)
+			return err
+		})
+		if err != nil {
+			return stats, fmt.Errorf("compact posting TreeDB storage: %w", err)
+		}
+		return stats, nil
 	}
 	stats, err := s.db.CompactStorage(ctx, opts)
 	if err != nil {

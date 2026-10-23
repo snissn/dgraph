@@ -876,6 +876,9 @@ func decodeUint64MatrixUnsafe(data []byte, matrix *[][]uint64) error {
 }
 
 func (r *rebuilder) Run(ctx context.Context) error {
+	if pstore == nil {
+		return r.runForStore(ctx)
+	}
 	if _, err := requireBadgerOperationalStore("index rebuild stream"); err != nil {
 		return err
 	}
@@ -1181,6 +1184,9 @@ func (rb *IndexRebuild) DropIndexes(ctx context.Context) error {
 	prefixes = append(prefixes, prefixesToDropCountIndex(ctx, rb)...)
 	prefixes = append(prefixes, prefixesToDropVectorIndexEdges(ctx, rb)...)
 	if len(prefixes) > 0 {
+		if pstore == nil {
+			return dropStoreIndexPrefixes(ctx, rb.StartTs, prefixes)
+		}
 		if _, err := requireBadgerOperationalStore("drop index prefixes"); err != nil {
 			return err
 		}
@@ -1207,8 +1213,14 @@ func (rb *IndexRebuild) NeedIndexRebuild() bool {
 
 // BuildIndexes builds indexes.
 func (rb *IndexRebuild) BuildIndexes(ctx context.Context) error {
-	if _, err := requireBadgerOperationalStore("rebuild indexes"); err != nil {
-		return err
+	if pstore == nil {
+		// The store-neutral rebuild currently supports scalar tokenizers. Its
+		// caller must serialize schema changes and await completion before a cut.
+		if len(rb.CurrentSchema.IndexSpecs) != 0 || rb.CurrentSchema.Count ||
+			rb.CurrentSchema.Directive == pb.SchemaUpdate_REVERSE ||
+			(rb.OldSchema != nil && (len(rb.OldSchema.IndexSpecs) != 0 || rb.OldSchema.Count || rb.OldSchema.Directive == pb.SchemaUpdate_REVERSE)) {
+			return errors.Errorf("store index rebuild requires scalar tokenizer schema")
+		}
 	}
 	if err := rebuildTokIndex(ctx, rb); err != nil {
 		return err

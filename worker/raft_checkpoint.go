@@ -383,30 +383,7 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 }
 
 func checkRaftPrototypeProposal(p *pb.Proposal) error {
-	if p.Kv != nil || p.CleanPredicate != "" || p.Restore != nil || p.DeleteNs != nil || p.ExtSnapshotState != nil || p.CdcState != nil {
-		return fmt.Errorf("raft_checkpoint prototype does not support external/admin materialization")
-	}
-	if m := p.Mutations; m != nil {
-		if m.DropOp != pb.Mutations_NONE {
-			return fmt.Errorf("raft_checkpoint prototype does not support drop")
-		}
-		for _, edge := range m.Edges {
-			if isDeletePredicateEdge(edge) {
-				return fmt.Errorf("raft_checkpoint prototype does not support predicate deletion")
-			}
-		}
-		// Fresh scalar schema and types are replayed by the existing semantic path.
-		// Rebuilds over existing data need a separately certified lifecycle.
-		for _, s := range m.Schema {
-			if old, exists := schema.State().Get(context.Background(), s.Predicate); exists && !proto.Equal(&old, s) {
-				return fmt.Errorf("raft_checkpoint prototype requires fresh or identical schema, cannot rebuild %s", s.Predicate)
-			}
-			if s.Directive == pb.SchemaUpdate_DELETE || len(s.IndexSpecs) > 0 || s.Count || s.Directive == pb.SchemaUpdate_REVERSE {
-				return fmt.Errorf("raft_checkpoint prototype does not support schema rebuild/delete/vector/count/reverse")
-			}
-		}
-	}
-	return nil
+	return checkRaftSupportedProposal(p)
 }
 
 // reserveRaftRecoveryDebt bounds accepted mutation input before proposing it.

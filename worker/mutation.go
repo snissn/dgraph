@@ -132,6 +132,9 @@ func runSchemaMutation(ctx context.Context, updates []*pb.SchemaUpdate, startTs 
 	if len(updates) == 0 {
 		return nil
 	}
+	if raftCheckpointEnabled() {
+		return runRaftSchemaMutation(ctx, updates, startTs)
+	}
 	// Wait until schema modification for all predicates is complete. There cannot be two
 	// background tasks running as this is a race condition. We typically won't propose an
 	// index update if one is already going on. If that's not the case, then the receiver
@@ -279,8 +282,23 @@ func runSchemaMutation(ctx context.Context, updates []*pb.SchemaUpdate, startTs 
 // updateSchema commits the schema to disk in blocking way, should be ok because this happens
 // only during schema mutations or we see a new predicate.
 func updateSchema(s *pb.SchemaUpdate, ts uint64) error {
-	schema.State().Set(s.Predicate, s)
-	schema.State().DeleteMutSchema(s.Predicate)
+	if !raftCheckpointEnabled() {
+		schema.State().Set(s.Predicate, s)
+		schema.State().DeleteMutSchema(s.Predicate)
+	}
+	if err := writeSchema(s, ts); err != nil {
+		return err
+	}
+	if raftCheckpointEnabled() {
+		// The query schema becomes complete only after all index callbacks and
+		// the final schema write finish inside ordered apply.
+		schema.State().Set(s.Predicate, s)
+		schema.State().DeleteMutSchema(s.Predicate)
+	}
+	return nil
+}
+
+func writeSchema(s *pb.SchemaUpdate, ts uint64) error {
 	txn := postingStore.NewWriteTxn()
 	defer txn.Discard()
 	data, err := proto.Marshal(s)
