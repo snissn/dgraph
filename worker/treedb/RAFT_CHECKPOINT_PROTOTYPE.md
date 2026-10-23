@@ -1,5 +1,9 @@
 # Raft-owned TreeDB materialization prototype
 
+This document records the original prototype contract and evidence. Production integration changes,
+including typed no-op rejection and its replay proof, are tracked in
+[RAFT_RECOVERY_PRODUCTION.md](RAFT_RECOVERY_PRODUCTION.md); its completion obligations remain open.
+
 This is an opt-in, single-Alpha diagnostic prototype. It is not production replay closure, snapshot
 transfer, performance qualification, or authorization to merge. The mutation RPC contract is
 unchanged: normal transaction success still depends on the existing Alpha/Zero consensus workflow.

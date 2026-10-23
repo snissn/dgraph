@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: © 2017-2025 Istari Digital, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package worker
 
 import (
@@ -11,13 +16,14 @@ import (
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/dgraph-io/dgraph/v25/raftwal"
 	"github.com/dgraph-io/dgraph/v25/schema"
+	"github.com/dgraph-io/dgraph/v25/types"
 	"github.com/golang/glog"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/protobuf/proto"
 )
 
 const (
-	raftCheckpointVersion  = "dgraph-normal-delta-v2"
+	raftCheckpointVersion  = "dgraph-normal-delta-v3"
 	raftCheckpointEvery    = 1024
 	raftCheckpointBytes    = 16 << 20
 	raftRecoveryMaxEntries = 4096
@@ -43,6 +49,48 @@ type raftCheckpointMetadata struct {
 type raftProposalSignature struct {
 	Size         int
 	SeenUnixNano int64
+	Rejection    string `json:",omitempty"`
+}
+
+// A semantic rejection is produced only by the side-effect-free validation
+// pass. Never infer it from a wrapped storage error, runtime conflict, or text.
+// Before certification its authority is the ordered proposal plus the schema
+// reconstructed by the preceding ordered input. After certification the retry
+// disposition is part of that same application cut.
+type raftSemanticRejection struct{ reason string }
+
+func (e *raftSemanticRejection) Error() string { return e.reason }
+
+func isRaftSemanticRejection(err error) bool {
+	_, ok := err.(*raftSemanticRejection)
+	return ok
+}
+
+func validateRaftMutationEdges(m *pb.Mutations, inferred map[string]types.TypeID) error {
+	ctx := schema.GetWriteContext(context.Background())
+	for _, edge := range m.Edges {
+		if edge.Attr == "" {
+			return &raftSemanticRejection{reason: "Predicate cannot be empty"}
+		}
+		su, exists := schema.State().Get(ctx, edge.Attr)
+		if !exists {
+			hint := m.GetMetadata().GetPredHints()[edge.Attr]
+			su = inferredSchema(edge.Attr, inferred[edge.Attr], hint)
+		}
+		if su.ValueType == pb.Posting_PASSWORD && edge.ValueType != pb.Posting_PASSWORD {
+			// Normal proposal admission hashes passwords before appending the log.
+			// Late conversion consumes randomness and is not a pure replay step.
+			return fmt.Errorf("Raft password conversion must complete before proposal persistence")
+		}
+		// ValidateAndConvert may replace value/type. Validate a temporary edge so
+		// a rejected proposal leaves both the posting state and its input intact.
+		candidate := &pb.DirectedEdge{Entity: edge.Entity, Attr: edge.Attr, Value: edge.Value,
+			ValueId: edge.ValueId, ValueType: edge.ValueType, Lang: edge.Lang, Op: edge.Op}
+		if err := ValidateAndConvert(candidate, &su); err != nil {
+			return &raftSemanticRejection{reason: err.Error()}
+		}
+	}
+	return nil
 }
 
 type appliedProposal struct {
@@ -79,9 +127,10 @@ func (n *node) expireRaftProposals(now time.Time, maxAge time.Duration) error {
 // Preserve the existing successful key/size dedup semantics across certified
 // cuts. Replaying a duplicate prewrite must not resurrect a completed txn.
 func (n *node) applyTrackedProposal(p *pb.Proposal, key uint64, size int) error {
-	if old := n.appliedProposals[key]; key != 0 && old != nil && old.err == nil && old.size == size {
+	if old := n.appliedProposals[key]; key != 0 && old != nil &&
+		(old.err == nil || (raftCheckpointEnabled() && isRaftSemanticRejection(old.err))) && old.size == size {
 		old.seen = time.Now()
-		return nil
+		return old.err
 	}
 	err := n.applyCommitted(p, key)
 	if key != 0 {
@@ -202,6 +251,9 @@ func (n *node) recoverRaftCheckpoint() error {
 	n.appliedProposals = make(map[uint64]*appliedProposal, len(c.AppliedProposals))
 	for key, sig := range c.AppliedProposals {
 		n.appliedProposals[key] = &appliedProposal{size: sig.Size, seen: time.Unix(0, sig.SeenUnixNano)}
+		if sig.Rejection != "" {
+			n.appliedProposals[key].err = &raftSemanticRejection{reason: sig.Rejection}
+		}
 	}
 	n.Applied.SetDoneUntil(c.Index)
 	atomic.StoreUint64(&n.raftCertifiedIndex, c.Index)
@@ -250,8 +302,14 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 	c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: n.gid, RaftID: n.Id, Index: index, Term: term, OracleMaxAssigned: posting.Oracle().MaxAssigned(), GroupChecksum: atomic.LoadUint64(&groups().deltaChecksum), ConfState: *n.ConfState()}
 	c.AppliedProposals = make(map[uint64]raftProposalSignature, len(n.appliedProposals))
 	for key, p := range n.appliedProposals {
-		if p.err == nil {
-			c.AppliedProposals[key] = raftProposalSignature{Size: p.size, SeenUnixNano: p.seen.UnixNano()}
+		if p.err == nil || isRaftSemanticRejection(p.err) {
+			sig := raftProposalSignature{Size: p.size, SeenUnixNano: p.seen.UnixNano()}
+			if p.err != nil {
+				sig.Rejection = p.err.Error()
+			}
+			c.AppliedProposals[key] = sig
+		} else {
+			return fmt.Errorf("uncertain proposal outcome cannot be certified: %w", p.err)
 		}
 	}
 	data, err := json.Marshal(c)

@@ -297,7 +297,7 @@ func updateSchema(s *pb.SchemaUpdate, ts uint64) error {
 	return txn.CommitAt(ts, nil)
 }
 
-func createSchema(attr string, typ types.TypeID, hint pb.Metadata_HintType, ts uint64) error {
+func inferredSchema(attr string, typ types.TypeID, hint pb.Metadata_HintType) pb.SchemaUpdate {
 	ctx := schema.GetWriteContext(context.Background())
 
 	// Don't overwrite schema blindly, acl's might have been set even though
@@ -321,6 +321,11 @@ func createSchema(attr string, typ types.TypeID, hint pb.Metadata_HintType, ts u
 		default:
 		}
 	}
+	return s
+}
+
+func createSchema(attr string, typ types.TypeID, hint pb.Metadata_HintType, ts uint64) error {
+	s := inferredSchema(attr, typ, hint)
 	if err := checkSchema(&s); err != nil {
 		return err
 	}

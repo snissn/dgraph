@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	stderrors "errors"
 	"fmt"
 	"math"
 	"sort"
@@ -502,6 +503,11 @@ func (n *node) applyMutations(ctx context.Context, proposal *pb.Proposal) (rerr 
 			schemaMap[edge.Attr] = posting.TypeID(edge)
 		}
 	}
+	if raftCheckpointEnabled() {
+		if err := validateRaftMutationEdges(proposal.Mutations, schemaMap); err != nil {
+			return err
+		}
+	}
 
 	total := len(proposal.Mutations.Edges)
 
@@ -619,10 +625,7 @@ func (n *node) applyMutations(ctx context.Context, proposal *pb.Proposal) (rerr 
 	var errs error
 	for range numChanCreated {
 		if err := <-errCh; err != nil {
-			if errs == nil {
-				errs = errors.New("Got error while running mutation")
-			}
-			errs = errors.Wrap(err, errs.Error())
+			errs = stderrors.Join(errs, err)
 		}
 	}
 	return errs
@@ -910,7 +913,7 @@ func (n *node) processApplyCh() {
 
 			var perr error
 			p, ok := n.appliedProposals[key]
-			if ok && p.err == nil && p.size == psz {
+			if ok && p.err == nil && p.size == psz && !raftCheckpointEnabled() {
 				msg := fmt.Sprintf("Proposal with key: %d already applied. Skipping index: %d."+
 					" Delta: %+v Snapshot: %+v.\n",
 					key, proposal.Index, proposal.Delta, proposal.Snapshot)
@@ -945,7 +948,7 @@ func (n *node) processApplyCh() {
 			}
 
 			if raftCheckpointEnabled() {
-				if perr != nil {
+				if perr != nil && !isRaftSemanticRejection(perr) {
 					glog.Fatalf("raft_checkpoint apply failed; refusing a visibility frontier: %v", perr)
 				}
 				n.raftAppliedBytes += uint64(len(entry.Data))
