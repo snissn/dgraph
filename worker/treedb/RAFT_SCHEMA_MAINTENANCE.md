@@ -86,13 +86,15 @@ removal/reassignment. Different pending transactions continue through canonical 
 their local timing never decides a rejection. Index/hash collisions and local physical pruning
 cannot change the outcome. Unknown decoding/read/cancellation failures remain uncertain errors.
 
-Scalar type changes rewrite complete main/split data at the schema timestamp using maintained
-conversion and binary marshaling before fingerprinting. This covers scalar-to-scalar, scalar-to-list
-and list-to-list conversions. Every old untagged fingerprint is replaced; values which become equal
-merge as ordinary repeated SETs do. Facet precedence follows deterministic source UID iteration
-(last source wins), never physical commit timestamps or pruning schedules. Language identities and
-facets remain attached to their values. Count buckets rebuild when conversion can merge list members
-even if Count stays enabled. Old timestamp versions retain the original bytes, identities and
+Scalar-to-scalar type changes preserve the stored type and bytes, using lazy read conversion on both
+Badger and the explicit Store path. A float 1.6 viewed as int 1 therefore returns to float 1.6 when
+its schema is restored. Scalar-to-list changes and scalar value-type changes within lists rewrite
+complete main/split data at the schema timestamp using maintained conversion and binary marshaling
+before fingerprinting. Every old untagged fingerprint is replaced; values which become equal merge
+as ordinary repeated SETs do. Facet precedence follows deterministic source UID iteration (last
+source wins), never physical commit timestamps or pruning schedules. Language identities and facets
+remain attached to their values. Count buckets rebuild when conversion can merge list members even
+if Count stays enabled. Old timestamp versions retain the original bytes, identities and
 cardinality. Disposable scratch holds the replacement image only; complete source values are visited
 through their main list, including cold split dependencies.
 
@@ -137,6 +139,10 @@ counts, removal and historical reads.
 retry without losing tagged values. Pure data-validation tests compare logical eligibility with
 different physical histories and preserve unknown error classes. Iteration callback errors and
 empty-list cache anchor timestamps have dedicated regressions.
+`posting.TestStoreScalarTypeRoundtripPreservesStoredEncoding` runs the Badger and explicit TreeDB
+builders through float 1.6 to int and back: stored type, bytes and DATA version stay unchanged, the
+int view is 1, and restored/current and historical float views retain 1.6 and satisfy `ge(1.6)`.
+`query.TestMinSchema` also checks the restored original float result through the query API.
 
 `worker.TestRaftSchemaVariantsCertifiedPendingAndRejection` applies mixed count/reverse, scalar
 type/list and token changes through the ordinary tracked proposal path. It certifies and reopens
@@ -217,21 +223,21 @@ Continuous-workload resource/debt qualification and full bounded-lifetime accept
 
 ## Other operations and inherited boundaries
 
-| Flow                              | Required closure / current disposition                                                                                                                                                                 |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Scalar tokenizer changes          | Implemented serial transition above; actual-server crash qualification remains                                                                                                                         |
-| Type definition/deletion          | Existing timestamped schema writer/tombstone; older-cut replay and reopen control implemented; no posting-data or namespace prefix deletion                                                            |
-| Count/reverse                     | Maintained builders integrated with explicit private Store, complete split sources, chunk aggregation, pending mutation and certificate/reopen proofs; inherited query limits remain                   |
-| Type/list conversion              | Complete target conversion/re-key/merge through maintained builders; pure conversion/data-shape validation precedes effects; old versions retained; populated list-to-scalar/UID-scalar changes reject |
-| Upsert/unique changes             | Pure schema preflight plus ordered current-schema prewrite validation and canonical conflict keys; delayed-admission and pending certificate/reopen controls; actual Zero qualification separate       |
-| Vector                            | Factory/cache and graph side effects need exact root closure and deterministic rebuild authority; already outside ordinary TreeDB adapter capabilities                                                 |
-| Drop/predicate/namespace deletion | Ordered pending disposition, versioned tombstones, schema/cache reset and namespace admission epoch must complete before a cut; physical Badger prefix deletion is not a replacement                   |
-| Restore/import                    | External files must be immutable, digest-bound retained input; whole-root transfer must use authorized install, while selective graft needs an ordered namespace transition                            |
-| Language/no-conflict metadata     | Ordered drained schema writer, structural checks and canonical pending guard; tagged indexes/history and pending conflict-key checkpoint/reopen controls                                               |
-| Rollup/prune                      | Guarded posting-complete baseline/admission runner on existing housekeeping tick; explicit retirement required for continued lifetime progress; actual-server resource qualification remains open      |
-| Backup/export                     | Existing paths require Badger streams/format; export can use a pinned readTs generic scan, backup needs a matching restore format and retained incremental history contract                            |
-| CDC/ACL                           | Existing configuration refusal remains; subscriptions, retained event frontier and ACL cache reconstruction need store-neutral ownership                                                               |
-| Move/split                        | Source/receiver ordered authority, root/dependency transfer, pending decisions and membership ownership must be bound together; no silent KV import                                                    |
+| Flow                              | Required closure / current disposition                                                                                                                                                                                           |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scalar tokenizer changes          | Implemented serial transition above; actual-server crash qualification remains                                                                                                                                                   |
+| Type definition/deletion          | Existing timestamped schema writer/tombstone; older-cut replay and reopen control implemented; no posting-data or namespace prefix deletion                                                                                      |
+| Count/reverse                     | Maintained builders integrated with explicit private Store, complete split sources, chunk aggregation, pending mutation and certificate/reopen proofs; inherited query limits remain                                             |
+| Type/list conversion              | Scalar-to-scalar reads convert lazily without rewriting DATA; list conversion/re-key/merge uses maintained builders; pure validation precedes effects; old versions retained; populated list-to-scalar/UID-scalar changes reject |
+| Upsert/unique changes             | Pure schema preflight plus ordered current-schema prewrite validation and canonical conflict keys; delayed-admission and pending certificate/reopen controls; actual Zero qualification separate                                 |
+| Vector                            | Factory/cache and graph side effects need exact root closure and deterministic rebuild authority; already outside ordinary TreeDB adapter capabilities                                                                           |
+| Drop/predicate/namespace deletion | Ordered pending disposition, versioned tombstones, schema/cache reset and namespace admission epoch must complete before a cut; physical Badger prefix deletion is not a replacement                                             |
+| Restore/import                    | External files must be immutable, digest-bound retained input; whole-root transfer must use authorized install, while selective graft needs an ordered namespace transition                                                      |
+| Language/no-conflict metadata     | Ordered drained schema writer, structural checks and canonical pending guard; tagged indexes/history and pending conflict-key checkpoint/reopen controls                                                                         |
+| Rollup/prune                      | Guarded posting-complete baseline/admission runner on existing housekeeping tick; explicit retirement required for continued lifetime progress; actual-server resource qualification remains open                                |
+| Backup/export                     | Existing paths require Badger streams/format; export can use a pinned readTs generic scan, backup needs a matching restore format and retained incremental history contract                                                      |
+| CDC/ACL                           | Existing configuration refusal remains; subscriptions, retained event frontier and ACL cache reconstruction need store-neutral ownership                                                                                         |
+| Move/split                        | Source/receiver ordered authority, root/dependency transfer, pending decisions and membership ownership must be bound together; no silent KV import                                                                              |
 
 Sort/count/inequality, Badger subscription formats, backup/restore formats and vector operational
 support are inherited adapter limitations; this packet does not create them or remove their

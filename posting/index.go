@@ -1579,8 +1579,7 @@ func (rb *IndexRebuild) needsCountIndexRebuild() indexOp {
 	if rb.CurrentSchema.Count == old.Count {
 		// Converting list values can merge previously distinct fingerprints,
 		// changing cardinality even when the Count directive stays enabled.
-		convertsValues := old.ValueType != rb.CurrentSchema.ValueType &&
-			types.TypeID(old.ValueType).IsScalar() && types.TypeID(rb.CurrentSchema.ValueType).IsScalar()
+		convertsValues := needsListValueTypeConversion(old, rb.CurrentSchema)
 		if rb.CurrentSchema.Count && (rb.needsReverseEdgesRebuild() != indexNoop || convertsValues) {
 			return indexRebuild
 		}
@@ -1831,7 +1830,19 @@ func rebuildReverseEdges(ctx context.Context, rb *IndexRebuild) error {
 	return builder.Run(ctx)
 }
 
-// needsListTypeRebuild also covers scalar value-type changes: list fingerprints
+// needsListValueTypeConversion identifies changes that can merge distinct list
+// fingerprints. Scalar values retain their encoding and convert lazily on reads;
+// vectors use their separate conversion and index lifecycle.
+func needsListValueTypeConversion(old, current *pb.SchemaUpdate) bool {
+	if old == nil || current == nil || !old.List || !current.List {
+		return false
+	}
+	oldType, newType := types.TypeID(old.ValueType), types.TypeID(current.ValueType)
+	return oldType != newType && oldType.IsScalar() && newType.IsScalar() &&
+		oldType != types.VFloatID && newType != types.VFloatID
+}
+
+// needsListTypeRebuild also covers list value-type changes: list fingerprints
 // must be derived from the converted binary value, never its old encoding.
 func (rb *IndexRebuild) needsListTypeRebuild() (bool, error) {
 	x.AssertTruef(rb.CurrentSchema != nil, "Current schema cannot be nil.")
@@ -1846,16 +1857,7 @@ func (rb *IndexRebuild) needsListTypeRebuild() (bool, error) {
 		return false, errors.Errorf("Type can't be changed from list to scalar for attr: [%s]"+
 			" without dropping it first.", x.ParseAttr(rb.CurrentSchema.Predicate))
 	}
-	oldType, newType := types.TypeID(rb.OldSchema.ValueType), types.TypeID(rb.CurrentSchema.ValueType)
-	// Vector schema changes retain their existing lazy value conversion and
-	// vector-specific builder. IsScalar includes vectors, but the ordinary
-	// scalar stream rebuilder cannot own their index lifecycle.
-	if oldType != newType && oldType.IsScalar() && newType.IsScalar() &&
-		oldType != types.VFloatID && newType != types.VFloatID {
-		return true, nil
-	}
-
-	return false, nil
+	return needsListValueTypeConversion(rb.OldSchema, rb.CurrentSchema), nil
 }
 
 // rebuildListType rewrites the complete logical data image at the schema

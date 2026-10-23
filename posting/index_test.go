@@ -606,17 +606,37 @@ func TestNeedsListTypeRebuild(t *testing.T) {
 	// Inferred string data may later receive an explicit vector schema. This
 	// retains the existing vector conversion path rather than entering the
 	// scalar rebuilder, which cannot build vector indexes.
-	for _, pair := range [][2]pb.Posting_ValType{
-		{pb.Posting_STRING, pb.Posting_VFLOAT},
-		{pb.Posting_VFLOAT, pb.Posting_STRING},
+	for _, tc := range []struct {
+		name          string
+		old, current  pb.Posting_ValType
+		list, rebuild bool
+	}{
+		{"scalar-string-vector", pb.Posting_STRING, pb.Posting_VFLOAT, false, false},
+		{"scalar-vector-string", pb.Posting_VFLOAT, pb.Posting_STRING, false, false},
+		{"scalar-float-int", pb.Posting_FLOAT, pb.Posting_INT, false, false},
+		{"scalar-int-float", pb.Posting_INT, pb.Posting_FLOAT, false, false},
+		{"scalar-string-int", pb.Posting_STRING, pb.Posting_INT, false, false},
+		{"list-string-int", pb.Posting_STRING, pb.Posting_INT, true, true},
+		{"list-int-string", pb.Posting_INT, pb.Posting_STRING, true, true},
+		{"list-float-int", pb.Posting_FLOAT, pb.Posting_INT, true, true},
+		{"list-same-type", pb.Posting_STRING, pb.Posting_STRING, true, false},
+		{"list-string-vector", pb.Posting_STRING, pb.Posting_VFLOAT, true, false},
+		{"list-vector-string", pb.Posting_VFLOAT, pb.Posting_STRING, true, false},
 	} {
-		rb := IndexRebuild{
-			OldSchema:     &pb.SchemaUpdate{ValueType: pair[0]},
-			CurrentSchema: &pb.SchemaUpdate{ValueType: pair[1]},
-		}
-		rebuild, err := rb.needsListTypeRebuild()
-		require.NoError(t, err)
-		require.False(t, rebuild)
+		t.Run(tc.name, func(t *testing.T) {
+			rb := IndexRebuild{
+				OldSchema:     &pb.SchemaUpdate{ValueType: tc.old, List: tc.list, Count: true},
+				CurrentSchema: &pb.SchemaUpdate{ValueType: tc.current, List: tc.list, Count: true},
+			}
+			rebuild, err := rb.needsListTypeRebuild()
+			require.NoError(t, err)
+			require.Equal(t, tc.rebuild, rebuild)
+			countOp := indexNoop
+			if tc.rebuild {
+				countOp = indexRebuild
+			}
+			require.Equal(t, countOp, rb.needsCountIndexRebuild(), "count follows actual list conversion")
+		})
 	}
 
 	rb := IndexRebuild{}

@@ -20,13 +20,89 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func TestStoreScalarTypeRoundtripPreservesStoredEncoding(t *testing.T) {
+	for _, backend := range []string{"badger", "treedb"} {
+		t.Run(backend, func(t *testing.T) {
+			oldStore, oldBadger := postingStore, pstore
+			var store Store
+			if backend == "badger" {
+				pstore = openPostingStoreTestDB(t)
+				store = NewBadgerStore(pstore)
+			} else {
+				store, _ = openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitRelaxed)
+				pstore = nil
+			}
+			postingStore = store
+			t.Cleanup(func() { postingStore, pstore = oldStore, oldBadger })
+			attr := x.AttrInRootNamespace("scalar-roundtrip-" + backend)
+			key := x.DataKey(attr, 1)
+			floatSchema := &pb.SchemaUpdate{Predicate: attr, ValueType: pb.Posting_FLOAT}
+			intSchema := &pb.SchemaUpdate{Predicate: attr, ValueType: pb.Posting_INT}
+			schema.State().Set(attr, floatSchema)
+			encoded := types.Val{Tid: types.BinaryID}
+			require.NoError(t, types.Marshal(types.Val{Tid: types.FloatID, Value: float64(1.6)}, &encoded))
+			originalBytes := append([]byte(nil), encoded.Value.([]byte)...)
+			list := NewList(key, &pb.PostingList{}, 0)
+			txn := NewTxn(9)
+			txn.cache.SetIfAbsent(string(key), list)
+			require.NoError(t, list.addMutation(context.Background(), txn, &pb.DirectedEdge{
+				Attr: attr, Value: originalBytes, ValueType: pb.Posting_FLOAT, Op: pb.DirectedEdge_SET,
+			}))
+			txn.Update()
+			writer := NewTxnWriterForStore(store)
+			require.NoError(t, txn.CommitToDisk(writer, 10))
+			require.NoError(t, writer.Flush())
+
+			// The query path converts the stored value to the current schema type.
+			// A scalar schema change must not replace its original physical value.
+			read := func(ts uint64, logicalType types.TypeID) types.Val {
+				t.Helper()
+				list, err := getNewForStore(key, store, ts, false)
+				require.NoError(t, err)
+				raw, err := list.Value(ts)
+				require.NoError(t, err)
+				require.Equal(t, types.FloatID, raw.Tid, "stored type at read timestamp %d", ts)
+				require.Equal(t, originalBytes, raw.Value, "stored bytes at read timestamp %d", ts)
+				readTxn := store.NewReadTxn(ts)
+				item, err := readTxn.Get(key)
+				require.NoError(t, err)
+				require.Equal(t, uint64(10), item.Version(), "scalar schema changes must not write DATA")
+				readTxn.Discard()
+				value, err := types.Convert(raw, logicalType)
+				require.NoError(t, err)
+				return value
+			}
+			require.Equal(t, float64(1.6), read(10, types.FloatID).Value)
+			change := func(ts uint64, old, next *pb.SchemaUpdate) {
+				t.Helper()
+				schema.State().Set(attr, next)
+				rb := IndexRebuild{Attr: attr, StartTs: ts, OldSchema: old, CurrentSchema: next}
+				if backend == "treedb" {
+					rb.Store = store
+				}
+				require.NoError(t, rb.ValidateData(context.Background()))
+				require.NoError(t, rb.BuildData(context.Background()))
+			}
+			change(20, floatSchema, intSchema)
+			require.Equal(t, int64(1), read(20, types.IntID).Value)
+			require.Equal(t, float64(1.6), read(19, types.FloatID).Value)
+			change(30, intSchema, floatSchema)
+			for _, ts := range []uint64{10, 19, 20, 29, 30} {
+				value := read(ts, types.FloatID)
+				require.Equal(t, float64(1.6), value.Value)
+				require.True(t, types.CompareVals("ge", value, types.Val{Tid: types.FloatID, Value: float64(1.6)}))
+			}
+		})
+	}
+}
+
 func TestStoreDataConversionCanonicalizesValuesAndFingerprints(t *testing.T) {
 	for _, shape := range []struct {
 		name             string
 		oldList, newList bool
 		cold             bool
 		badger           bool
-	}{{"scalar-scalar", false, false, false, false}, {"scalar-list", false, true, false, false}, {"list-list", true, true, false, false}, {"cold-list-list", true, true, true, false}, {"badger-list-list", true, true, false, true}} {
+	}{{"scalar-list", false, true, false, false}, {"list-list", true, true, false, false}, {"cold-list-list", true, true, true, false}, {"badger-list-list", true, true, false, true}} {
 		t.Run(shape.name, func(t *testing.T) {
 			oldStore, oldBadger := postingStore, pstore
 			var store Store
