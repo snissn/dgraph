@@ -40,7 +40,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/snissn/gomap v0.6.2-0.20260721120929-84e3f6652651
+	github.com/snissn/gomap v0.6.2-0.20261023065356-2cb705090aa7
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cast v1.10.0
 	github.com/spf13/cobra v1.10.2
@@ -178,4 +178,4 @@ require (
 	gotest.tools/v3 v3.5.2 // indirect
 )
 
-replace github.com/snissn/gomap => /mnt/fast4tb/gomap-raft-checkpoint-prototype-20261023/gomap
+replace github.com/snissn/gomap => ../gomap
