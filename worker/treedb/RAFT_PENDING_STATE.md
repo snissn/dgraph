@@ -62,10 +62,36 @@ capacity decisions. Query-only cache keys are excluded. Temporary mutation execu
 and decoding allocations remain proportional to the bounded input/state; this contract does not
 assert constant transient memory.
 
+## Retry lifetime and operational backpressure
+
+The pending namespace limit is separate from retry history and recovery debt. With semantic floor
+`S=0`, successful and terminally rejected proposal signatures stay in `appliedProposals`; local
+time, checkpoint success and physical GC do not retire them. Certificate JSON includes those
+signatures and has a 1 MiB ceiling. Exceeding it skips an ordinary checkpoint or fails a forced one
+while preserving the previous exact certificate and required WAL. New mutation proposal admission
+then pauses at 4096 uncertified entries or 64 MiB recovery input (including in-flight reservations).
+These are backpressure thresholds, not an equilibrium bound on all log, disk or heap use.
+
+Transaction decisions bypass mutation debt so a full budget cannot prevent resolution; advisory
+watermark-only Deltas are suppressed at the debt limit. Decisions and other permitted control
+traffic can still add retained input and signatures. In particular, timestamp-less control
+signatures have no positive StartTs eligible for the current floor retirement rule. A strict bound
+on that entire lifetime remains an open operational gate, even though pending admission is bounded.
+
+Continued ordinary write and history-reclamation progress requires explicit replicated retirement,
+through authenticated admin `retirePostingHistory(floor: UInt64!)` with a configured admin token, or
+the equivalent existing ordered `RequestPostingHistoryFloor` API. The candidate floor must be below
+the preceding ordered Oracle frontier and every pending start, and must not regress. This is an
+operator-selected semantic expiration: reads and mutations at or below it become stale; it is never
+selected from a wall clock. Only that ordered transition retires eligible signatures. Local active
+reads can delay physical `P` while replicated `S` advances. A full pending/debt threshold, or a
+successful checkpoint after retirement, does not establish continuous-workload resource equilibrium;
+actual retained-log, heap and admission-liveness qualification remains separate.
+
 ## Schema and local maintenance
 
-The pure ordered schema check rejects a changed tokenizer definition for a predicate with canonical
-pending deltas. Type transitions and existing type deletion are refused while any transaction is
+The pure ordered schema check rejects an actual schema change for a predicate with canonical pending
+deltas. Type-definition transitions and existing type deletion are refused while any transaction is
 pending. Exact schema/type definitions and absent type deletion are no-ops; unrelated predicate
 schema changes remain eligible. Query-only cache keys cannot affect this decision. The check never
 launches Zero abort requests. Schema timestamps come from the preceding ordered Oracle frontier, not

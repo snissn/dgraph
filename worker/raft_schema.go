@@ -141,6 +141,9 @@ func validateRaftSchemaUpdate(update *pb.SchemaUpdate) error {
 	if update.NoConflict && (update.Upsert || update.Unique) {
 		return &raftSemanticRejection{reason: "upsert/unique schema requires canonical conflict tracking"}
 	}
+	if update.Lang && (update.ValueType != pb.Posting_STRING || update.List) {
+		return &raftSemanticRejection{reason: "language schema requires a non-list string predicate"}
+	}
 	if err := schema.ValidateTokenizers([]*pb.SchemaUpdate{update}); err != nil {
 		return &raftSemanticRejection{reason: err.Error()}
 	}
@@ -162,8 +165,10 @@ func validateRaftSchemaUpdate(update *pb.SchemaUpdate) error {
 	before.Count, after.Count = false, false
 	before.Upsert, after.Upsert = false, false
 	before.Unique, after.Unique = false, false
+	before.Lang, after.Lang = false, false
+	before.NoConflict, after.NoConflict = false, false
 	if !proto.Equal(before, after) {
-		return fmt.Errorf("raft_checkpoint schema metadata change needs conflict/uniqueness validation for %s", update.Predicate)
+		return fmt.Errorf("raft_checkpoint unsupported schema metadata change for %s", update.Predicate)
 	}
 	return nil
 }

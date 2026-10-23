@@ -227,7 +227,6 @@ func TestRaftSchemaSupportedBoundary(t *testing.T) {
 	index.Directive, index.Tokenizer = pb.SchemaUpdate_INDEX, []string{"exact"}
 	require.NoError(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{index}}}))
 	for _, change := range []func(*pb.SchemaUpdate){
-		func(s *pb.SchemaUpdate) { s.Lang = true },
 		func(s *pb.SchemaUpdate) { s.Directive = pb.SchemaUpdate_REVERSE },
 		func(s *pb.SchemaUpdate) { s.Directive = pb.SchemaUpdate_DELETE },
 	} {
@@ -241,6 +240,8 @@ func TestRaftSchemaSupportedBoundary(t *testing.T) {
 		func(s *pb.SchemaUpdate) { s.Count = true },
 		func(s *pb.SchemaUpdate) { s.Upsert = true },
 		func(s *pb.SchemaUpdate) { s.Unique, s.Upsert = true, true },
+		func(s *pb.SchemaUpdate) { s.Lang = true },
+		func(s *pb.SchemaUpdate) { s.NoConflict = true },
 	} {
 		update := proto.Clone(index).(*pb.SchemaUpdate)
 		change(update)
@@ -254,6 +255,14 @@ func TestRaftSchemaSupportedBoundary(t *testing.T) {
 	noConflict := proto.Clone(index).(*pb.SchemaUpdate)
 	noConflict.NoConflict, noConflict.Upsert = true, true
 	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{noConflict}}}))
+	for _, change := range []func(*pb.SchemaUpdate){
+		func(s *pb.SchemaUpdate) { s.List, s.Lang = true, true },
+		func(s *pb.SchemaUpdate) { s.ValueType, s.Tokenizer, s.Lang = pb.Posting_INT, []string{"int"}, true },
+	} {
+		update := proto.Clone(index).(*pb.SchemaUpdate)
+		change(update)
+		require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{update}}}))
+	}
 	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{nil}}}))
 	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{DropOp: pb.Mutations_ALL}}))
 	require.NoError(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{StartTs: 10, DropOp: pb.Mutations_TYPE, DropValue: "0-Type"}}))

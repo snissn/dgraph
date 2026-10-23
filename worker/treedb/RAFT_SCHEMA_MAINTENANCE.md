@@ -13,11 +13,12 @@ checks scalar conversion and refuses populated list-to-scalar or UID/scalar chan
 data may change shape even when replicas retain different physical deltas or baselines. Read,
 decoding and I/O errors cannot become terminal semantic rejections. Upsert transitions reuse
 canonical conflict keys; uniqueness additionally checks complete existing logical values below.
-Language and other schema metadata transitions retain their separate guards. Fresh basic predicates
-and types keep their existing semantic writer. Isolated timestamped type deletion uses the existing
-schema-store tombstone path; type updates publish their in-memory definition after their schema
-write succeeds. Vector and external-file lifecycle remain separate capabilities. Posting-data and
-namespace deletion are documented by their separate ordered admin integration.
+Language and no-conflict metadata use the same ordered schema writer and pending predicate guard.
+Language is valid only for non-list strings; no-conflict cannot combine with upsert/unique. Fresh
+basic predicates and types keep their existing semantic writer. Isolated timestamped type deletion
+uses the existing schema-store tombstone path; type updates publish their in-memory definition after
+their schema write succeeds. Vector and external-file lifecycle remain separate capabilities.
+Posting-data and namespace deletion are documented by their separate ordered admin integration.
 
 Committed input is already routed; application does not consult Zero's later tablet assignment. The
 same rule is used by ordinary `runMutation`. Schema validation precedes materialization. The query
@@ -67,6 +68,11 @@ remain unknown errors; scratch cleanup failure cannot inherit a duplicate tag. S
 publication uses the same drained capability and index builders. No-conflict schema cannot combine
 with upsert/unique: canonical index conflict keys must reach Zero. The existing frontend unique
 query checks and Zero arbitration remain the conflict protocol.
+
+Language directive removal follows existing Dgraph semantics: it changes later schema admission,
+without deleting historical tagged postings or their indexes. Re-enabling it exposes those retained
+values. No-conflict changes select future canonical conflict keys only after affected pending
+transactions resolve; the canonical pending overlay preserves the selected keys over checkpoints.
 
 ## Physical maintenance
 
@@ -118,6 +124,9 @@ value. Their shared canonical Zero conflict key survives a pending certificate/r
 commit/abort decisions leave exactly the selected subject in the index. This preserves Zero's
 inputs; it does not run Zero's arbitration. Posting tests compare duplicate and conversion-collision
 decisions with different physical floors and force scratch hash collisions to check full equality.
+Language controls certify/reopen tagged exact indexes, remove and re-enable the directive without
+losing their historical contents. No-conflict controls certify/reopen empty pending conflict keys,
+then restore ordinary conflict tracking and verify later abort preserves the committed index.
 
 These are focused correctness/race controls. They do not establish real-server schema ACK-to-SIGKILL
 behavior, power-loss certification, rebuild throughput, large-predicate resource budgets or full
@@ -191,7 +200,8 @@ Continuous-workload resource/debt qualification and full bounded-lifetime accept
 | Vector                            | Factory/cache and graph side effects need exact root closure and deterministic rebuild authority; already outside ordinary TreeDB adapter capabilities                                                 |
 | Drop/predicate/namespace deletion | Ordered pending disposition, versioned tombstones, schema/cache reset and namespace admission epoch must complete before a cut; physical Badger prefix deletion is not a replacement                   |
 | Restore/import                    | External files must be immutable, digest-bound retained input; whole-root transfer must use authorized install, while selective graft needs an ordered namespace transition                            |
-| Rollup/prune                      | Guarded posting-complete baseline/admission runner on existing housekeeping tick; bounded pending checkpoint/debt and actual-server qualification remain open                                          |
+| Language/no-conflict metadata     | Ordered drained schema writer, structural checks and canonical pending guard; tagged indexes/history and pending conflict-key checkpoint/reopen controls                                               |
+| Rollup/prune                      | Guarded posting-complete baseline/admission runner on existing housekeeping tick; explicit retirement required for continued lifetime progress; actual-server resource qualification remains open      |
 | Backup/export                     | Existing paths require Badger streams/format; export can use a pinned readTs generic scan, backup needs a matching restore format and retained incremental history contract                            |
 | CDC/ACL                           | Existing configuration refusal remains; subscriptions, retained event frontier and ACL cache reconstruction need store-neutral ownership                                                               |
 | Move/split                        | Source/receiver ordered authority, root/dependency transfer, pending decisions and membership ownership must be bound together; no silent KV import                                                    |

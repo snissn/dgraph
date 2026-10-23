@@ -222,4 +222,59 @@ func TestRaftSchemaVariantsCertifiedPendingAndRejection(t *testing.T) {
 	require.Equal(t, []uint64{3}, read(tokenKey(bad, "exact", "reserved"), math.MaxUint64))
 	certify(18)
 	require.Equal(t, []uint64{3}, read(tokenKey(bad, "exact", "reserved"), math.MaxUint64))
+
+	language := proto.Clone(unique).(*pb.SchemaUpdate)
+	language.Lang = true
+	require.NoError(t, apply(19, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 29, Schema: []*pb.SchemaUpdate{language}}}))
+	certify(19)
+	fr, en := scalar(bad, "bonjour"), scalar(bad, "bonjour")
+	fr.Entity, fr.Lang, en.Entity, en.Lang = 5, "fr", 6, "en"
+	require.NoError(t, apply(20, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 30, Edges: []*pb.DirectedEdge{fr, en}}}))
+	require.NoError(t, apply(21, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 32, Txns: []*pb.TxnStatus{{StartTs: base + 30, CommitTs: base + 31}}}}))
+	certify(21)
+	languageKey := func(lang string) []byte {
+		impl, ok := tok.GetTokenizer("exact")
+		require.True(t, ok)
+		tokens, err := tok.BuildTokens("bonjour", tok.GetTokenizerForLang(impl, lang))
+		require.NoError(t, err)
+		require.Len(t, tokens, 1)
+		return x.IndexKey(bad, tokens[0])
+	}
+	require.Equal(t, []uint64{5}, read(languageKey("fr"), math.MaxUint64))
+	require.Equal(t, []uint64{6}, read(languageKey("en"), math.MaxUint64))
+	// Language metadata follows existing Dgraph semantics: removing the
+	// directive restricts later admission; it does not erase tagged postings.
+	require.NoError(t, apply(22, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 33, Schema: []*pb.SchemaUpdate{unique}}}))
+	certify(22)
+	current, _ = schema.State().Get(context.Background(), bad)
+	require.False(t, current.Lang)
+	require.Equal(t, []uint64{5}, read(languageKey("fr"), base+31))
+	require.NoError(t, apply(23, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 34, Schema: []*pb.SchemaUpdate{language}}}))
+	certify(23)
+	require.Equal(t, []uint64{5}, read(languageKey("fr"), math.MaxUint64))
+	require.Equal(t, []uint64{6}, read(languageKey("en"), math.MaxUint64))
+
+	noConflict := proto.Clone(numericIndexed).(*pb.SchemaUpdate)
+	noConflict.NoConflict = true
+	require.NoError(t, apply(24, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 35, Schema: []*pb.SchemaUpdate{noConflict}}}))
+	certify(24)
+	require.NoError(t, apply(25, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 36, Edges: []*pb.DirectedEdge{scalar(numeric, "44")}}}))
+	var noKeys api.TxnContext
+	posting.Oracle().GetTxn(base+36).FillContext(&noKeys, 1, false)
+	require.Empty(t, noKeys.Keys)
+	require.NotEmpty(t, noKeys.Preds)
+	certify(25)
+	posting.Oracle().GetTxn(base+36).FillContext(&noKeys, 1, false)
+	require.Empty(t, noKeys.Keys)
+	require.NoError(t, apply(26, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 38, Txns: []*pb.TxnStatus{{StartTs: base + 36, CommitTs: base + 37}}}}))
+	require.NoError(t, apply(27, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 39, Schema: []*pb.SchemaUpdate{numericIndexed}}}))
+	certify(27)
+	require.NoError(t, apply(28, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 40, Edges: []*pb.DirectedEdge{scalar(numeric, "45")}}}))
+	var restoredKeys api.TxnContext
+	posting.Oracle().GetTxn(base+40).FillContext(&restoredKeys, 1, false)
+	require.NotEmpty(t, restoredKeys.Keys)
+	require.NoError(t, apply(29, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 41, Txns: []*pb.TxnStatus{{StartTs: base + 40}}}}))
+	certify(29)
+	require.Equal(t, []uint64{1}, read(tokenKey(numeric, "int", int64(44)), math.MaxUint64))
+	require.Empty(t, read(tokenKey(numeric, "int", int64(45)), math.MaxUint64))
 }
