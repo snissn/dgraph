@@ -71,32 +71,47 @@ operational capability acceptance.
 
 Generic MVCC pruning retains one anchor per key. A posting delta is not a full anchor: it can
 require many older deltas and a complete baseline. Pruning must therefore follow a posting-aware
-baseline pass, not just a Raft snapshot hint. The selected algorithm is:
+baseline pass, not just a Raft snapshot hint. The selected design separates a replicated semantic
+expiration floor `S` from a local physical pruning floor `P <= S`. Local maintenance timing or
+active readers must never determine committed-mutation rejection: replicas can reach different local
+maintenance states while applying the same retained input.
 
-1. Serialize maintenance with ordered apply, snapshot installation and all admitted callbacks. Fence
-   background cold rollups and writers. Take an active read-timestamp admission cut, including
-   transactions that can issue future reads, rather than counting only currently open iterators.
-2. Select a monotonically increasing floor strictly below protected read and pending transaction
-   timestamps, and below the Oracle assigned frontier. Conservatively cap the first implementation
-   by both selectable certificate Oracle frontiers. New admissions at or below the proposed floor
-   must be excluded under the same admission lock; an elapsed timeout is not a pin.
-3. Materialize complete or empty posting baselines at the chosen timestamp for every main list and
-   its split dependencies. Preserve all newer deltas and versions. Rebase cold-list rollup output
-   explicitly: its ordinary `maxCommitTs+1` can be below a previously persisted floor. Drain writes
-   and invalidate affected caches before declaring the baseline pass complete.
-4. Persist the floor only after the entire baseline pass succeeds. Then invoke maintained MVCC
-   pruning, retaining complete anchors and all newer versions. Current/previous physical certificate
-   roots remain pinned throughout.
-5. Publish a certificate binding the maintenance floor/completion and the exact resulting root
-   before releasing admission. An ambiguous publication keeps admission closed until owner
-   Close/Open determines the selected certificate. A failed prepublication pass leaves the prior
-   certificate/history intact; startup discards unlogged working maintenance and replays retained
-   input.
+1. Introduce an explicit versioned ordered floor proposal, not a reinterpretation of the existing
+   snapshot `ReadTs` hint. Every replica computes the same new `S` from that input and preceding
+   ordered Oracle/pending state. Cap it below the assigned frontier and every pending transaction
+   start timestamp. A conditional request which cannot advance is a deterministic no-op.
+   Certificates bind `S` and its ordered transition. Only `S` can authorize semantic rejection of a
+   later stale mutation before inference or transaction registration. Local pruning state never
+   participates in this decision.
+2. New request-scope read admissions at or below `S` return a defined too-old error before
+   consulting posting caches. Requests already admitted retain their timestamps until completion.
+   Adapter/internal read handles also pin timestamps. A timestamp issued by Zero is not an
+   indefinite historical-read lease; later requests can explicitly expire.
+3. Serialize local maintenance with ordered apply, install and callback writers. Under read
+   admission synchronization choose `P <= S` strictly below every active request/read pin. Readers
+   can delay physical reclamation without changing `S` or replicated outcomes. Fence cold rollups
+   and stale writers.
+4. Materialize complete or empty posting baselines at `P` for every main list and split dependency,
+   preserving all newer deltas. Rebase cold-list output explicitly: ordinary `maxCommitTs+1` can be
+   below an earlier physical floor. A maintenance-only read capability accesses those baselines
+   without reopening general reads expired by `S`. Drain writes and invalidate caches before
+   declaring the pass complete.
+5. Persist `P` only after the entire baseline pass succeeds, then run maintained MVCC pruning. Keep
+   complete anchors, all newer versions, and both physical certificate root pins. A local
+   certificate binds `S`, `P` and the exact root; its persisted MVCC floor must match `P` and never
+   exceed `S`.
+6. Ambiguous maintenance certification keeps local maintenance/admission sealed until owner
+   Close/Open selects and verifies a certificate. Partial unlogged physical maintenance cannot
+   supersede an older certificate. Restore its exact root and `S/P`, discard working progress, then
+   replay retained floor/mutation proposals. Replicas may reclaim at different `P` values while
+   their replicated `S` and outcomes agree.
 
 The adapter currently holds root lifetime pins, but its timestamp-only read transaction can issue
 later point reads against a newer MVCC cut. It has no active readTs registry, so rootGate alone does
-not prove this logical protocol. This protocol is design work pending implementation and proof. It
-must not be confused with the implemented physical maintenance paths above.
+not prove this logical protocol. Replicated floor proposals, request admission, the active readTs
+registry and posting-baseline protocol are not implemented. Logical history is preserved; the
+bounded logical-history lifetime gate remains open. This design is distinct from the implemented
+physical maintenance paths above.
 
 ## Other operations and inherited boundaries
 
