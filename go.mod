@@ -155,7 +155,7 @@ require (
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
-	github.com/snissn/compress v1.18.2-snissn.0.0.20260506201017-87fb149e4721 // indirect
+	github.com/snissn/compress v1.18.2-snissn.0.0.20261014112447-88a027b09341 // indirect
 	github.com/snissn/go-crc32-asm v0.0.0-20260522204125-08945951423a // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
@@ -177,3 +177,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
+
+replace github.com/snissn/gomap => /mnt/fast4tb/gomap-raft-checkpoint-prototype-20261023/gomap

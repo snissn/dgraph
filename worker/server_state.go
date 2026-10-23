@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/golang/glog"
@@ -179,13 +180,29 @@ func (s *ServerState) openPostingStore() error {
 			mode = posting.TreeDBCommitRelaxed
 		}
 		treeOpts, err := dgraphtreedb.ResolveOptions(dgraphtreedb.OpenOptions{
-			Dir: Config.PostingDir, Profile: profile,
+			Dir: Config.PostingDir, Profile: profile, MemtableMode: "cow_ordered",
 			RequireInMemory: x.WorkerConfig.Badger.InMemory,
 		})
 		if err != nil {
 			return fmt.Errorf("resolve TreeDB posting store: %w", err)
 		}
-		s.TreeDBStore, err = posting.OpenTreeDBStore(treeOpts, mode)
+		if Config.PostingStoreDurability == PostingStoreDurabilityRaftCheckpoint {
+			if x.WorkerConfig.AclEnabled || Config.ChangeDataConf != "" {
+				return fmt.Errorf("raft_checkpoint prototype does not support ACL or CDC")
+			}
+			if !x.WorkerConfig.HardSync {
+				return fmt.Errorf("raft_checkpoint requires --survive=filesystem for Alpha and a filesystem-durable Zero")
+			}
+			treeOpts = td.OptionsFor(td.ProfileNoWALFast, Config.PostingDir)
+			treeOpts.MemtableMode = "cow_ordered"
+			walIdentity, identityErr := filepath.Abs(Config.WALDir)
+			if identityErr != nil {
+				return identityErr
+			}
+			s.TreeDBStore, err = posting.OpenRaftTreeDBStore(treeOpts, "dgraph-raft-v1:"+walIdentity)
+		} else {
+			s.TreeDBStore, err = posting.OpenTreeDBStore(treeOpts, mode)
+		}
 		if err != nil {
 			return fmt.Errorf("open TreeDB posting store: %w", err)
 		}

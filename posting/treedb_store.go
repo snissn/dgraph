@@ -28,6 +28,9 @@ const (
 	// TreeDBCommitRelaxed acknowledges after atomic publication without an
 	// fsync boundary.
 	TreeDBCommitRelaxed
+	// TreeDBCommitExternallyRecoverable requires an explicit external recovery
+	// owner; completion means installed materialization, backed by retained Raft.
+	TreeDBCommitExternallyRecoverable
 )
 
 var (
@@ -68,6 +71,7 @@ const (
 // TreeDBStore owns exactly one TreeDB handle and exactly one external-MVCC
 // owner. Close is idempotent and closes that handle at most once.
 type TreeDBStore struct {
+	external   *treedb.ExternalRecovery
 	db         *treedb.DB
 	mvcc       *mvcc.Store
 	commitMode mvcc.CommitMode
@@ -102,6 +106,9 @@ type TreeDBStore struct {
 // canonical production profiles all support an explicit WriteSync opt-up even
 // when their ordinary acknowledgement policy is relaxed.
 func OpenTreeDBStore(opts treedb.Options, mode TreeDBCommitMode) (*TreeDBStore, error) {
+	if mode == TreeDBCommitExternallyRecoverable {
+		return nil, fmt.Errorf("external recovery mode requires OpenRaftTreeDBStore")
+	}
 	commitMode, err := toMVCCCommitMode(mode)
 	if err != nil {
 		return nil, err
@@ -169,7 +176,11 @@ func (s *TreeDBStore) Close() error {
 		s.lifecycleMu.Lock()
 		defer s.lifecycleMu.Unlock()
 		if s.db != nil {
-			s.closeErr = s.db.Close()
+			if s.external != nil {
+				s.closeErr = s.external.Close()
+			} else {
+				s.closeErr = s.db.Close()
+			}
 		}
 	})
 	return s.closeErr
@@ -232,6 +243,9 @@ func (s *TreeDBStore) ValueLogGC(ctx context.Context, opts treedb.ValueLogGCOpti
 	if s.IsClosed() || s.db == nil {
 		return treedb.ValueLogGCStats{}, fmt.Errorf("value-log GC posting TreeDB: %w", treedb.ErrClosed)
 	}
+	if s.external != nil {
+		return treedb.ValueLogGCStats{}, fmt.Errorf("external recovery prototype: online GC is unsupported")
+	}
 	stats, err := s.db.ValueLogGC(ctx, opts)
 	if err != nil {
 		return stats, fmt.Errorf("value-log GC posting TreeDB: %w", err)
@@ -248,6 +262,9 @@ func (s *TreeDBStore) CompactStorage(ctx context.Context, opts treedb.CompactSto
 	defer s.lifecycleMu.Unlock()
 	if s.IsClosed() || s.db == nil {
 		return treedb.CompactStorageStats{}, fmt.Errorf("compact posting TreeDB storage: %w", treedb.ErrClosed)
+	}
+	if s.external != nil {
+		return treedb.CompactStorageStats{}, fmt.Errorf("external recovery prototype: online compaction is unsupported")
 	}
 	stats, err := s.db.CompactStorage(ctx, opts)
 	if err != nil {
@@ -283,6 +300,9 @@ func (s *TreeDBStore) AdvanceDiscardFloor(timestamp uint64) error {
 	if s.IsClosed() || s.db == nil {
 		return fmt.Errorf("advance discard floor posting TreeDB: %w", treedb.ErrClosed)
 	}
+	if s.external != nil {
+		return fmt.Errorf("external recovery prototype: discard-floor advancement is unsupported")
+	}
 	return s.mvcc.AdvanceDiscardFloor(timestamp, s.commitMode)
 }
 
@@ -295,6 +315,9 @@ func (s *TreeDBStore) PruneVersions(batchSize int) (mvcc.PruneStats, error) {
 	defer s.lifecycleMu.Unlock()
 	if s.IsClosed() || s.db == nil {
 		return mvcc.PruneStats{}, fmt.Errorf("prune posting TreeDB versions: %w", treedb.ErrClosed)
+	}
+	if s.external != nil {
+		return mvcc.PruneStats{}, fmt.Errorf("external recovery prototype: version pruning is unsupported")
 	}
 	return s.mvcc.PruneVersions(mvcc.PruneOptions{BatchSize: batchSize, Mode: s.commitMode})
 }
@@ -700,7 +723,12 @@ func (s *TreeDBStore) commitAtAdmitted(commitTs uint64, mutations []mvcc.Mutatio
 	if s.commitStartedForTest != nil {
 		s.commitStartedForTest(commitTs, mutations)
 	}
-	err := s.mvcc.CommitAt(commitTs, mutations, s.commitMode)
+	var err error
+	if s.external != nil {
+		err = s.external.Apply(func() error { return s.mvcc.CommitAt(commitTs, mutations, s.commitMode) })
+	} else {
+		err = s.mvcc.CommitAt(commitTs, mutations, s.commitMode)
+	}
 	if s.commitFinishedForTest != nil {
 		s.commitFinishedForTest(commitTs, err)
 	}

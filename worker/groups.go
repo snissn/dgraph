@@ -151,10 +151,18 @@ func StartRaftNodes(walStore *raftwal.DiskStorage, bindall bool) {
 
 	gr.informZeroAboutTablets()
 	glog.Infof("Informed Zero about tablets I have: OK")
-	gr.applyInitialSchema()
-	gr.applyInitialTypes()
+	if !raftCheckpointEnabled() {
+		gr.applyInitialSchema()
+		gr.applyInitialTypes()
+	}
 	glog.Infof("Upserted Schema and Types: OK")
 
+	if raftCheckpointEnabled() {
+		hs, err := walStore.HardState()
+		x.Check(err)
+		x.Check(gr.Node.Applied.WaitForMark(gr.Ctx(), hs.Commit))
+		glog.Infof("TreeDB raft_checkpoint committed replay completed through %d before health", hs.Commit)
+	}
 	x.UpdateHealthStatus(true)
 	glog.Infof("Server is ready: OK")
 }
@@ -1043,6 +1051,14 @@ func (g *groupi) processOracleDeltaStream() {
 				return
 			}
 
+			// A stalled pending transaction must not cause unbounded retention of
+			// watermark-only Deltas. Keep consuming Zero's stream so a later decision
+			// can resolve it. Every transaction decision must remain: an abort can
+			// race the application of its prewrite. Losing advisory watermarks can delay
+			// reads, but never permits visibility ahead of a materialized decision.
+			if raftCheckpointEnabled() && len(delta.Txns) == 0 && g.Node.raftRecoveryAtLimit() {
+				continue
+			}
 			// We should always sort the txns before applying. Otherwise, we might lose some of
 			// these updates, because we never write over a new version.
 			sort.Slice(delta.Txns, func(i, j int) bool {

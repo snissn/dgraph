@@ -1,0 +1,268 @@
+package worker
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sync/atomic"
+
+	"github.com/dgraph-io/dgraph/v25/posting"
+	"github.com/dgraph-io/dgraph/v25/protos/pb"
+	"github.com/dgraph-io/dgraph/v25/raftwal"
+	"github.com/dgraph-io/dgraph/v25/schema"
+	"github.com/golang/glog"
+	"go.etcd.io/etcd/raft/v3/raftpb"
+	"google.golang.org/protobuf/proto"
+)
+
+const (
+	raftCheckpointVersion  = "dgraph-normal-delta-v1"
+	raftCheckpointEvery    = 1024
+	raftCheckpointBytes    = 16 << 20
+	raftRecoveryMaxEntries = 4096
+	raftRecoveryMaxBytes   = 64 << 20
+)
+
+// raftCheckpointMetadata is application state bound atomically to the immutable
+// TreeDB checkpoint. No uncommitted prewrite may be omitted from this cut: this
+// prototype certifies only pending-free cuts and retains history otherwise.
+type raftCheckpointMetadata struct {
+	Version             string
+	Group               uint32
+	RaftID              uint64
+	Index               uint64
+	Term                uint64
+	OracleMaxAssigned   uint64
+	GroupChecksum       uint64
+	PendingTransactions uint64
+	ConfState           raftpb.ConfState
+}
+
+func raftCheckpointEnabled() bool {
+	return Config.PostingStoreBackend == PostingStoreBackendTreeDB && Config.PostingStoreDurability == PostingStoreDurabilityRaftCheckpoint
+}
+
+// validateRaftCheckpoint is read-only and does not accept the old separately
+// persisted CheckpointIndex as evidence. Missing history and identity mismatches
+// are startup errors, before read health can be published.
+func validateRaftCheckpoint(c raftCheckpointMetadata, store *raftwal.DiskStorage, gid uint32, id uint64) error {
+	if c.Version != raftCheckpointVersion || c.Group != gid || c.RaftID != id || c.PendingTransactions != 0 {
+		return fmt.Errorf("incompatible Raft TreeDB checkpoint identity or pending state")
+	}
+	hs, err := store.HardState()
+	if err != nil {
+		return err
+	}
+	first, err := store.FirstIndex()
+	if err != nil {
+		return err
+	}
+	if c.Index > hs.Commit || first > c.Index+1 {
+		return fmt.Errorf("checkpoint/replay history gap: checkpoint=%d first=%d commit=%d", c.Index, first, hs.Commit)
+	}
+	if c.Index > 0 {
+		term, err := store.Term(c.Index)
+		if err != nil {
+			return err
+		}
+		if term != c.Term {
+			return fmt.Errorf("checkpoint Raft term mismatch")
+		}
+	}
+	last, err := store.LastIndex()
+	if err != nil {
+		return err
+	}
+	for lo := c.Index + 1; lo <= hs.Commit; {
+		entries, err := store.Entries(lo, hs.Commit+1, 8<<20)
+		if err != nil {
+			return err
+		}
+		if len(entries) == 0 {
+			return fmt.Errorf("empty committed replay range at %d", lo)
+		}
+		for _, e := range entries {
+			if e.Index != lo {
+				return fmt.Errorf("missing replay entry %d", lo)
+			}
+			lo++
+		}
+	}
+	if last < hs.Commit {
+		return fmt.Errorf("missing committed replay suffix: last=%d commit=%d", last, hs.Commit)
+	}
+	return nil
+}
+
+func (n *node) recoverRaftCheckpoint() error {
+	if !raftCheckpointEnabled() {
+		return nil
+	}
+	if _, hasPeer := groups().MyPeer(); hasPeer || n.RaftContext.IsLearner {
+		return fmt.Errorf("raft_checkpoint prototype requires one Alpha; snapshot transfer is not implemented")
+	}
+	n.Store.RequireCheckpointCertificate()
+	data, ok := State.TreeDBStore.RecoveredRaftCheckpoint()
+	c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: n.gid, RaftID: n.Id}
+	if ok {
+		if err := json.Unmarshal(data, &c); err != nil {
+			return err
+		}
+	}
+	if err := validateRaftCheckpoint(c, n.Store, n.gid, n.Id); err != nil {
+		return err
+	}
+	if err := n.Store.AuthorizeCheckpoint(c.Index); err != nil {
+		return err
+	}
+	lastIndex, err := n.Store.LastIndex()
+	if err != nil {
+		return err
+	}
+	for lo := c.Index + 1; lo <= lastIndex; {
+		entries, err := n.Store.Entries(lo, lastIndex+1, 8<<20)
+		if err != nil {
+			return err
+		}
+		if len(entries) == 0 {
+			return fmt.Errorf("missing recovery-debt entry %d", lo)
+		}
+		for _, e := range entries {
+			atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(e.Data)))
+			lo = e.Index + 1
+		}
+	}
+	n.Cfg.Applied = c.Index
+	n.Applied.SetDoneUntil(c.Index)
+	atomic.StoreUint64(&n.raftCertifiedIndex, c.Index)
+	n.Store.SetUint(raftwal.CheckpointIndex, c.Index)
+	posting.Oracle().ProcessDelta(&pb.OracleDelta{MaxAssigned: c.OracleMaxAssigned})
+	atomic.StoreUint64(&groups().deltaChecksum, c.GroupChecksum)
+	atomic.StoreUint64(&n.checkpointTs, c.OracleMaxAssigned)
+	if c.Index > 0 {
+		n.SetConfState(&c.ConfState)
+		snap, err := n.Store.Snapshot()
+		if err != nil {
+			return err
+		}
+		if snap.Metadata.Index < c.Index {
+			data, err := proto.Marshal(&pb.Snapshot{Context: n.RaftContext, Index: c.Index, ReadTs: c.OracleMaxAssigned})
+			if err != nil {
+				return err
+			}
+			if err := n.Store.CreateSnapshot(c.Index, &c.ConfState, data); err != nil {
+				return err
+			}
+		}
+	}
+	glog.Infof("TreeDB raft_checkpoint recovery: certified=%d oracle=%d", c.Index, c.OracleMaxAssigned)
+	return nil
+}
+
+// checkpointRaftCut runs on the semantic apply goroutine, after posting Flush
+// and Oracle advancement. It therefore never samples independent progress
+// counters across applications. Background rollup is disabled for this policy.
+func (n *node) checkpointRaftCut(index uint64, force bool) error {
+	if !raftCheckpointEnabled() {
+		return nil
+	}
+	last := atomic.LoadUint64(&n.raftCertifiedIndex)
+	if index <= last || (!force && index-last < raftCheckpointEvery && atomic.LoadUint64(&n.raftRecoveryBytes) < raftCheckpointBytes) {
+		return nil
+	}
+	if posting.Oracle().NumPendingTxns() != 0 {
+		return nil
+	}
+	term, err := n.Store.Term(index)
+	if err != nil {
+		return err
+	}
+	c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: n.gid, RaftID: n.Id, Index: index, Term: term, OracleMaxAssigned: posting.Oracle().MaxAssigned(), GroupChecksum: atomic.LoadUint64(&groups().deltaChecksum), ConfState: *n.ConfState()}
+	data, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	if err := State.TreeDBStore.CheckpointRaft(context.Background(), data); err != nil {
+		return err
+	}
+	// The durable TreeDB certificate precedes both retention authorization and
+	// the independent applied hint. A crash between any steps selects a safe cut.
+	if err := n.Store.AuthorizeCheckpoint(index); err != nil {
+		return err
+	}
+	snapData, err := proto.Marshal(&pb.Snapshot{Context: n.RaftContext, Index: index, ReadTs: c.OracleMaxAssigned})
+	if err != nil {
+		return err
+	}
+	if err := n.Store.CreateSnapshot(index, &c.ConfState, snapData); err != nil {
+		return err
+	}
+	n.Store.SetUint(raftwal.CheckpointIndex, index)
+	atomic.StoreUint64(&n.raftCertifiedIndex, index)
+	atomic.StoreUint64(&n.checkpointTs, c.OracleMaxAssigned)
+	// Ready persistence can continue during image copying. Subtract only the
+	// application prefix included in this checkpoint, retaining concurrent suffix.
+	atomic.AddUint64(&n.raftRecoveryBytes, ^(n.raftAppliedBytes - 1))
+	n.raftAppliedBytes = 0
+	glog.Infof("TreeDB raft_checkpoint certified: index=%d oracle=%d pending=0", index, c.OracleMaxAssigned)
+	return nil
+}
+
+func checkRaftPrototypeProposal(p *pb.Proposal) error {
+	if p.Kv != nil || p.CleanPredicate != "" || p.Restore != nil || p.DeleteNs != nil || p.ExtSnapshotState != nil || p.CdcState != nil {
+		return fmt.Errorf("raft_checkpoint prototype does not support external/admin materialization")
+	}
+	if m := p.Mutations; m != nil {
+		if m.DropOp != pb.Mutations_NONE {
+			return fmt.Errorf("raft_checkpoint prototype does not support drop")
+		}
+		for _, edge := range m.Edges {
+			if isDeletePredicateEdge(edge) {
+				return fmt.Errorf("raft_checkpoint prototype does not support predicate deletion")
+			}
+		}
+		// Fresh scalar schema and types are replayed by the existing semantic path.
+		// Rebuilds over existing data need a separately certified lifecycle.
+		for _, s := range m.Schema {
+			if old, exists := schema.State().Get(context.Background(), s.Predicate); exists && !proto.Equal(&old, s) {
+				return fmt.Errorf("raft_checkpoint prototype requires fresh or identical schema, cannot rebuild %s", s.Predicate)
+			}
+			if s.Directive == pb.SchemaUpdate_DELETE || len(s.IndexSpecs) > 0 || s.Count || s.Directive == pb.SchemaUpdate_REVERSE {
+				return fmt.Errorf("raft_checkpoint prototype does not support schema rebuild/delete/vector/count/reverse")
+			}
+		}
+	}
+	return nil
+}
+
+// reserveRaftRecoveryDebt bounds accepted mutation input before proposing it.
+// Decisions bypass this budget so a full budget cannot prevent pending txns
+// from resolving. Reserved bytes overlap persisted bytes conservatively until
+// the caller finishes; concurrent proposals cannot all pass the same budget.
+func (n *node) reserveRaftRecoveryDebt(size uint64) (func(), error) {
+	n.raftDebtMu.Lock()
+	defer n.raftDebtMu.Unlock()
+	last, err := n.Store.LastIndex()
+	if err != nil {
+		return nil, err
+	}
+	certified := atomic.LoadUint64(&n.raftCertifiedIndex)
+	if last-certified+n.raftReservedEntries >= raftRecoveryMaxEntries || size > raftRecoveryMaxBytes || atomic.LoadUint64(&n.raftRecoveryBytes)+n.raftReservedBytes+size > raftRecoveryMaxBytes {
+		return nil, fmt.Errorf("raft_checkpoint recovery debt limit: new mutations paused until pending decisions permit checkpoint")
+	}
+	n.raftReservedEntries++
+	n.raftReservedBytes += size
+	return func() {
+		n.raftDebtMu.Lock()
+		n.raftReservedEntries--
+		n.raftReservedBytes -= size
+		n.raftDebtMu.Unlock()
+	}, nil
+}
+
+func (n *node) raftRecoveryAtLimit() bool {
+	n.raftDebtMu.Lock()
+	defer n.raftDebtMu.Unlock()
+	last, err := n.Store.LastIndex()
+	return err != nil || last-atomic.LoadUint64(&n.raftCertifiedIndex)+n.raftReservedEntries >= raftRecoveryMaxEntries || atomic.LoadUint64(&n.raftRecoveryBytes)+n.raftReservedBytes >= raftRecoveryMaxBytes
+}

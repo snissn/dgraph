@@ -525,6 +525,8 @@ github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
 github.com/snissn/compress v1.18.2-snissn.0.0.20260506201017-87fb149e4721 h1:2XYKYq/WV3oldGbGi3b7M7VQoh38DIKSO0lNteuazJ0=
 github.com/snissn/compress v1.18.2-snissn.0.0.20260506201017-87fb149e4721/go.mod h1:p4xiZN07JMUF5xuybNGkG+pozT12MAblxCx36z+PIYM=
+github.com/snissn/compress v1.18.2-snissn.0.0.20261014112447-88a027b09341 h1:brG2Yps8frK2s7mVF9Lz+N3ettUty+hcX2y3vAyEMUw=
+github.com/snissn/compress v1.18.2-snissn.0.0.20261014112447-88a027b09341/go.mod h1:p4xiZN07JMUF5xuybNGkG+pozT12MAblxCx36z+PIYM=
 github.com/snissn/go-crc32-asm v0.0.0-20260522204125-08945951423a h1:uqSq50AAT36ZzDiRApq8GNsbeJASPaneZ6aKfw3KShc=
 github.com/snissn/go-crc32-asm v0.0.0-20260522204125-08945951423a/go.mod h1:PDwKLbWpRDAN2IPbK9PxIgSx0YdwQaSOLWObRawQJ58=
 github.com/snissn/gomap v0.6.2-0.20260721120929-84e3f6652651 h1:IPLiJtfKzUMhtwokgbr7HffbfBN0uJijCx+pqZYEBPU=

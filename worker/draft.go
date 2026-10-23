@@ -60,8 +60,14 @@ type node struct {
 	gid     uint32
 	closer  *z.Closer
 
-	checkpointTs uint64 // Timestamp corresponding to checkpoint.
-	streaming    int32  // Used to avoid calculating snapshot
+	raftDebtMu          sync.Mutex
+	raftReservedBytes   uint64
+	raftReservedEntries uint64
+	raftAppliedBytes    uint64
+	raftCertifiedIndex  uint64
+	raftRecoveryBytes   uint64
+	checkpointTs        uint64 // Timestamp corresponding to checkpoint.
+	streaming           int32  // Used to avoid calculating snapshot
 
 	// Used to track the ops going on in the system.
 	ops         map[op]operation
@@ -128,7 +134,9 @@ func (n *node) startTaskAtTs(id op, ts uint64) (*z.Closer, error) {
 			time.Sleep(10 * time.Second) // Wait for 10s to start rollup operation.
 			// If any other operation is running, this would error out. This error can
 			// be safely ignored because rollups will resume once that other task is done.
-			_, _ = n.startTask(opRollup)
+			if !raftCheckpointEnabled() {
+				_, _ = n.startTask(opRollup)
+			}
 		}
 	}
 
@@ -294,6 +302,9 @@ func (n *node) applyConfChange(e raftpb.Entry) {
 		glog.Errorf("While unmarshalling confchange: %+v", err)
 	}
 
+	if raftCheckpointEnabled() && (cc.Type == raftpb.ConfChangeRemoveNode || cc.NodeID != n.Id) {
+		glog.Fatal("raft_checkpoint prototype refuses membership changes requiring snapshot transfer")
+	}
 	if cc.Type == raftpb.ConfChangeRemoveNode {
 		n.DeletePeer(cc.NodeID)
 	} else if len(cc.Context) > 0 {
@@ -615,6 +626,14 @@ func (n *node) applyMutations(ctx context.Context, proposal *pb.Proposal) (rerr 
 }
 
 func (n *node) applyCommitted(proposal *pb.Proposal, key uint64) error {
+	if raftCheckpointEnabled() {
+		if err := checkRaftPrototypeProposal(proposal); err != nil {
+			return err
+		}
+		if proposal.Snapshot != nil {
+			return nil
+		} // Local pruning is certificate-owned.
+	}
 	start := time.Now()
 	defer func() {
 		since := time.Since(start)
@@ -933,6 +952,15 @@ func (n *node) processApplyCh() {
 				_ = ostats.RecordWithTags(context.Background(), tags, x.LatencyMs.M(ms))
 			}
 
+			if raftCheckpointEnabled() {
+				if perr != nil {
+					glog.Fatalf("raft_checkpoint apply failed; refusing a visibility frontier: %v", perr)
+				}
+				n.raftAppliedBytes += uint64(len(entry.Data))
+				if err := n.checkpointRaftCut(proposal.Index, false); err != nil {
+					glog.Fatalf("raft_checkpoint failed: %v", err)
+				}
+			}
 			n.Proposals.Done(key, perr)
 			n.Applied.Done(proposal.Index)
 			ostats.Record(context.Background(), x.RaftAppliedIndex.M(int64(n.Applied.DoneUntil())))
@@ -949,6 +977,9 @@ func (n *node) processApplyCh() {
 		select {
 		case entries, ok := <-n.applyCh:
 			if !ok {
+				if err := n.checkpointRaftCut(n.Applied.DoneUntil(), true); err != nil {
+					glog.Errorf("final checkpoint: %v", err)
+				}
 				return
 			}
 			handle(entries)
@@ -1175,6 +1206,9 @@ func rampMeter(address *int64, maxSize int64, component string) {
 }
 
 func (n *node) updateRaftProgress() error {
+	if raftCheckpointEnabled() {
+		return nil
+	}
 	// Both leader and followers can independently update their Raft progress. We don't store
 	// this in Raft WAL. Instead, this is used to just skip over log records that this Alpha
 	// has already applied, to speed up things on a restart.
@@ -1215,7 +1249,7 @@ func (n *node) checkpointAndClose(done chan struct{}) {
 				glog.Errorf("While updating Raft progress: %v", err)
 			}
 
-			if n.AmLeader() {
+			if n.AmLeader() && !raftCheckpointEnabled() {
 				// If leader doesn't have a snapshot, we should create one immediately. This is very
 				// useful when you bring up the cluster from bulk loader. If you remove an alpha and
 				// add a new alpha, the new follower won't get a snapshot if the leader doesn't have
@@ -1267,6 +1301,8 @@ func (n *node) checkpointAndClose(done chan struct{}) {
 						lastSnapshotTime = time.Now()
 					}
 				}
+			}
+			if n.AmLeader() {
 				go n.abortOldTransactions()
 			}
 
@@ -1426,6 +1462,9 @@ func (n *node) Run() {
 				snap := &pb.Snapshot{}
 				x.Check(proto.Unmarshal(rd.Snapshot.Data, snap))
 				rc := snap.GetContext()
+				if raftCheckpointEnabled() && rc.Id != n.Id {
+					glog.Fatal("raft_checkpoint prototype refuses peer snapshot: certified TreeDB install protocol unavailable")
+				}
 				x.AssertTrue(rc.GetGroup() == n.gid)
 				if rc.Id != n.Id {
 					// Set node to unhealthy state here while it applies the snapshot.
@@ -1483,13 +1522,18 @@ func (n *node) Run() {
 
 			// Store the hardstate and entries. Note that these are not CommittedEntries.
 			n.SaveToStorage(&rd.HardState, rd.Entries, &rd.Snapshot)
+			if raftCheckpointEnabled() {
+				for _, e := range rd.Entries {
+					atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(e.Data)))
+				}
+			}
 			timer.Record("disk")
 			span.AddEvent(fmt.Sprintf("Saved %d entries. Snapshot, HardState empty? (%v, %v)",
 				len(rd.Entries),
 				raft.IsEmptySnap(rd.Snapshot),
 				raft.IsEmptyHardState(rd.HardState)))
 
-			for x.WorkerConfig.HardSync && rd.MustSync {
+			for x.WorkerConfig.HardSync && (rd.MustSync || (raftCheckpointEnabled() && len(rd.CommittedEntries) > 0)) {
 				if err := n.Store.Sync(); err != nil {
 					glog.Errorf("Error while calling Store.Sync: %+v", err)
 					time.Sleep(10 * time.Millisecond)
@@ -1519,7 +1563,7 @@ func (n *node) Run() {
 				case len(entry.Data) == 0:
 					glog.V(3).Infof("Found empty data at index: %d", entry.Index)
 					n.Applied.Done(entry.Index)
-				case entry.Index < applied:
+				case entry.Index < applied || (raftCheckpointEnabled() && entry.Index == applied):
 					glog.V(3).Infof("Skipping over already applied entry: %d", entry.Index)
 					n.Applied.Done(entry.Index)
 				default:
@@ -1952,6 +1996,13 @@ func (n *node) retryUntilSuccess(fn func() error, pause time.Duration) {
 
 // InitAndStartNode gets called after having at least one membership sync with the cluster.
 func (n *node) InitAndStartNode() {
+	x.Check(n.recoverRaftCheckpoint())
+	if raftCheckpointEnabled() {
+		// Deterministic built-in schemas are versioned by the application contract.
+		// Bootstrap them before semantic replay so they cannot race certificate cuts.
+		gr.applyInitialSchema()
+		gr.applyInitialTypes()
+	}
 	x.Check(initProposalKey(n.Id))
 	_, restart, err := n.PastLife()
 	x.Check(err)
@@ -2032,7 +2083,9 @@ func (n *node) InitAndStartNode() {
 	go n.cdcTracker.processCDCEvents()
 	// Ignoring the error since InitAndStartNode does not return an error and using x.Check would
 	// not be the right thing to do.
-	_, _ = n.startTask(opRollup)
+	if !raftCheckpointEnabled() {
+		_, _ = n.startTask(opRollup)
+	}
 	go n.stopAllTasks()
 	go n.Run()
 }

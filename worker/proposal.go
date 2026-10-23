@@ -123,6 +123,18 @@ var errUnableToServe = errors.New("Server overloaded with pending proposals. Ple
 // proposeAndWait sends a proposal through RAFT. It waits on a channel for the proposal
 // to be applied(written to WAL) to all the nodes in the group.
 func (n *node) proposeAndWait(ctx context.Context, proposal *pb.Proposal) (perr error) {
+	if raftCheckpointEnabled() {
+		if err := checkRaftPrototypeProposal(proposal); err != nil {
+			return err
+		}
+		if proposal.Mutations != nil {
+			release, err := n.reserveRaftRecoveryDebt(uint64(proto.Size(proposal) + 8))
+			if err != nil {
+				return err
+			}
+			defer release()
+		}
+	}
 	startTime := time.Now()
 	ctx = x.WithMethod(ctx, "n.proposeAndWait")
 	defer func() {

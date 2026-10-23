@@ -35,6 +35,16 @@ type wal struct {
 	nextEntryIdx int
 	// dir is the directory to use to store files.
 	dir string
+	// Non-nil only for an explicit external state machine. Track changed files
+	// at append/rotation, never rescan retained history at each Ready sync.
+	dirty          map[*logFile]struct{}
+	namespaceDirty bool
+}
+
+func (l *wal) markDirty(file *logFile) {
+	if l.dirty != nil {
+		l.dirty[file] = struct{}{}
+	}
 }
 
 // allEntries returns all the entries in the range [lo, hi).
@@ -135,6 +145,7 @@ func (l *wal) AddEntries(entries []raftpb.Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
+	l.markDirty(l.current)
 	// glog.Infof("AddEntries: %+v\n", entries)
 	fidx, eidx := l.slotGe(entries[0].Index)
 
@@ -160,11 +171,16 @@ func (l *wal) AddEntries(entries []raftpb.Entry) error {
 			l.current = l.files[fidx]
 
 			for _, ef := range extra {
+				if l.dirty != nil {
+					delete(l.dirty, ef)
+					l.namespaceDirty = true
+				}
 				glog.V(2).Infof("Deleting extra file: %d\n", ef.fid)
 				if err := ef.delete(); err != nil {
 					glog.Errorf("deleting file: %s. error: %v\n", ef.Fd.Name(), err)
 				}
 			}
+			l.markDirty(l.current)
 			z.ZeroOut(l.current.Data, entrySize*eidx, logFileOffset)
 			l.files = l.files[:fidx]
 		}
@@ -205,6 +221,7 @@ func (l *wal) AddEntries(entries []raftpb.Entry) error {
 			re.Data = ebuf.Bytes()
 		}
 
+		l.markDirty(l.current)
 		// Allocate slice for the data and copy bytes.
 		destBuf, next, err := l.current.AllocateSlice(len(re.Data), offset)
 		if err != nil {
@@ -360,6 +377,10 @@ func (l *wal) deleteBefore(raftIndex uint64) {
 	}
 
 	for _, ef := range before {
+		if l.dirty != nil {
+			delete(l.dirty, ef)
+			l.namespaceDirty = true
+		}
 		if err := ef.delete(); err != nil {
 			glog.Errorf("while deleting file: %s, err: %v\n", ef.Fd.Name(), err)
 		}
@@ -391,6 +412,7 @@ func (l *wal) rotate(firstIndex uint64, offset int) error {
 	}
 	nextFid++
 
+	l.markDirty(l.current)
 	err := l.current.Truncate(int64(offset))
 	if err != nil {
 		return errors.Wrapf(err, "while truncating entry file")
@@ -405,6 +427,10 @@ func (l *wal) rotate(firstIndex uint64, offset int) error {
 	// update the current file to the file that was just created.
 	l.files = append(l.files, l.current)
 	l.current = ef
+	l.markDirty(ef)
+	if l.dirty != nil {
+		l.namespaceDirty = true
+	}
 	return nil
 }
 
