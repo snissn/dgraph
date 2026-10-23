@@ -136,7 +136,7 @@ func inspect(server, dgraph, gomap string) (manifest, error) {
 	}
 	for _, dependency := range info.Deps {
 		if dependency.Path == "github.com/snissn/gomap" {
-			if m.GomapVersion != "" || dependency.Replace == nil || dependency.Replace.Version != "" {
+			if m.GomapVersion != "" || dependency.Replace == nil || (dependency.Replace.Version != "" && dependency.Replace.Version != "(devel)") {
 				return m, errors.New("one local Gomap replacement is required")
 			}
 			m.GomapVersion, m.GomapReplacement = dependency.Version, dependency.Replace.Path
