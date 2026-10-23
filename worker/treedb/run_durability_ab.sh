@@ -88,8 +88,13 @@ GOWORK=off go build -o "${artifact_dir}/bin/livebench" ./worker/treedb/livebench
 GOWORK=off go build -o "${artifact_dir}/bin/report" ./worker/treedb/livebench/reportcmd
 
 micro_cmd=(go test ./posting -run '^$' -bench 'Benchmark(BadgerStoreSeam|TreeDBStoreAdapterOverhead|CommitEventDisabledAndUnsubscribed)$' -benchmem -benchtime "${benchtime}" -count "${count}")
-GOWORK=off "${micro_cmd[@]}" >"${artifact_dir}/microbench/raw.stdout" 2>"${artifact_dir}/microbench/raw.stderr"
+micro_status=0
+GOWORK=off "${micro_cmd[@]}" >"${artifact_dir}/microbench/raw.stdout" 2>"${artifact_dir}/microbench/raw.stderr" || micro_status=$?
 cat "${artifact_dir}/microbench/raw.stdout" "${artifact_dir}/microbench/raw.stderr" >"${artifact_dir}/microbench/raw.txt"
+if ((micro_status != 0)); then
+	cat "${artifact_dir}/microbench/raw.txt" >&2
+	exit "${micro_status}"
+fi
 cat "${artifact_dir}/microbench/raw.stdout"
 
 storage_source=$(findmnt -no SOURCE -T "${artifact_dir}")

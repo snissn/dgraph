@@ -260,3 +260,8 @@ accepted-install recovery, real peer changes and filesystem power-loss qualifica
 required proofs. CPU/endpoint/operation/storage diagnostics remain excluded from accepted timing
 rows. Microbenchmark stdout/stderr are retained separately; `raw.txt` remains a compatibility
 concatenation.
+
+The executable must contain Go `vcs.revision` metadata matching the checkout that launches the
+harness. If the selected toolchain omits that metadata for linked Git worktrees, build from a normal
+clone of the exact commit instead. Missing revision metadata is an error before server startup;
+passing a source path or naming a binary after a commit does not substitute for that binding.

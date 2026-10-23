@@ -56,7 +56,7 @@ func validateRuntime(r Result) error {
 		return errors.New("measured binary hash/build identity missing")
 	}
 	if c.Backend == "badger" && (c.TreeDBPolicy != "" || c.TreeDBMemtable != "") {
-		return errors.New("Badger config contains TreeDB selection")
+		return errors.New("badger config contains TreeDB selection")
 	}
 	if c.Backend == "treedb" && c.TreeDBPolicy != "store_wal" && c.TreeDBPolicy != "raft_checkpoint" {
 		return errors.New("explicit TreeDB recovery policy is required")
