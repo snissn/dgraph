@@ -67,9 +67,10 @@ type DiskStorage struct {
 	lock sync.Mutex
 
 	// External materialized stores may compact only a certified durable prefix.
-	checkpointGuard  bool
-	certifiedIndex   uint64
-	syncStageForTest func(string)
+	checkpointGuard     bool
+	certifiedIndex      uint64
+	syncStageForTest    func(string)
+	installStageForTest func(string)
 }
 
 // Init initializes an instance of DiskStorage without encryption.
@@ -82,11 +83,14 @@ func Init(dir string) *DiskStorage {
 // InitEncrypted initializes returns a properly initialized instance of DiskStorage.
 // To gracefully shutdown DiskStorage, store.Closer.SignalAndWait() should be called.
 func InitEncrypted(dir string, encKey x.Sensitive) (*DiskStorage, error) {
+	intent, err := ReadAcceptedSnapshotInstall(dir)
+	if err != nil {
+		return nil, err
+	}
 	w := &DiskStorage{
 		dir: dir,
 	}
 
-	var err error
 	if w.meta, err = newMetaFile(dir); err != nil {
 		return nil, err
 	}
@@ -99,6 +103,12 @@ func InitEncrypted(dir string, encKey x.Sensitive) (*DiskStorage, error) {
 	}
 
 	w.elog = trace.NewEventLog("Badger", "RaftStorage")
+	if intent != nil {
+		// The durable archive plus accepted intent owns this transition. Normal
+		// snapshot/log alignment and pruning must wait until the posting owner
+		// confirms its exact receiver root and CompleteSnapshotInstall runs.
+		return w, nil
+	}
 
 	snap, err := w.meta.snapshot()
 	if err != nil {

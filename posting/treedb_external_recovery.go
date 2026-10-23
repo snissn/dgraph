@@ -1,8 +1,14 @@
+/*
+ * SPDX-FileCopyrightText: © 2017-2025 Istari Digital, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package posting
 
 import (
 	"context"
 	"fmt"
+	"io"
 
 	td "github.com/snissn/gomap/TreeDB"
 	"github.com/snissn/gomap/TreeDB/mvcc"
@@ -33,7 +39,58 @@ func (s *TreeDBStore) RecoveredRaftCheckpoint() ([]byte, bool) {
 	return cert.Metadata, ok
 }
 
-// CheckpointRaft closes admission and drains existing callbacks before asking
+func (s *TreeDBStore) RaftCheckpointCertificate() (td.ExternalRecoveryCheckpoint, bool) {
+	if s == nil || s.external == nil {
+		return td.ExternalRecoveryCheckpoint{}, false
+	}
+	return s.external.RecoveredCheckpoint()
+}
+
+func (s *TreeDBStore) ExportRaftCheckpoint(ctx context.Context, dst io.Writer, generation uint64, digest string) error {
+	if s == nil || s.external == nil || s.IsClosed() {
+		return fmt.Errorf("external posting store unavailable")
+	}
+	return s.external.ExportCheckpoint(ctx, dst, generation, digest)
+}
+
+// InstallRaftCheckpoint drains every read transaction (and its iterators),
+// blocks new readers, then closes write admission and drains accepted storage
+// and acknowledgement dispatch. Dgraph's semantic apply/TxnWriter.Flush barrier
+// must finish its callbacks before this call; arbitrary user callbacks may call
+// Close and cannot be waited on while this adapter holds its lifecycle gate.
+// Pre-install write handles become stale even if preparation subsequently fails.
+// The caller must separately drain semantic apply and reload schema/cache before
+// read health; this barrier owns only the storage handles and root publication.
+func (s *TreeDBStore) InstallRaftCheckpoint(ctx context.Context, src io.Reader,
+	authorize func(td.ExternalRecoveryCheckpoint) ([]byte, error)) (td.ExternalRecoveryCheckpoint, error) {
+	if s == nil {
+		return td.ExternalRecoveryCheckpoint{}, fmt.Errorf("external posting store unavailable")
+	}
+	s.rootGate.Lock()
+	defer s.rootGate.Unlock()
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.external == nil || s.IsClosed() {
+		return td.ExternalRecoveryCheckpoint{}, fmt.Errorf("external posting store unavailable")
+	}
+	s.commitWG.Wait()
+	s.rootEpoch.Add(1)
+	cert, err := s.external.InstallCheckpoint(ctx, src, authorize)
+	if err != nil {
+		// A no-op capability call distinguishes an intact old owner from an
+		// ambiguous publication requiring reopen. Never serve through a poisoned
+		// owner or guess whether CURRENT selected the old/new namespace.
+		if probe := s.external.Apply(func() error { return nil }); probe != nil {
+			s.closed.Store(true)
+		}
+		return cert, err
+	}
+	s.db = s.external.DB()
+	s.mvcc = mvcc.New(s.db)
+	return cert, nil
+}
+
+// CheckpointRaft closes admission and drains existing storage before asking
 // the external owner to bind the exact physical root to this application cut.
 func (s *TreeDBStore) CheckpointRaft(ctx context.Context, metadata []byte) error {
 	s.lifecycleMu.Lock()

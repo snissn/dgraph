@@ -6,9 +6,11 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/dgraph-io/dgraph/v25/schema"
 	"github.com/dgraph-io/dgraph/v25/types"
 	"github.com/golang/glog"
+	td "github.com/snissn/gomap/TreeDB"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -211,6 +214,27 @@ func (n *node) recoverRaftCheckpoint() error {
 		return fmt.Errorf("raft_checkpoint prototype requires one Alpha; snapshot transfer is not implemented")
 	}
 	n.Store.RequireCheckpointCertificate()
+	walPath, err := filepath.Abs(Config.WALDir)
+	if err != nil {
+		return err
+	}
+	intent, err := preflightRaftSnapshotInstall("dgraph-raft-v1:" + walPath)
+	if err != nil {
+		return err
+	}
+	if intent != nil {
+		current, ok := State.TreeDBStore.RaftCheckpointCertificate()
+		var source td.ExternalRecoveryCheckpoint
+		if err := json.Unmarshal(intent.SourceCertificate, &source); err != nil {
+			return err
+		}
+		if !ok || current.Root != source.Root || !bytes.Equal(current.Metadata, intent.ReceiverMetadata) {
+			return fmt.Errorf("accepted install posting root is not reconciled")
+		}
+		if err := n.Store.CompleteSnapshotInstall(current.Metadata); err != nil {
+			return err
+		}
+	}
 	data, ok := State.TreeDBStore.RecoveredRaftCheckpoint()
 	c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: n.gid, RaftID: n.Id}
 	if ok {
@@ -278,6 +302,11 @@ func (n *node) recoverRaftCheckpoint() error {
 		}
 	}
 	glog.Infof("TreeDB raft_checkpoint recovery: certified=%d oracle=%d", c.Index, c.OracleMaxAssigned)
+	if intent != nil {
+		if err := n.Store.FinishSnapshotInstall(intent.Digest); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

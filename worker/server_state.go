@@ -199,7 +199,18 @@ func (s *ServerState) openPostingStore() error {
 			if identityErr != nil {
 				return identityErr
 			}
-			s.TreeDBStore, err = posting.OpenRaftTreeDBStore(treeOpts, "dgraph-raft-v1:"+walIdentity)
+			identity := "dgraph-raft-v1:" + walIdentity
+			intent, preflightErr := preflightRaftSnapshotInstall(identity)
+			if preflightErr != nil {
+				return preflightErr
+			}
+			s.TreeDBStore, err = posting.OpenRaftTreeDBStore(treeOpts, identity)
+			if err == nil && intent != nil {
+				err = s.reconcileRaftSnapshotOwner(context.Background(), intent)
+				if err != nil {
+					s.TreeDBStore.Close()
+				}
+			}
 		} else {
 			s.TreeDBStore, err = posting.OpenTreeDBStore(treeOpts, mode)
 		}

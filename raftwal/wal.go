@@ -393,10 +393,13 @@ func (l *wal) reset() error {
 		if err := ef.delete(); err != nil {
 			return errors.Wrapf(err, "while deleting %s", ef.Fd.Name())
 		}
+		delete(l.dirty, ef)
+		l.namespaceDirty = true
 	}
 	l.files = l.files[:0]
 	z.ZeroOut(l.current.Data, 0, logFileOffset)
 	l.nextEntryIdx = 0
+	l.markDirty(l.current)
 	return nil
 }
 

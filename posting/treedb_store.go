@@ -79,6 +79,8 @@ type TreeDBStore struct {
 	durability string
 
 	lifecycleMu  sync.Mutex
+	rootGate     sync.RWMutex // external snapshot install drains read handles
+	rootEpoch    atomic.Uint64
 	commitWG     sync.WaitGroup
 	workerWG     sync.WaitGroup
 	queueActive  bool
@@ -146,12 +148,17 @@ func toMVCCCommitMode(mode TreeDBCommitMode) (mvcc.CommitMode, error) {
 }
 
 func (s *TreeDBStore) NewReadTxn(readTs uint64) ReadTxn {
-	return &treeDBReadTxn{store: s, readTs: readTs, iterators: make(map[*treeDBIterator]struct{})}
+	tracked := s.external != nil
+	if tracked {
+		s.rootGate.RLock()
+	}
+	return &treeDBReadTxn{store: s, readTs: readTs, rootReadHeld: tracked,
+		iterators: make(map[*treeDBIterator]struct{})}
 }
 
 func (s *TreeDBStore) NewWriteTxn() WriteTxn {
 	batch := s.mutationPool.Get().(*treeDBMutationBatch)
-	return &treeDBWriteTxn{store: s, batch: batch}
+	return &treeDBWriteTxn{store: s, batch: batch, rootEpoch: s.rootEpoch.Load()}
 }
 
 func (s *TreeDBStore) IsClosed() bool {
@@ -174,6 +181,10 @@ func (s *TreeDBStore) Close() error {
 		s.commitWG.Wait()
 		close(s.commitQueue)
 		s.workerWG.Wait()
+		if s.external != nil {
+			s.rootGate.Lock()
+			defer s.rootGate.Unlock()
+		}
 
 		s.lifecycleMu.Lock()
 		defer s.lifecycleMu.Unlock()
@@ -330,6 +341,7 @@ type treeDBWriteTxn struct {
 	batch     *treeDBMutationBatch
 	stickyErr error
 	closed    bool
+	rootEpoch uint64
 }
 
 type treeDBMutationBatch struct {
@@ -342,11 +354,12 @@ type treeDBMutationBatch struct {
 }
 
 type treeDBCommitRequest struct {
-	sequence uint64
-	commitTs uint64
-	batch    *treeDBMutationBatch
-	callback func(error)
-	done     chan error
+	sequence  uint64
+	commitTs  uint64
+	batch     *treeDBMutationBatch
+	callback  func(error)
+	done      chan error
+	rootEpoch uint64
 }
 
 type treeDBCommitCompletion struct {
@@ -427,14 +440,14 @@ func (t *treeDBWriteTxn) CommitAt(commitTs uint64, cb func(error)) error {
 			t.store.releaseMutationBatch(batch)
 			return err
 		}
-		return t.store.commitSync(commitTs, batch)
+		return t.store.commitSync(commitTs, batch, t.rootEpoch)
 	}
 	if err != nil {
 		t.store.releaseMutationBatch(batch)
 		go cb(err)
 		return nil
 	}
-	request := treeDBCommitRequest{commitTs: commitTs, batch: batch, callback: cb}
+	request := treeDBCommitRequest{commitTs: commitTs, batch: batch, callback: cb, rootEpoch: t.rootEpoch}
 	if err := t.store.enqueueCommit(request); err != nil {
 		t.store.releaseMutationBatch(batch)
 		go cb(err)
@@ -491,6 +504,9 @@ func (s *TreeDBStore) enqueueCommit(request treeDBCommitRequest) error {
 	defer s.lifecycleMu.Unlock()
 	if s.closed.Load() || s.db == nil {
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
+	}
+	if request.rootEpoch != s.rootEpoch.Load() {
+		return fmt.Errorf("commit across posting root install: %w", ErrTreeDBTxnClosed)
 	}
 	// Retain the previous one-active-plus-64-queued ownership bound even though
 	// the scheduler may move queued requests into its own pending set. Holding
@@ -683,7 +699,7 @@ func (s *TreeDBStore) deliverTreeDBCommit(completion treeDBCommitCompletion) {
 	s.releaseTreeDBCommitSlot()
 }
 
-func (s *TreeDBStore) commitSync(commitTs uint64, batch *treeDBMutationBatch) error {
+func (s *TreeDBStore) commitSync(commitTs uint64, batch *treeDBMutationBatch, rootEpoch uint64) error {
 	if s == nil {
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
 	}
@@ -692,6 +708,11 @@ func (s *TreeDBStore) commitSync(commitTs uint64, batch *treeDBMutationBatch) er
 		s.lifecycleMu.Unlock()
 		s.releaseMutationBatch(batch)
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
+	}
+	if rootEpoch != s.rootEpoch.Load() {
+		s.lifecycleMu.Unlock()
+		s.releaseMutationBatch(batch)
+		return fmt.Errorf("commit across posting root install: %w", ErrTreeDBTxnClosed)
 	}
 	s.acquireTreeDBCommitSlot()
 	if !s.queueActive {
@@ -784,11 +805,12 @@ func decodeTreeDBEnvelope(encoded []byte) (value []byte, userMeta byte, discard 
 }
 
 type treeDBReadTxn struct {
-	mu        sync.Mutex
-	store     *TreeDBStore
-	readTs    uint64
-	discarded bool
-	iterators map[*treeDBIterator]struct{}
+	mu           sync.Mutex
+	store        *TreeDBStore
+	readTs       uint64
+	discarded    bool
+	rootReadHeld bool
+	iterators    map[*treeDBIterator]struct{}
 }
 
 func (t *treeDBReadTxn) Get(key []byte) (Item, error) {
@@ -863,6 +885,9 @@ func (t *treeDBReadTxn) Discard() {
 	t.mu.Unlock()
 	for _, it := range iterators {
 		it.close(false)
+	}
+	if t.rootReadHeld {
+		t.store.rootGate.RUnlock()
 	}
 }
 

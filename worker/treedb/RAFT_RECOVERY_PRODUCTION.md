@@ -59,26 +59,24 @@ is still required for operational liveness.
 
 ## Remaining consumer completion sequence
 
-| Obligation                    | Existing path and required proof                                                                                                                                              | Status                                                   |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| Immediate acknowledged suffix | CommitNow response, abrupt Alpha and Zero termination before read/drain, restart and verify all acknowledged transaction decisions                                            | Open                                                     |
-| Pending-free progress         | Retained debt admission pauses mutations; ordered commit/abort bypasses debt; old transaction abort restores a cut and credits; unavailable Zero remains visible backpressure | Open                                                     |
-| Fresh schema/index/type       | Existing serial schema writer and normal indexed posting path; certify, recover old cut, replay, query indexes and duplicates                                                 | Fresh basic schema supported; index replay proof open    |
-| Existing schema rebuild       | Existing asynchronous reindex/temporary Badger path must become a serial certified lifecycle with deterministic failure disposition                                           | Guarded; protocol open                                   |
-| Drop/namespace/restore/import | Each operation needs ordered input closure, pending disposition, schema/cache invalidation and a root cut; external files require digest-bound retained authority             | Guarded; protocol open                                   |
-| Peer snapshot/rejoin          | Export a certified root and dependencies at a Raft snapshot; validate transfer; atomically install with receiver identity and frontiers before retention/read health          | Guarded; owner transfer/install API absent               |
-| Maintenance                   | Rollup, MVCC pruning, vlog GC/rewrite and compaction must respect current/previous certified roots and active readers through every crash cut                                 | Guarded; root-pinning API integration open               |
-| Operational routing           | Backup/export/admin and shutdown must use capability-aware store paths; no `nil` Badger dereference or bypass of owner lifecycle                                              | Existing fail-closed guards; full production routes open |
-| Retry identity/bounds         | Proposal key/size compatibility remains inherited; stronger content binding and proven retry expiry behavior at long-load limits need qualification                           | Open                                                     |
-| Allocation and runtime        | Existing bounded mutation arena reused; capture public admission/apply/allocation profile only after correctness and root runtime grant                                       | Open                                                     |
+| Obligation                    | Existing path and required proof                                                                                                                                              | Status                                                    |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Immediate acknowledged suffix | CommitNow response, abrupt Alpha and Zero termination before read/drain, restart and verify all acknowledged transaction decisions                                            | Initial-root server proof green; nonzero cut proof open   |
+| Pending-free progress         | Retained debt admission pauses mutations; ordered commit/abort bypasses debt; old transaction abort restores a cut and credits; unavailable Zero remains visible backpressure | Controlled real apply proof green; live Zero timeout open |
+| Fresh schema/index/type       | Existing serial schema writer and normal indexed posting path; certify, recover old cut, replay, query indexes and duplicates                                                 | Fresh basic schema supported; index replay proof open     |
+| Existing schema rebuild       | Existing asynchronous reindex/temporary Badger path must become a serial certified lifecycle with deterministic failure disposition                                           | Guarded; protocol open                                    |
+| Drop/namespace/restore/import | Each operation needs ordered input closure, pending disposition, schema/cache invalidation and a root cut; external files require digest-bound retained authority             | Guarded; protocol open                                    |
+| Peer snapshot/rejoin          | Export a certified root and dependencies at a Raft snapshot; validate transfer; atomically install with receiver identity and frontiers before retention/read health          | Adapter/WAL/startup crash proofs green; live RPC guarded  |
+| Maintenance                   | Rollup, MVCC pruning, vlog GC/rewrite and compaction must respect current/previous certified roots and active readers through every crash cut                                 | Guarded; root-pinning API integration open                |
+| Operational routing           | Backup/export/admin and shutdown must use capability-aware store paths; no `nil` Badger dereference or bypass of owner lifecycle                                              | Existing fail-closed guards; full production routes open  |
+| Retry identity/bounds         | Proposal key/size compatibility remains inherited; stronger content binding and proven retry expiry behavior at long-load limits need qualification                           | Open                                                      |
+| Allocation and runtime        | Existing bounded mutation arena reused; capture public admission/apply/allocation profile only after correctness and root runtime grant                                       | Open                                                      |
 
-Peer installation cannot call the present `Checkpoint` API to bless an arbitrary working database.
-The source certificate has a different Raft ID and WAL-directory owner identity. An owner-specific
-export/install protocol must verify and retain source dependencies, bind receiver identity and
-application metadata, atomically install the recovered root and Raft snapshot, and recover each
-intermediate crash state before read health. The current `DB/Apply/Checkpoint/RecoveredCheckpoint`
-surface provides no such transfer operation. This is a named cross-owner obligation, not a reason to
-disable certificate checks.
+Peer installation uses the external owner's explicit generation/digest-bound export and authorized
+install APIs. The source certificate has a different Raft ID and WAL-directory owner identity.
+Periodic local certification retains pinned roots; network transfer exports a full physical image.
+The receiver preserves source semantic metadata and rewrites only its local Raft ID. A trusted
+authorization callback must accept a durable WAL-owned install intent before owner CURRENT changes.
 
 The selected peer-install state machine preserves both the posting and Raft authorities:
 
@@ -90,8 +88,10 @@ The selected peer-install state machine preserves both the posting and Raft auth
    current term/vote, and the stable archive reference/digest. No CURRENT switch precedes this
    intent.
 3. The owner publishes the receiver-identity certificate and installed root atomically. Reader
-   admission/drain, posting callback drain and stale-write epoch rejection protect the DB pointer
-   replacement. Schema and posting caches are reloaded before read health.
+   admission/drain, accepted storage drain and stale-write epoch rejection protect the DB pointer
+   replacement. The semantic caller must finish `TxnWriter.Flush` callbacks first; arbitrary adapter
+   callbacks may call Close and are not waited on while the lifecycle gate is held. Schema and
+   posting caches are reloaded before read health.
 4. Complete the certificate-authorized local Raft snapshot install and sync its dependencies. Commit
    initially reaches only the snapshot index; later Ready suffix entries must be durable before a
    higher HardState commit can be published. Covered old history can now be removed.
@@ -101,12 +101,31 @@ The selected peer-install state machine preserves both the posting and Raft auth
 
 An outgoing snapshot must retain its captured certificate ConfState; replacing it with live
 membership breaks that binding. A stale requested generation/digest must fail export explicitly.
-Crashes after archive sync, accepted intent, CURRENT publication, Raft snapshot sync, and intent
-cleanup are required red test cuts before this protocol can enable peer snapshot/rejoin. The intent,
-live reader/epoch barrier and consumer install path are not implemented by this plan text.
+`TestRaftTreeDBTransferDrainsReadersAndRejectsStaleWriters` holds a real read transaction and
+iterator and an admitted asynchronous storage commit while install waits, then checks root
+replacement, receiver identity and stale-write refusal. `TestAcceptedSnapshotInstallCrashCuts`
+abruptly exits at accepted-intent, Raft metadata sync and divergent-suffix reset; two startup
+completions preserve term/vote and snapshot-only commit.
+`TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay` uses real mutation/Delta data and the
+real owner authorization callback. It abruptly exits before owner Open, after CURRENT installation
+and after WAL completion, repeats each startup, and checks the same installed generation,
+value/schema, dedup, Oracle, captured ConfState and election state. Missing/corrupt archives,
+corrupt intent and wrong WAL identity refuse before physical owner Open; an owner-namespace canary
+and marker remain untouched. The archive lives outside owner namespaces until semantic and WAL
+reconciliation completes. Owner internal publication crash cuts are covered by Gomap's transfer
+suite. Live Ready/RPC snapshot acceptance and membership scheduling remain guarded until their own
+proofs pass.
 
-The sibling Gomap implementation is replacing whole-image checkpoint copies with pinned retained
-roots. The prototype document's image-copy byte accounting and maintenance limits describe its
-original evidence only. Consumer results must identify the actual dependency commit and root
-mechanism; a bounded certificate file size is not the size of the retained database or recovery
-working set.
+The checksummed version-1 accepted intent is limited to 4 MiB, receiver application metadata to 1
+MiB and source certificate to 2 MiB. A single archive is capped at 8 GiB. Acceptance syncs dirty WAL
+files, directory and metadata, then archive and directory, then atomic intent and directory; the
+owner cannot publish CURRENT earlier. Completion syncs exact snapshot/HardState before WAL reset,
+then syncs reset before deleting the intent. Intent deletion is synced before archive deletion,
+leaving at worst an unreferenced archive after a cleanup crash. Orphan cleanup and total transfer
+staging limits remain operational obligations before peer support is enabled.
+
+The sibling Gomap implementation now uses pinned retained roots on an independent API-only branch
+based on ordinary main, without the separate captured-WAL engine. The prototype document's
+image-copy byte accounting and maintenance limits describe its original evidence only. Consumer
+results must identify the actual dependency commit and root mechanism; a bounded certificate file
+size is not the size of the retained database or recovery working set.
