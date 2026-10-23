@@ -123,6 +123,49 @@ calculation are unchanged, but these runs explicitly set `Context.Excluded` and 
 Native acceptance aggregation rejects them. The flag is optional and does not enable runtime
 tracing.
 
+## Paired Alpha memory attribution (separate diagnostic only)
+
+Use `--memory-diagnostic /absolute/private-artifacts/memory` as a new filename prefix in a
+separately admitted run. Its parent directory must exist (the new run artifact directory itself is
+also supported). Both Badger and TreeDB use identical hooks: after warmup before timed baseline
+counters, and after the native post-workload CPU/HWM/disk/store/Prometheus metrics have been
+captured, before schema/posting validation or restart. It refuses combination with CPU, endpoint,
+operation or storage diagnostics so other waits cannot move these boundaries.
+
+Each boundary writes seven immutable raw artifacts: Alpha `/proc/PID/status`,
+`/proc/PID/smaps_rollup` and `/debug/vars`, followed by `/debug/pprof/heap?gc=1`, then those same
+three raw-state sources again. The GC-assisted heap profile gives a current retained Go heap sample;
+the manifest records whether that request was attempted. Pre-GC raw state is preserved before the
+request, and post-GC raw state also includes serving/serializing the profile. Each schema-v1
+manifest binds the actual Alpha PID, run/backend/durability, server hash, named boundary, capture
+envelope, completion/error, and each raw artifact's source, timestamps, path, byte count and
+SHA-256. A failed capture preserves the completed raw artifacts and an incomplete/error manifest and
+refuses a successful native result. Existing destinations, cluster-state paths and resolved aliases
+into cluster state are refused using the maintained sidecar path guards. Heap artifact paths are
+forwarded in `Context.Profiles` for ordinary `go tool pprof` inspection.
+
+For a within-run retained-heap delta, using that exact run's prefix and binary:
+
+```sh
+go tool pprof -top -sample_index=inuse_space \
+  -base /absolute/private-artifacts/memory.after_warmup_before_counters.heap.gc1.pprof \
+  /absolute/private-artifacts/memory.after_native_metrics_before_validation.heap.gc1.pprof
+```
+
+This subtraction compares two GC-assisted live-heap samples; it is not allocation bytes/op or a
+direct decomposition of the kernel RSS/HWM difference between backends.
+
+The first observation is outside the timed CPU baseline but deliberately changes the process's
+GC/heap state before workload execution. It can itself raise the later kernel `VmHWM`; the second
+GC/profile request runs only after native metrics were captured. Every such run is explicitly
+excluded from performance acceptance. Do not substitute its HWM, throughput or GC count for the
+uninstrumented A/B rows. `/debug/vars` and heap profile serialization allocate and perturb state;
+these sequential observations are not atomic snapshots. Forced GC does not promise immediate return
+of idle memory to the OS or clearing kernel HWM. Go heap retention is distinct from cumulative
+allocation churn, off-heap allocator memory, file mappings and RSS. Compare raw runtime state with
+`smaps_rollup` before attributing the original RSS difference. This diagnostic neither establishes
+sustained memory equilibrium nor qualifies resource/performance acceptance.
+
 ## Native-boundary storage attribution (separate diagnostic only)
 
 Use `--storage-diagnostic /new/path/storage.json` on a separately admitted run to attribute the

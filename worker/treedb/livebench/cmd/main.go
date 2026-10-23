@@ -34,6 +34,7 @@ import (
 type options struct {
 	survival, treeDBPolicy, treeDBMemtable                                                                         string
 	dgraphBin, artifactDir, backend, class, cpuProfile, endpointDiagnostic, operationDiagnostic, storageDiagnostic string
+	memoryDiagnostic                                                                                               string
 	repeat, dataset, concurrency, warmup, timed, zeroOffset, alphaOffset                                           int
 	profileSeconds                                                                                                 int
 	seed                                                                                                           int64
@@ -72,6 +73,7 @@ func main() {
 	flag.StringVar(&o.endpointDiagnostic, "endpoint-diagnostic", "", "new JSON sidecar for separate diagnostic-run posting endpoints; diagnostic overhead only")
 	flag.StringVar(&o.operationDiagnostic, "operation-diagnostic", "", "new operation/server-phase JSON sidecar; diagnostic overhead excluded from acceptance")
 	flag.StringVar(&o.storageDiagnostic, "storage-diagnostic", "", "new same-walk posting-file JSON sidecar; diagnostic overhead excluded from acceptance")
+	flag.StringVar(&o.memoryDiagnostic, "memory-diagnostic", "", "new artifact filename prefix for paired Alpha raw memory/forced-GC heap observations; excluded from acceptance")
 	flag.Float64Var(&o.maxLoad, "max-load1", float64(runtime.NumCPU())*.75, "exclude a run if host load1 exceeds this")
 	flag.Parse()
 	if err := run(o); err != nil {
@@ -100,6 +102,9 @@ func run(o options) (err error) {
 		return err
 	}
 	if err := validateStorageDiagnosticOption(o); err != nil {
+		return err
+	}
+	if err := validateMemoryDiagnosticOption(o); err != nil {
 		return err
 	}
 	if _, err := os.Stat(o.artifactDir); !os.IsNotExist(err) {
@@ -166,6 +171,13 @@ func run(o options) (err error) {
 		return fmt.Errorf("warmup: %w", err)
 	}
 	r.SetupFinished = time.Now().UTC()
+	if o.memoryDiagnostic != "" {
+		profiles, memoryErr := captureMemoryDiagnostic(o.memoryDiagnostic, memoryDiagnosticBoundaries[0], filepath.Join(runDir, "p"), httpBase, alpha.cmd.Process.Pid, r)
+		r.Context.Profiles = append(r.Context.Profiles, profiles...)
+		if memoryErr != nil {
+			return fmt.Errorf("after warmup memory diagnostic: %w", memoryErr)
+		}
+	}
 	var diagnostic *operationDiagnostic
 	var beforeStore, beforeProm, afterStore, afterProm *operationRequest
 	if o.operationDiagnostic != "" {
@@ -264,6 +276,13 @@ func run(o options) (err error) {
 		return fmt.Errorf("collect posting-store status: %w", err)
 	}
 	r.Metrics = metrics(o.backend, config.TreeDBPolicy, cpuAfter-cpuBefore, hwm, diskLogical, diskAllocated, promBefore, promAfter, storeBefore, storeAfter)
+	if o.memoryDiagnostic != "" {
+		profiles, memoryErr := captureMemoryDiagnostic(o.memoryDiagnostic, memoryDiagnosticBoundaries[1], filepath.Join(runDir, "p"), httpBase, alpha.cmd.Process.Pid, r)
+		r.Context.Profiles = append(r.Context.Profiles, profiles...)
+		if memoryErr != nil {
+			return fmt.Errorf("after native metrics memory diagnostic: %w", memoryErr)
+		}
+	}
 	if diagnostic != nil {
 		diagnosticWriteAttempted = true
 		if err := writeOperationDiagnostic(o.operationDiagnostic, diagnostic, filepath.Join(runDir, "p")); err != nil {
@@ -1560,6 +1579,9 @@ func finishOperation(row *operationRow, elapsed time.Duration, err error) {
 
 // Mark all diagnostics at run setup; CPU profiling alone keeps its existing behavior.
 func markDiagnostics(r *livebench.Result, o options) {
+	if o.memoryDiagnostic != "" {
+		r.Context.Contaminants = append(r.Context.Contaminants, memoryDiagnosticReason)
+	}
 	if o.storageDiagnostic != "" {
 		r.Context.Contaminants = append(r.Context.Contaminants, storageDiagnosticReason)
 	}
