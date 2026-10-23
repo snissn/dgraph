@@ -256,6 +256,11 @@ changes recovery owner; its relaxed arm keeps the normal relaxed posting WAL and
 unchanged. An older server lacking the candidate selector fails before measurement. Each repeat of a
 cell must use the same policy and requested memtable. Defaults do not enable the candidate.
 
+The Raft-owned profile has no posting-store command-WAL group collector. Its five group metrics are
+explicitly unavailable with that reason; they are not reported as zero physical syncs. Persistent
+value-log counters remain required. Logical write bytes are unavailable if their existing
+command-WAL counter is absent; client payload bytes are not substituted for storage bytes.
+
 A schema-v5 row is a source/runtime-bound benchmark result, not a durability certificate. The
 existing restart timer ends at Alpha health after a **clean** Alpha restart; Zero remains running.
 Runtime observers execute outside that timer and the workload timer. Immediate-ACK SIGKILL,

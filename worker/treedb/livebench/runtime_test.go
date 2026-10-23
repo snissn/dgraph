@@ -130,6 +130,28 @@ func TestCheckpointPolicyRequiresFilesystemAndCOWBeforeAcceptance(t *testing.T) 
 	if err := r.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	for _, name := range requiredTreeDBMetrics {
+		if strings.HasPrefix(name, "treedb_group_commit_") {
+			r.Metrics[name] = Metric{Available: false, Unit: "count", Source: "TreeDB /debug/store", Reason: RaftCheckpointNoCommandWAL}
+		}
+	}
+	if err := r.Validate(); err != nil {
+		t.Fatalf("explicit posting-WAL absence for checkpoint profile rejected: %v", err)
+	}
+	required := r.Metrics["treedb_value_log_file_syncs"]
+	r.Metrics["treedb_value_log_file_syncs"] = Metric{Available: false, Unit: "count", Source: "TreeDB /debug/store", Reason: RaftCheckpointNoCommandWAL}
+	if err := r.Validate(); err == nil {
+		t.Fatal("unavailable persistent value-log syncs accepted as posting WAL")
+	}
+	r.Metrics["treedb_value_log_file_syncs"] = required
+	group := r.Metrics["treedb_group_commit_commits"]
+	group.Reason = "debug sample failed"
+	r.Metrics["treedb_group_commit_commits"] = group
+	if err := r.Validate(); err == nil {
+		t.Fatal("arbitrary missing group counter accepted for checkpoint profile")
+	}
+	group.Reason = RaftCheckpointNoCommandWAL
+	r.Metrics["treedb_group_commit_commits"] = group
 	for _, mode := range []string{"process", ""} {
 		bad := r
 		bad.Config.SurvivalMode = mode

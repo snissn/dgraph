@@ -262,7 +262,7 @@ func run(o options) (err error) {
 	if err != nil {
 		return fmt.Errorf("collect posting-store status: %w", err)
 	}
-	r.Metrics = metrics(o.backend, cpuAfter-cpuBefore, hwm, diskLogical, diskAllocated, promBefore, promAfter, storeBefore, storeAfter)
+	r.Metrics = metrics(o.backend, config.TreeDBPolicy, cpuAfter-cpuBefore, hwm, diskLogical, diskAllocated, promBefore, promAfter, storeBefore, storeAfter)
 	if diagnostic != nil {
 		diagnosticWriteAttempted = true
 		if err := writeOperationDiagnostic(o.operationDiagnostic, diagnostic, filepath.Join(runDir, "p")); err != nil {
@@ -972,17 +972,18 @@ func delta(after, before map[string]float64, key string) (float64, bool) {
 	return a - b, aok && bok
 }
 
-func metrics(backend string, cpu, hwm, diskLogical, diskAllocated float64, pb, pa, sb, sa map[string]float64) map[string]livebench.Metric {
+func metrics(backend, policy string, cpu, hwm, diskLogical, diskAllocated float64, pb, pa, sb, sa map[string]float64) map[string]livebench.Metric {
 	m := map[string]livebench.Metric{
 		"cpu_seconds": {Available: true, Value: cpu, Unit: "seconds", Source: "/proc alpha utime+stime"}, "rss_peak_bytes": {Available: true, Value: hwm, Unit: "bytes", Source: "/proc alpha VmHWM"}, "disk_logical_bytes": {Available: true, Value: diskLogical, Unit: "bytes", Source: "posting directory walk"}, "disk_allocated_bytes": {Available: true, Value: diskAllocated, Unit: "bytes", Source: "posting directory stat blocks"},
 		"recovery_seconds": {Available: false, Unit: "seconds", Source: "alpha restart", Reason: "populated after restart"},
 	}
 	writeBytes, writeAvail := delta(pa, pb, "badger_write_bytes_user")
 	writeSource := "Badger Prometheus badger_write_bytes_user"
-	writeReason := ""
+	writeReason := "logical user-byte counter unavailable for selected backend"
 	if backend == "treedb" {
 		writeBytes, writeAvail = delta(sa, sb, "treedb.command_wal.public_batch.set.bytes_total")
 		writeSource = "TreeDB /debug/store public batch set bytes"
+		writeReason = "TreeDB public-batch logical-byte counter unavailable"
 		pointAppends, pointAppendOK := delta(sa, sb, "treedb.command_wal.append.point.count_total")
 		switch {
 		case !pointAppendOK:
@@ -993,7 +994,7 @@ func metrics(backend string, cpu, hwm, diskLogical, diskAllocated float64, pb, p
 			writeReason = "TreeDB direct-point appends bypass the public-batch logical-byte counter"
 		}
 	}
-	m["write_bytes"] = livebench.Metric{Available: writeAvail, Value: writeBytes, Unit: "bytes", Source: writeSource, Reason: writeReason}
+	m["write_bytes"] = availability(writeBytes, writeAvail, "bytes", writeSource, writeReason)
 	physical := 0.0
 	physicalOK := backend == "badger"
 	for _, name := range []string{"badger_write_bytes_l0", "badger_write_bytes_vlog", "badger_write_bytes_compaction"} {
@@ -1026,7 +1027,7 @@ func metrics(backend string, cpu, hwm, diskLogical, diskAllocated float64, pb, p
 	m["gc_cycles"] = availability(gc, gcOK, "count", gcSource, "counter unavailable")
 	m["flushes"] = availability(flush, flushOK, "count", flushSource, flushReason)
 	m["checkpoints"] = availability(check, checkOK, "count", checkSource, "counter unavailable for selected backend")
-	addTreeDBDiagnostics(m, backend, sb, sa)
+	addTreeDBDiagnostics(m, backend, policy, sb, sa)
 	return m
 }
 
@@ -1055,11 +1056,15 @@ var treeDBDiagnostics = []treeDBDiagnostic{
 	{metric: "treedb_leaf_log_segment_rotations", stat: "treedb.cache.leaf_log_lanes.segment_rotations_total"},
 }
 
-func addTreeDBDiagnostics(out map[string]livebench.Metric, backend string, before, after map[string]float64) {
+func addTreeDBDiagnostics(out map[string]livebench.Metric, backend, policy string, before, after map[string]float64) {
 	for _, diagnostic := range treeDBDiagnostics {
 		source := "TreeDB /debug/store timed-phase delta: " + diagnostic.stat
 		if backend != "treedb" {
 			out[diagnostic.metric] = availability(0, false, "count", source, "TreeDB-only diagnostic")
+			continue
+		}
+		if policy == "raft_checkpoint" && strings.HasPrefix(diagnostic.metric, "treedb_group_commit_") {
+			out[diagnostic.metric] = availability(0, false, "count", source, livebench.RaftCheckpointNoCommandWAL)
 			continue
 		}
 		value, ok := delta(after, before, diagnostic.stat)

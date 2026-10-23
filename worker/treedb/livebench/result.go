@@ -23,6 +23,10 @@ const (
 	SchemaVersion       = 5
 
 	pointAppendCoverageMetric = "treedb_command_wal_append_point_calls"
+
+	// RaftCheckpointNoCommandWAL explains absent posting-WAL grouping metrics.
+	// Raft durability is measured separately; unavailable does not mean zero syncs.
+	RaftCheckpointNoCommandWAL = "raft_checkpoint disables the posting-store command WAL; durability authority is Raft"
 )
 
 type Config struct {
@@ -201,8 +205,10 @@ func (r Result) Validate() error {
 	for _, name := range requiredTreeDBMetrics {
 		m, ok := r.Metrics[name]
 		legacyOptional := r.SchemaVersion == legacySchemaVersion && name == pointAppendCoverageMetric
+		disabledCommandWAL := r.SchemaVersion == SchemaVersion && r.Config.TreeDBPolicy == "raft_checkpoint" &&
+			strings.HasPrefix(name, "treedb_group_commit_") && ok && !m.Available && m.Reason == RaftCheckpointNoCommandWAL
 		if r.Config.Backend == "treedb" && (!ok || !m.Available) {
-			if !legacyOptional {
+			if !legacyOptional && !disabledCommandWAL {
 				errs = append(errs, fmt.Errorf("TreeDB diagnostic %q must be available", name))
 			}
 		}
