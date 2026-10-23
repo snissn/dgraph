@@ -205,7 +205,12 @@ func (n *node) receiveRaftCheckpoint(ctx context.Context, snapshot raftpb.Snapsh
 	if err != nil {
 		return err
 	}
-	return n.reloadRaftCheckpointState(ctx)
+	if err := n.reloadRaftCheckpointState(ctx); err != nil {
+		return err
+	}
+	glog.Infof("Native checkpoint installed: index=%d source=%d receiver=%d pending=%d",
+		snapshot.Metadata.Index, snap.GetContext().GetId(), n.Id, posting.Oracle().NumPendingTxns())
+	return nil
 }
 
 func (n *node) reloadRaftCheckpointState(ctx context.Context) error {

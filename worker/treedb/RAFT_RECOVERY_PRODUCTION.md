@@ -61,18 +61,18 @@ continuous live traffic and unavailable-Zero behavior remain separate operationa
 
 ## Remaining consumer completion sequence
 
-| Obligation                    | Existing path and required proof                                                                                                                                     | Status                                                                                                               |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Immediate acknowledged suffix | CommitNow response, abrupt Alpha and Zero termination before read/drain, restart and verify all acknowledged transaction decisions                                   | Initial-root server proof green; nonzero cut proof open                                                              |
-| Pending-state progress        | Canonical overlay certifies unresolved state; retained debt admission pauses mutations until a cut; ordered decisions bypass both pending/debt limits                | Canonical pending cut/reopen/debt-release proof green; continuous live load open                                     |
-| Fresh schema/index/type       | Existing serial schema writer and normal indexed posting path; certify, recover old cut, replay, query indexes and duplicates                                        | Fresh basic schema and indexed pending commit/abort replay proof green                                               |
-| Existing schema rebuild       | Scalar tokenizer rebuild uses synchronous existing aggregation with logical tombstones; captured schema/root and old-cut replay agree                                | Scalar tokenizer proof green; other conversions guarded                                                              |
-| Drop/namespace/restore/import | Each operation needs ordered input closure, pending disposition, schema/cache invalidation and a root cut; external files require digest-bound retained authority    | Guarded; protocol open                                                                                               |
-| Peer snapshot/rejoin          | Export a certified root and dependencies at a Raft snapshot; validate transfer; atomically install with receiver identity and frontiers before retention/read health | Adapter/WAL/startup + actual native RPC/Raft retry proofs green; multi-process activation guarded                    |
-| Maintenance                   | Rollup, MVCC pruning, vlog GC/rewrite and compaction must respect current/previous certified roots and active readers through every crash cut                        | Physical GC/compaction and ordered S/local P baseline+prune green; local runner active, operational S publisher open |
-| Operational routing           | Backup/export/admin and shutdown must use capability-aware store paths; no `nil` Badger dereference or bypass of owner lifecycle                                     | Existing fail-closed guards; full production routes open                                                             |
-| Retry identity/bounds         | Canonical StartTs/content binding; ordered semantic expiry and bounded metadata admission; qualify long-load limits                                                  | Focused replay and rejection proof green                                                                             |
-| Allocation and runtime        | Existing bounded mutation arena reused; capture public admission/apply/allocation profile only after correctness and root runtime grant                              | Open                                                                                                                 |
+| Obligation                    | Existing path and required proof                                                                                                                                     | Status                                                                                                                 |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Immediate acknowledged suffix | CommitNow response, abrupt Alpha and Zero termination before read/drain, restart and verify all acknowledged transaction decisions                                   | Initial-root server proof green; nonzero cut proof open                                                                |
+| Pending-state progress        | Canonical overlay certifies unresolved state; retained debt admission pauses mutations until a cut; ordered decisions bypass both pending/debt limits                | Canonical pending cut/reopen/debt-release proof green; continuous live load open                                       |
+| Fresh schema/index/type       | Existing serial schema writer and normal indexed posting path; certify, recover old cut, replay, query indexes and duplicates                                        | Fresh basic schema and indexed pending commit/abort replay proof green                                                 |
+| Existing schema rebuild       | Scalar tokenizer rebuild uses synchronous existing aggregation with logical tombstones; captured schema/root and old-cut replay agree                                | Scalar tokenizer proof green; other conversions guarded                                                                |
+| Drop/namespace/restore/import | Each operation needs ordered input closure, pending disposition, schema/cache invalidation and a root cut; external files require digest-bound retained authority    | Guarded; protocol open                                                                                                 |
+| Peer snapshot/rejoin          | Export a certified root and dependencies at a Raft snapshot; validate transfer; atomically install with receiver identity and frontiers before retention/read health | Native RPC, startup crash cuts, actual three-voter join/rejoin and immediate-ACK process crash green; learners guarded |
+| Maintenance                   | Rollup, MVCC pruning, vlog GC/rewrite and compaction must respect current/previous certified roots and active readers through every crash cut                        | Physical GC/compaction and ordered S/local P baseline+prune green; authenticated explicit S publisher active           |
+| Operational routing           | Backup/export/admin and shutdown must use capability-aware store paths; no `nil` Badger dereference or bypass of owner lifecycle                                     | Existing fail-closed guards; full production routes open                                                               |
+| Retry identity/bounds         | Canonical StartTs/content binding; ordered semantic expiry and bounded metadata admission; qualify long-load limits                                                  | Focused replay and rejection proof green                                                                               |
+| Allocation and runtime        | Existing bounded mutation arena reused; capture public admission/apply/allocation profile only after correctness and root runtime grant                              | Open                                                                                                                   |
 
 Peer installation uses the external owner's explicit generation/digest-bound export and authorized
 install APIs. The source certificate has a different Raft ID and WAL-directory owner identity.
@@ -115,16 +115,18 @@ value/schema, dedup, Oracle, captured ConfState and election state. Missing/corr
 corrupt intent and wrong WAL identity refuse before physical owner Open; an owner-namespace canary
 and marker remain untouched. The archive lives outside owner namespaces until semantic and WAL
 reconciliation completes. Owner internal publication crash cuts are covered by Gomap's transfer
-suite. Live Ready/RPC snapshot acceptance and membership scheduling remain guarded until their own
-proofs pass.
+suite. Live Ready/RPC and voter membership scheduling are exercised by the native peer proof below.
 
 The checksummed version-1 accepted intent is limited to 4 MiB, receiver application metadata to 1
 MiB and source certificate to 2 MiB. A single archive is capped at 8 GiB. Acceptance syncs dirty WAL
 files, directory and metadata, then archive and directory, then atomic intent and directory; the
 owner cannot publish CURRENT earlier. Completion syncs exact snapshot/HardState before WAL reset,
 then syncs reset before deleting the intent. Intent deletion is synced before archive deletion,
-leaving at worst an unreferenced archive after a cleanup crash. Orphan cleanup and total transfer
-staging limits remain operational obligations before peer support is enabled.
+leaving at worst an unreferenced archive after a cleanup crash. Startup validates accepted authority
+before reclaiming only owned unaccepted `snapshot-install-*.tar` files and syncing the directory.
+Accepted archives survive cleanup; corrupt/missing accepted input fails before any cleanup.
+Unexpected nonregular staging objects refuse startup. One serialized Ready receiver stages at most
+one bounded archive per process, and restart reclaims interrupted, unaccepted downloads.
 
 The sibling Gomap implementation now uses pinned retained roots on an independent API-only branch
 based on ordinary main, without the separate captured-WAL engine. The prototype document's
@@ -144,8 +146,10 @@ Incoming source metadata cannot regress the receiver's already drained semantic 
 ConfChange and empty entries share the existing ordered semantic apply channel. A membership change
 forces certification including canonical pending state; its captured ConfState is retained in
 outgoing snapshot metadata. Forwarded snapshots update transport source context without substituting
-live membership. These controls are implemented while startup/membership capability guards remain: a
-live multi-process join/rejoin campaign is still required.
+live membership. Ordinary voter membership is enabled. Learner startup remains guarded pending its
+own lifecycle qualification. Every external-recovery startup proposes an ordered empty Delta and
+waits for its applied prefix before publishing health. A fresh peer's local Commit=0 is insufficient
+evidence of catch-up. Snapshot completion cannot publish initial health before this startup barrier.
 
 A stale source certificate is a preparation failure, not permission to Advance an unapplied Ready.
 The receiver first persists only current term/vote while retaining its old durable
@@ -200,7 +204,7 @@ Focused tests cover two successive split baselines against an unpruned control, 
 callback/cancellation failures, stale capability handles, task admission before cache/Oracle,
 old-root reopen after uncertified mutation, ordered-floor replay, content collisions, stale retries
 after signature retirement, and normal commit/reopen above a certified physical floor. The
-multi-process join/rejoin and continuous-pending operational gates remain separate.
+continuous-pending operational and full lifecycle gates remain separate.
 
 ## Canonical pending checkpoints
 
@@ -235,9 +239,8 @@ Focused coverage includes indexed pending commit and abort after checkpoint/reop
 prewrite WAL pruned, real full-count capacity/refusal and decision release, corruption/accounting
 refusal, pending-aware physical baselines, and pending state through native RPC/install crash cuts.
 See [RAFT_PENDING_STATE.md](RAFT_PENDING_STATE.md) for canonical format and charge details. These
-focused proofs do not replace immediate-ACK subprocess, continuous-load, full schema/admin, or real
-multi-process join/rejoin qualification. Replicated S still needs an authenticated operational
-publisher; no automatic local clock/frontier expiry has been introduced.
+focused proofs do not replace continuous-load or full schema/admin qualification. The authenticated
+publisher below selects S explicitly; no automatic local clock/frontier expiry has been introduced.
 
 ## Operational history retirement
 
@@ -275,3 +278,24 @@ missing/wrong credentials, too-high and regressing floors, delayed eligibility, 
 response followed by adjacent Alpha+Zero SIGKILL, nonzero certificate recovery, stale read refusal
 and an admissible fresh exact-index query. Its failed attempts remain in diagnostic artifacts. This
 is process-crash correctness evidence, not a power-loss or performance qualification.
+
+## Actual voter lifecycle diagnostic
+
+`raftproduction/verify_native_peers.py` launches a filesystem-durable Zero with replication factor
+three and three filesystem-durable Alphas. It creates an indexed predicate and unresolved normal
+transaction, forces an explicit S certificate, then joins voters two and three. Each join must log a
+native checkpoint containing one pending transaction before its startup replay/health barrier. The
+client commits the imported transaction through voter three and verifies indexed reads at all peers.
+It kills voter two, advances committed data and S on the quorum, restarts voter two, and requires a
+new native install before verifying the newer value. Finally it sends SIGKILL to all Alphas and Zero
+immediately after a new CommitNow ACK, restarts all four, and verifies every indexed value at every
+peer. HTTP calls between ACK and the adjacent kill syscalls are excluded.
+
+The first development run, `artifacts/dgraph/native-peers-server-01`, passed: receiver two installed
+cut 16/pending 1, receiver three cut 20/pending 1, and receiver two rejoined at cut 34/pending 0.
+The imported StartTs 5 committed at 13; the immediately killed ACK used StartTs 22/CommitTs 23. Its
+binary SHA256 is `2e5bbec221a78b24e627acfbfc1a69b9c88299fde90d2c463b803b36ddb5df0e`. That binary
+includes the concurrently developing schema lane and is a source-working-tree diagnostic, not final
+exact-head qualification. Each attempt retains complete commands, result and server logs. SIGKILL
+preserves page cache; this proof makes no power-loss, timing, learner, or full production-tier
+claim.

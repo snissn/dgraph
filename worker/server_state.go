@@ -204,6 +204,9 @@ func (s *ServerState) openPostingStore() error {
 			if preflightErr != nil {
 				return preflightErr
 			}
+			if err := cleanupRaftSnapshotStaging(intent); err != nil {
+				return err
+			}
 			s.TreeDBStore, err = posting.OpenRaftTreeDBStore(treeOpts, identity)
 			if err == nil && intent != nil {
 				err = s.reconcileRaftSnapshotOwner(context.Background(), intent)

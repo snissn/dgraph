@@ -260,8 +260,8 @@ func (n *node) recoverRaftCheckpoint() error {
 	if !raftCheckpointEnabled() {
 		return nil
 	}
-	if _, hasPeer := groups().MyPeer(); hasPeer || n.RaftContext.IsLearner {
-		return fmt.Errorf("raft_checkpoint prototype requires one Alpha; snapshot transfer is not implemented")
+	if n.RaftContext.IsLearner {
+		return fmt.Errorf("external posting recovery learner activation requires its own lifecycle qualification")
 	}
 	return n.recoverRaftCheckpointState()
 }

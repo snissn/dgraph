@@ -158,12 +158,24 @@ func StartRaftNodes(walStore *raftwal.DiskStorage, bindall bool) {
 	glog.Infof("Upserted Schema and Types: OK")
 
 	if raftCheckpointEnabled() {
+		// A fresh peer has local Commit=0 even when the leader already has
+		// application data. An ordered barrier catches up its complete prefix
+		// (including native snapshot installation) before any read health.
+		barrierCtx, cancel := context.WithTimeout(gr.Ctx(), 2*time.Minute)
+		err := gr.Node.proposeAndWait(barrierCtx, &pb.Proposal{Delta: &pb.OracleDelta{}})
+		cancel()
+		x.Checkf(err, "external recovery startup barrier failed")
 		hs, err := walStore.HardState()
 		x.Check(err)
 		x.Check(gr.Node.Applied.WaitForMark(gr.Ctx(), hs.Commit))
 		glog.Infof("TreeDB raft_checkpoint committed replay completed through %d before health", hs.Commit)
+		gr.Node.raftSemanticMu.Lock()
+		atomic.StoreUint32(&gr.Node.raftStartupComplete, 1)
+		x.UpdateHealthStatus(true)
+		gr.Node.raftSemanticMu.Unlock()
+	} else {
+		x.UpdateHealthStatus(true)
 	}
-	x.UpdateHealthStatus(true)
 	glog.Infof("Server is ready: OK")
 }
 

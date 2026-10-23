@@ -38,6 +38,25 @@ func snapshotInstallOptions(dir string) Options {
 		PostingStoreDurability: PostingStoreDurabilityRaftCheckpoint, PostingStoreEvents: true}
 }
 
+func TestRaftSnapshotStartupCleansOnlyUnacceptedStaging(t *testing.T) {
+	old := Config
+	t.Cleanup(func() { Config = old })
+	Config.WALDir = t.TempDir()
+	for _, name := range []string{"snapshot-install-orphan.tar", "snapshot-install-accepted.tar", "unrelated.tar"} {
+		require.NoError(t, os.WriteFile(filepath.Join(Config.WALDir, name), []byte(name), 0600))
+	}
+	intent := &raftwal.AcceptedSnapshotInstall{ArchiveName: "snapshot-install-accepted.tar"}
+	require.NoError(t, cleanupRaftSnapshotStaging(intent))
+	require.NoFileExists(t, filepath.Join(Config.WALDir, "snapshot-install-orphan.tar"))
+	require.FileExists(t, filepath.Join(Config.WALDir, intent.ArchiveName))
+	require.FileExists(t, filepath.Join(Config.WALDir, "unrelated.tar"))
+	require.NoError(t, cleanupRaftSnapshotStaging(nil))
+	require.NoFileExists(t, filepath.Join(Config.WALDir, intent.ArchiveName))
+	require.NoError(t, os.Symlink("unrelated.tar", filepath.Join(Config.WALDir, "snapshot-install-link.tar")))
+	require.ErrorContains(t, cleanupRaftSnapshotStaging(nil), "unexpected snapshot staging object")
+	require.FileExists(t, filepath.Join(Config.WALDir, "unrelated.tar"))
+}
+
 func TestRaftSnapshotStartupCrashHelper(t *testing.T) {
 	stage, dir := os.Getenv("DGRAPH_OWNER_INSTALL_CUT"), os.Getenv("DGRAPH_OWNER_INSTALL_DIR")
 	if stage == "" {
@@ -57,8 +76,14 @@ func TestRaftSnapshotStartupCrashHelper(t *testing.T) {
 		require.NoError(t, err)
 		var intent raftwal.AcceptedSnapshotInstall
 		require.NoError(t, json.Unmarshal(input, &intent))
+		// Model bytes arriving after startup. A pre-acceptance archive from a
+		// previous process is deliberately reclaimed by startup.
+		archivePath := filepath.Join(Config.WALDir, intent.ArchiveName)
+		incoming, err := os.ReadFile(archivePath)
+		require.NoError(t, err)
 		state := &ServerState{}
 		require.NoError(t, state.openPostingStore())
+		require.NoError(t, os.WriteFile(archivePath, incoming, 0600))
 		wal := raftwal.Init(Config.WALDir)
 		wal.RequireCheckpointCertificate()
 		archive, err := os.Open(filepath.Join(Config.WALDir, intent.ArchiveName))
@@ -245,6 +270,8 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 				require.NoError(t, err)
 				canary := filepath.Join(Config.PostingDir, "materialized-preflight-canary")
 				require.NoError(t, os.Mkdir(canary, 0700))
+				stagingCanary := filepath.Join(Config.WALDir, "snapshot-install-unaccepted-canary.tar")
+				require.NoError(t, os.WriteFile(stagingCanary, []byte("preserve before authority validation"), 0600))
 				switch stage {
 				case "corrupt_archive":
 					require.NoError(t, os.WriteFile(filepath.Join(Config.WALDir, name), []byte("corrupt"), 0600))
@@ -265,6 +292,7 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, before, after)
 				require.DirExists(t, canary, "rejected startup cannot clean an owner namespace")
+				require.FileExists(t, stagingCanary, "rejected preflight cannot clean staging")
 				require.NoFileExists(t, filepath.Join(Config.PostingDir, "CURRENT"))
 				state = nil
 				return
@@ -295,7 +323,7 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 			gr.Node = n
 			var applyDone chan struct{}
 			if nativeRetry {
-				require.NoError(t, os.Remove(filepath.Join(Config.WALDir, name)))
+				require.NoFileExists(t, filepath.Join(Config.WALDir, name), "startup reclaims unaccepted input")
 				require.NoError(t, n.recoverRaftCheckpoint())
 				n.SetRaft(raft.RestartNode(n.Cfg))
 				n.SetConfState(&raftpb.ConfState{})

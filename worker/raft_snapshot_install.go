@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/dgraph-io/dgraph/v25/raftwal"
@@ -21,6 +22,50 @@ import (
 )
 
 const raftCheckpointTransferFormat = "dgraph-treedb-checkpoint-v1"
+
+// cleanupRaftSnapshotStaging runs only during startup, after install authority
+// has passed preflight and before any download can start. Unaccepted downloads
+// cannot survive an abrupt process exit indefinitely. The accepted archive is
+// retained until the WAL install protocol has completed.
+func cleanupRaftSnapshotStaging(intent *raftwal.AcceptedSnapshotInstall) error {
+	entries, err := os.ReadDir(Config.WALDir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	changed := false
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "snapshot-install-") || !strings.HasSuffix(name, ".tar") ||
+			(intent != nil && name == intent.ArchiveName) {
+			continue
+		}
+		// Downloads are always regular files. Refuse unexpected objects instead
+		// of following a symlink or recursively deleting a directory.
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("unexpected snapshot staging object %q", name)
+		}
+		if err := os.Remove(filepath.Join(Config.WALDir, name)); err != nil {
+			return err
+		}
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	dir, err := os.Open(Config.WALDir)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
+}
 
 // preflightRaftSnapshotInstall precedes posting-owner Open and its physical
 // restore/cleanup. The complete accepted archive is rooted in the WAL namespace,

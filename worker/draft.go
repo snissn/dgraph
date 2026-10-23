@@ -68,6 +68,7 @@ type node struct {
 	raftCertifiedIndex  uint64
 	raftRecoveryBytes   uint64
 	raftSemanticIndex   uint64
+	raftStartupComplete uint32
 	raftConfStateDirty  bool
 	raftFloorDirty      bool
 	raftPostingFloor    uint64
@@ -311,9 +312,6 @@ func (n *node) applyConfChange(e raftpb.Entry) {
 		glog.Errorf("While unmarshalling confchange: %+v", err)
 	}
 
-	if raftCheckpointEnabled() && (cc.Type == raftpb.ConfChangeRemoveNode || cc.NodeID != n.Id) {
-		glog.Fatal("raft_checkpoint prototype refuses membership changes requiring snapshot transfer")
-	}
 	if cc.Type == raftpb.ConfChangeRemoveNode {
 		n.DeletePeer(cc.NodeID)
 	} else if len(cc.Context) > 0 {
@@ -1461,9 +1459,9 @@ func (n *node) Run() {
 					glog.Fatal("legacy snapshot receiver refuses external checkpoint format")
 				}
 				if rc.Id != n.Id && raftCheckpointEnabled() {
-					x.UpdateHealthStatus(false)
 					x.Check(n.Applied.WaitForMark(n.ctx, n.Applied.LastIndex()))
 					n.raftSemanticMu.Lock()
+					x.UpdateHealthStatus(false)
 					x.Check(n.persistSnapshotElection(rd.HardState))
 					if err := n.retrieveRaftCheckpoint(rd.Snapshot, rd.HardState); err != nil {
 						glog.Errorf("Native snapshot preparation failed: %v; recovering prior authority", err)
@@ -1651,7 +1649,9 @@ func (n *node) Run() {
 			n.Raft().Advance()
 			if resumeSnapshotHealth {
 				x.Check(n.Applied.WaitForMark(n.ctx, n.Applied.LastIndex()))
-				x.UpdateHealthStatus(true)
+				if atomic.LoadUint32(&n.raftStartupComplete) != 0 {
+					x.UpdateHealthStatus(true)
+				}
 				resumeSnapshotHealth = false
 			}
 			timer.Record("advance")
