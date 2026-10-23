@@ -858,9 +858,9 @@ func (l *List) addMutation(ctx context.Context, txn *Txn, t *pb.DirectedEdge) er
 
 func GetConflictKey(pk x.ParsedKey, key []byte, t *pb.DirectedEdge) uint64 {
 	su, _ := schema.State().Get(context.Background(), t.Attr)
-	return getConflictKeyForSchema(pk, key, t, su)
+	return getConflictKeyForSchema(pk, key, t, &su)
 }
-func getConflictKeyForSchema(pk x.ParsedKey, key []byte, t *pb.DirectedEdge, su pb.SchemaUpdate) uint64 {
+func getConflictKeyForSchema(pk x.ParsedKey, key []byte, t *pb.DirectedEdge, su *pb.SchemaUpdate) uint64 {
 	getKey := func(key []byte, uid uint64) uint64 {
 		// Instead of creating a string first and then doing a fingerprint, let's do a fingerprint
 		// here to save memory allocations.
@@ -870,9 +870,9 @@ func getConflictKeyForSchema(pk x.ParsedKey, key []byte, t *pb.DirectedEdge, su 
 
 	var conflictKey uint64
 	switch {
-	case su.NoConflict:
+	case su.GetNoConflict():
 		break
-	case su.Upsert:
+	case su.GetUpsert():
 		// Consider checking to see if a email id is unique. A user adds:
 		// <uid> <email> "email@email.org", and there's a string equal tokenizer
 		// and upsert directive on the schema.
@@ -882,7 +882,7 @@ func getConflictKeyForSchema(pk x.ParsedKey, key []byte, t *pb.DirectedEdge, su 
 		// that two users don't set the same email id.
 		conflictKey = getKey(key, 0)
 
-	case pk.IsData() && su.List:
+	case pk.IsData() && su.GetList():
 		// Data keys, irrespective of whether they are UID or values, should be judged based on
 		// whether they are lists or not. For UID, t.ValueId = UID. For value, t.ValueId =
 		// fingerprint(value) or could be fingerprint(lang) or something else.

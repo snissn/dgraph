@@ -60,7 +60,7 @@ func (s *TreeDBStore) CheckRaftReadTimestamp(ts uint64) error {
 }
 func (s *TreeDBStore) checkRaftReadTimestampLocked(ts uint64) error {
 	if s.raftReadDraining || s.IsClosed() {
-		return fmt.Errorf("Raft posting reader admission paused")
+		return fmt.Errorf("raft posting reader admission paused")
 	}
 	if ts <= s.raftSemanticFloor {
 		return fmt.Errorf("read timestamp %d is at or below replicated posting floor %d", ts, s.raftSemanticFloor)
@@ -105,7 +105,7 @@ func (s *TreeDBStore) drainRaftRequests(ctx context.Context) (func(), error) {
 	s.raftReadMu.Lock()
 	if s.raftReadDraining {
 		s.raftReadMu.Unlock()
-		return nil, fmt.Errorf("Raft posting reader drain already active")
+		return nil, fmt.Errorf("raft posting reader drain already active")
 	}
 	s.raftReadDraining = true
 	for s.raftReadPins != 0 {

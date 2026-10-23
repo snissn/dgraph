@@ -86,10 +86,6 @@ func walkStoreLists(ctx context.Context, store Store, ts uint64, prefix []byte, 
 // Logical empty lists replace physical prefix deletion. Versions below ts stay
 // available to timestamped readers and retained checkpoint roots. The caller
 // owns the schema/apply barrier; this function never advances a discard floor.
-func dropStoreIndexPrefixes(ctx context.Context, ts uint64, prefixes [][]byte) (retErr error) {
-	return dropStoreIndexPrefixesForStore(ctx, postingStore, ts, prefixes)
-}
-
 func dropStoreIndexPrefixesForStore(ctx context.Context, store Store, ts uint64, prefixes [][]byte) (retErr error) {
 	if ts == 0 {
 		return nil

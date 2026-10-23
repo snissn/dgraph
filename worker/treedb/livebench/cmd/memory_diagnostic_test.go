@@ -98,7 +98,9 @@ func TestMemoryDiagnosticFailureRetainsPartialEnvelopeWithoutGCClaim(t *testing.
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux /proc observer")
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "unavailable", 503) }))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
 	defer server.Close()
 	dir := t.TempDir()
 	prefix, boundary := filepath.Join(dir, "memory"), memoryDiagnosticBoundaries[0]

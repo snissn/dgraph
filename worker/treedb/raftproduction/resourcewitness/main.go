@@ -97,7 +97,7 @@ func bindGomap(m *manifest, dep *debug.Module) error {
 	m.GomapVersion = dep.Version
 	if dep.Replace != nil {
 		if dep.Replace.Path == "" || (dep.Replace.Version != "" && dep.Replace.Version != "(devel)") {
-			return errors.New("Gomap replacement must name a local source directory")
+			return errors.New("gomap replacement must name a local source directory")
 		}
 		m.GomapReplacement = dep.Replace.Path
 		replacement := dep.Replace.Path

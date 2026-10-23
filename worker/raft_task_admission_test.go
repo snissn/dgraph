@@ -14,6 +14,7 @@ import (
 	"github.com/dgraph-io/dgraph/v25/conn"
 	"github.com/dgraph-io/dgraph/v25/posting"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
+	"github.com/dgraph-io/dgraph/v25/x"
 	td "github.com/snissn/gomap/TreeDB"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +56,7 @@ func TestRaftFutureOracleWaitDoesNotBlockMaintenanceAdmission(t *testing.T) {
 	waiting := &oracleWaitContext{Context: ctx, entered: make(chan struct{})}
 	done := make(chan error, 1)
 	go func() {
-		_, err := processTask(waiting, &pb.Query{ReadTs: posting.Oracle().MaxAssigned() + 100, Cache: UseTxnCache}, 1)
+		_, err := processTask(waiting, &pb.Query{Attr: x.NamespaceAttr(0, "future-wait"), ReadTs: posting.Oracle().MaxAssigned() + 100, Cache: UseTxnCache}, 1)
 		done <- err
 	}()
 	select {

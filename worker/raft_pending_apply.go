@@ -22,10 +22,11 @@ import (
 // Temporary staging/list-read memory remains subject to the ordinary execution
 // costs; the retained canonical pending state has the explicit charged bound.
 func (n *node) stageRaftMutation(ctx context.Context, p *pb.Proposal, inferred map[string]types.TypeID) error {
-	overrides := make(map[string]pb.SchemaUpdate)
+	overrides := make(map[string]*pb.SchemaUpdate)
 	for attr, typ := range inferred {
 		if _, ok := schema.State().Get(schema.GetWriteContext(ctx), attr); !ok {
-			overrides[attr] = inferredSchema(attr, typ, p.GetMutations().GetMetadata().GetPredHints()[attr])
+			su := inferredSchema(attr, typ, p.GetMutations().GetMetadata().GetPredHints()[attr])
+			overrides[attr] = &su
 		}
 	}
 	txn, err := posting.CloneRaftPendingTxn(p.Mutations.StartTs)
@@ -76,8 +77,7 @@ func (n *node) stageRaftMutation(ctx context.Context, p *pb.Proposal, inferred m
 	}
 	sort.Strings(attrs)
 	for _, attr := range attrs {
-		su := overrides[attr]
-		if err := writeSchema(&su, p.Mutations.StartTs); err != nil {
+		if err := writeSchema(overrides[attr], p.Mutations.StartTs); err != nil {
 			return err
 		}
 	}
@@ -88,8 +88,7 @@ func (n *node) stageRaftMutation(ctx context.Context, p *pb.Proposal, inferred m
 		return err
 	}
 	for _, attr := range attrs {
-		su := overrides[attr]
-		schema.State().Set(attr, &su)
+		schema.State().Set(attr, overrides[attr])
 	}
 	return nil
 }

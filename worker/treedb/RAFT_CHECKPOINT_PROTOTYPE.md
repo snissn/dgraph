@@ -15,7 +15,7 @@ durable commits and the existing durable selector retain their own durability co
 
 Start both Zero and Alpha with `--survive=filesystem`. Alpha requires:
 
-```
+```sh
 --posting-store='backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true;'
 ```
 
@@ -120,7 +120,7 @@ unqualified.
 
 Run with `GOWORK=off` and task-specific `TMPDIR` on `/mnt/fast4tb`:
 
-```
+```sh
 go test ./worker ./posting ./raftwal \
   -run 'TestRaftCheckpoint|TestCheckpointCertificate|TestServerStateTreeDB|TestTreeDBStore' \
   -count=1
