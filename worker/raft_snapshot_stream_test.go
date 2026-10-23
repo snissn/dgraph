@@ -47,7 +47,15 @@ func readCheckpointThroughRPC(t *testing.T, stale, fresh *pb.Snapshot) ([]byte, 
 	requestError := func(request *pb.Snapshot) error {
 		stream, err := client.StreamSnapshot(ctx)
 		require.NoError(t, err)
-		require.NoError(t, stream.Send(request))
+		// Capability guards may close the RPC before accepting the request.
+		// Recv carries the server's terminal status even when Send sees EOF.
+		if err := stream.Send(request); err != nil {
+			_, statusErr := stream.Recv()
+			if statusErr != nil {
+				return statusErr
+			}
+			return err
+		}
 		_, err = stream.Recv()
 		return err
 	}
@@ -55,7 +63,7 @@ func readCheckpointThroughRPC(t *testing.T, stale, fresh *pb.Snapshot) ([]byte, 
 		Context: fresh.Context}), "explicit full checkpoint transfer format")
 	mode := Config.PostingStoreDurability
 	Config.PostingStoreDurability = PostingStoreDurabilityDurable
-	require.ErrorContains(t, requestError(fresh), "legacy snapshot sender does not support transfer format")
+	require.ErrorContains(t, requestError(fresh), "operation requires the Badger operational posting-store backend: Raft snapshot send")
 	Config.PostingStoreDurability = mode
 	staleError := requestError(stale)
 	require.ErrorContains(t, staleError, "no longer the current certified cut")

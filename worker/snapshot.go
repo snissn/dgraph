@@ -255,6 +255,12 @@ func doStreamSnapshot(snap *pb.Snapshot, out pb.Worker_StreamSnapshotServer) err
 }
 
 func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) (err error) {
+	native := raftCheckpointEnabled()
+	if !native {
+		if _, err := requireBadgerPostingStore("Raft snapshot send"); err != nil {
+			return err
+		}
+	}
 	snap, err := stream.Recv()
 	if err != nil {
 		// If we don't even receive a request (here or if no StreamSnapshot is called), we can't
@@ -280,14 +286,11 @@ func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) (err 
 			}()
 		}
 	}
-	if raftCheckpointEnabled() {
+	if native {
 		return streamRaftCheckpoint(snap, stream)
 	}
 	if snap.TransferFormat != "" {
 		return errors.Errorf("legacy snapshot sender does not support transfer format %q", snap.TransferFormat)
-	}
-	if _, err := requireBadgerPostingStore("Raft snapshot send"); err != nil {
-		return err
 	}
 	if n == nil || n.Raft() == nil {
 		return conn.ErrNoNode
