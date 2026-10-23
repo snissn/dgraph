@@ -267,19 +267,11 @@ func ExpectedObserved(c Config) (string, string, error) {
 		return "badger", "syncwrites=" + badgerSync, nil
 	case "treedb":
 		selected := c.DurabilityClass
-		if c.TreeDBPolicy == "raft_checkpoint" {
-			if c.DurabilityClass != "durable" || c.SurvivalMode != "filesystem" || c.TreeDBMemtable != "cow_ordered" {
-				return "", "", errors.New("raft_checkpoint requires durable/filesystem/cow_ordered")
-			}
-			selected = "raft_checkpoint"
-		} else if c.TreeDBPolicy != "" && c.TreeDBPolicy != "store_wal" {
-			return "", "", fmt.Errorf("unknown TreeDB policy %q", c.TreeDBPolicy)
+		if c.TreeDBPolicy != "" && c.TreeDBPolicy != "store_wal" {
+			return "", "", fmt.Errorf("unsupported TreeDB policy %q", c.TreeDBPolicy)
 		}
 		if err := requireExactSelector(c.PostingStore, map[string]string{"backend": "treedb", "tier": "benchmark_minimal", "durability": selected, "events": "true"}); err != nil {
 			return "", "", fmt.Errorf("posting-store selector: %w", err)
-		}
-		if selected == "raft_checkpoint" {
-			return "treedb", "raft_checkpoint", nil
 		}
 		if c.DurabilityClass == "relaxed" {
 			return "treedb", "wal_on_relaxed_sync", nil

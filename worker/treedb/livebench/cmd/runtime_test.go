@@ -16,11 +16,11 @@ func TestRuntimeCaptureRefusesWrongResolvedConfigurationAndRoute(t *testing.T) {
 		name, config, profile, memtable string
 		fail                            bool
 	}{
-		{"valid", "x.WorkerConfig: {HardSync:true}", "raft_checkpoint", "cow_ordered", false},
-		{"wrong sync", "x.WorkerConfig: {HardSync:false}", "raft_checkpoint", "cow_ordered", true},
-		{"missing config", "flags survive=filesystem", "raft_checkpoint", "cow_ordered", true},
-		{"wrong profile", "x.WorkerConfig: {HardSync:true}", "wal_on_sync", "cow_ordered", true},
-		{"wrong memtable", "x.WorkerConfig: {HardSync:true}", "raft_checkpoint", "btree", true},
+		{"valid", "x.WorkerConfig: {HardSync:true}", "wal_on_sync", "cow_ordered", false},
+		{"wrong sync", "x.WorkerConfig: {HardSync:false}", "wal_on_sync", "cow_ordered", true},
+		{"missing config", "flags survive=filesystem", "wal_on_sync", "cow_ordered", true},
+		{"wrong profile", "x.WorkerConfig: {HardSync:true}", "wal_on_relaxed_sync", "cow_ordered", true},
+		{"wrong memtable", "x.WorkerConfig: {HardSync:true}", "wal_on_sync", "btree", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -39,7 +39,7 @@ func TestRuntimeCaptureRefusesWrongResolvedConfigurationAndRoute(t *testing.T) {
 				_, _ = w.Write([]byte("status=map[backend:treedb profile:" + tc.profile + "] stats=map[treedb.cache.memtable_mode:" + tc.memtable + "]"))
 			}))
 			defer server.Close()
-			o := options{artifactDir: dir, backend: "treedb", class: "durable", survival: "filesystem", treeDBPolicy: "raft_checkpoint", treeDBMemtable: "cow_ordered"}
+			o := options{artifactDir: dir, backend: "treedb", class: "durable", survival: "filesystem", treeDBMemtable: "cow_ordered"}
 			identities, err := captureRuntime(o, "startup", process("zero"), process("alpha"), server.URL)
 			if (err != nil) != tc.fail {
 				t.Fatalf("identities=%v err=%v", identities, err)
@@ -56,10 +56,10 @@ func TestRuntimeCaptureRefusesWrongResolvedConfigurationAndRoute(t *testing.T) {
 	}
 }
 
-func TestRuntimeOptionsRejectWeakCheckpointBeforeCreatingArtifacts(t *testing.T) {
+func TestRuntimeOptionsRejectUnknownSurvivalBeforeCreatingArtifacts(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "must-not-exist")
-	err := run(options{artifactDir: dir, survival: "process", treeDBPolicy: "raft_checkpoint", treeDBMemtable: "cow_ordered"})
-	if err == nil || !strings.Contains(err.Error(), "filesystem") {
+	err := run(options{artifactDir: dir, survival: "unknown", treeDBMemtable: "cow_ordered"})
+	if err == nil || !strings.Contains(err.Error(), "--survive") {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {

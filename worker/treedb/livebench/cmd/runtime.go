@@ -19,39 +19,20 @@ func normalizeRuntimeOptions(o *options) error {
 	if o.survival == "" {
 		o.survival = "process"
 	}
-	if o.treeDBPolicy == "" {
-		o.treeDBPolicy = "store_wal"
-	}
 	if o.survival != "process" && o.survival != "filesystem" {
 		return errors.New("--survive must be process or filesystem")
-	}
-	if o.treeDBPolicy != "store_wal" && o.treeDBPolicy != "raft_checkpoint" {
-		return errors.New("invalid --treedb-durable-policy")
-	}
-	if o.treeDBPolicy == "raft_checkpoint" && (o.survival != "filesystem" || o.treeDBMemtable != "cow_ordered") {
-		return errors.New("raft_checkpoint requires explicit filesystem survival and cow_ordered verification")
 	}
 	return nil
 }
 
-func runtimeSelectors(o options) (string, string) {
-	if o.backend == "treedb" && o.class == "durable" && o.treeDBPolicy == "raft_checkpoint" {
-		return "backend=treedb; tier=benchmark_minimal; durability=raft_checkpoint; events=true", "syncwrites=false"
-	}
-	return selectors(o.backend, o.class)
-}
-
 func runtimeConfig(o options) livebench.Config {
-	posting, badger := runtimeSelectors(o)
+	posting, badger := selectors(o.backend, o.class)
 	c := livebench.Config{SurvivalMode: o.survival, Backend: o.backend, DurabilityClass: o.class,
 		PostingStore: posting, Badger: badger, DatasetNodes: o.dataset, Concurrency: o.concurrency,
 		WarmupOps: o.warmup, TimedOps: o.timed, QueryMix: map[string]int{"point_read": 60, "one_hop_read": 20, "write": 20},
 		Topology: "single-zero-single-alpha", Seed: o.seed}
 	if o.backend == "treedb" {
 		c.TreeDBPolicy, c.TreeDBMemtable = "store_wal", o.treeDBMemtable
-		if o.class == "durable" {
-			c.TreeDBPolicy = o.treeDBPolicy
-		}
 	}
 	return c
 }

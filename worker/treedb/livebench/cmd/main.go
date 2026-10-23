@@ -32,7 +32,7 @@ import (
 )
 
 type options struct {
-	survival, treeDBPolicy, treeDBMemtable                                                                         string
+	survival, treeDBMemtable                                                                                       string
 	dgraphBin, artifactDir, backend, class, cpuProfile, endpointDiagnostic, operationDiagnostic, storageDiagnostic string
 	repeat, dataset, concurrency, warmup, timed, zeroOffset, alphaOffset                                           int
 	profileSeconds                                                                                                 int
@@ -57,7 +57,6 @@ func main() {
 	flag.StringVar(&o.backend, "backend", "", "badger or treedb")
 	flag.StringVar(&o.class, "durability", "", "relaxed or durable")
 	flag.StringVar(&o.survival, "survive", "process", "explicit Zero and Alpha survival: process or filesystem")
-	flag.StringVar(&o.treeDBPolicy, "treedb-durable-policy", "store_wal", "TreeDB durable arm recovery owner: store_wal or raft_checkpoint")
 	flag.StringVar(&o.treeDBMemtable, "require-treedb-memtable", "", "refuse startup/restart unless the observed TreeDB memtable matches")
 	flag.IntVar(&o.repeat, "repeat", 1, "one-based repeat number")
 	flag.IntVar(&o.dataset, "dataset-nodes", 500, "initial node count")
@@ -114,7 +113,7 @@ func run(o options) (err error) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	posting, badger := runtimeSelectors(o)
+	posting, badger := selectors(o.backend, o.class)
 	config := runtimeConfig(o)
 	r := livebench.Result{SchemaVersion: livebench.SchemaVersion, RunID: fmt.Sprintf("%s-%s-r%d", o.backend, o.class, o.repeat), Repeat: o.repeat, Config: config, LatencyMS: map[string]float64{}, Metrics: map[string]livebench.Metric{}}
 	r.Context, err = collectContext(o)

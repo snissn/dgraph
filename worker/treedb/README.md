@@ -249,12 +249,11 @@ establish filesystem or complete RPC power-loss durability. Report rendering add
 without editing the old artifacts.
 
 `REQUIRE_TREEDB_MEMTABLE=cow_ordered` refuses a TreeDB arm unless its actual startup and restart
-stats confirm COW. This checks the server binary's selection; it does not silently change that
-binary's memtable configuration. For the Raft-owned durable candidate, additionally set
-`TREEDB_DURABLE_POLICY=raft_checkpoint` and `SURVIVE=filesystem`. Only the TreeDB durable arm
-changes recovery owner; its relaxed arm keeps the normal relaxed posting WAL and Badger is
-unchanged. An older server lacking the candidate selector fails before measurement. Each repeat of a
-cell must use the same policy and requested memtable. Defaults do not enable the candidate.
+stats confirm COW. This checks the server binary's selection; it does not change its memtable. This
+harness supports the current store-WAL selectors. The Raft-owned recovery selector must land with
+its corresponding server implementation in #34; unsupported policy overrides fail before any
+measurement or artifact creation. Defaults remain process survival and existing posting-store
+selection.
 
 A schema-v5 row is a source/runtime-bound benchmark result, not a durability certificate. The
 existing restart timer ends at Alpha health after a **clean** Alpha restart; Zero remains running.

@@ -6,7 +6,7 @@ usage() {
 	printf '%s\n' 'usage: worker/treedb/run_durability_ab.sh [--smoke] --artifact-dir OUTSIDE_REPOSITORY_DIR' \
 		'Runs adapter microbenchmarks and the four-cell live durability matrix.' \
 		'Decision runs also collect separate relaxed/durable TreeDB CPU profiles.' \
-		'Environment overrides: SURVIVE TREEDB_DURABLE_POLICY REQUIRE_TREEDB_MEMTABLE REPEATS DATASET_NODES WARMUP_OPS TIMED_OPS CONCURRENCY COUNT BENCHTIME PROFILE_RELAXED_OPS PROFILE_DURABLE_OPS PROFILE_SECONDS.'
+		'Environment overrides: SURVIVE REQUIRE_TREEDB_MEMTABLE REPEATS DATASET_NODES WARMUP_OPS TIMED_OPS CONCURRENCY COUNT BENCHTIME PROFILE_RELAXED_OPS PROFILE_DURABLE_OPS PROFILE_SECONDS.'
 }
 
 smoke=0
@@ -55,15 +55,11 @@ required_memtable=${REQUIRE_TREEDB_MEMTABLE-}
 	echo 'SURVIVE must be process or filesystem' >&2
 	exit 2
 }
-[[ ${treedb_policy} == store_wal || ${treedb_policy} == raft_checkpoint ]] || {
-	echo 'invalid TREEDB_DURABLE_POLICY' >&2
+[[ ${treedb_policy} == store_wal ]] || {
+	echo 'this server integration supports only TREEDB_DURABLE_POLICY=store_wal' >&2
 	exit 2
 }
-if [[ ${treedb_policy} == raft_checkpoint && (${survive} != filesystem || ${required_memtable} != cow_ordered) ]]; then
-	echo 'raft_checkpoint requires SURVIVE=filesystem REQUIRE_TREEDB_MEMTABLE=cow_ordered' >&2
-	exit 2
-fi
-runtime_args=(--survive "${survive}" --treedb-durable-policy "${treedb_policy}" --require-treedb-memtable "${required_memtable}")
+runtime_args=(--survive "${survive}" --require-treedb-memtable "${required_memtable}")
 mkdir -p "${artifact_dir}/bin" "${artifact_dir}/microbench"
 
 repeats=${REPEATS:-3}
