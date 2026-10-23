@@ -159,8 +159,16 @@ func TestRaftPostingHistoryPruneCertifiedAndInterruptedReplay(t *testing.T) {
 	var before api.TxnContext
 	posting.Oracle().GetTxn(base+36).FillContext(&before, 1, false)
 	require.NotEmpty(t, before.Keys)
-	_, err = n.pruneRaftPostingHistory(context.Background(), base+20, 4)
-	require.NoError(t, err, "a newer pending transaction must not prevent physical progress")
+	// The explicit working-only capability remains a safe fallback contract:
+	// completing physical work alone never authorizes retention of its suffix.
+	require.NoError(t, n.validateRaftMaintenanceRecovery())
+	workingCap, err := current.TreeDBStore.BeginRaftPostingMaintenance(context.Background(), base+20)
+	require.NoError(t, err)
+	require.NoError(t, workingCap.MaterializeBaselines(context.Background()))
+	_, err = workingCap.AdvanceAndPrune(4)
+	require.NoError(t, err)
+	require.NoError(t, workingCap.FinishWorking())
+	workingCap.Close()
 	physical, err = current.TreeDBStore.DiscardFloor()
 	require.NoError(t, err)
 	require.Equal(t, base+20, physical)
@@ -186,6 +194,21 @@ func TestRaftPostingHistoryPruneCertifiedAndInterruptedReplay(t *testing.T) {
 	require.ElementsMatch(t, before.Preds, after.Preds)
 	_, err = n.pruneRaftPostingHistory(context.Background(), base+20, 4)
 	require.NoError(t, err)
+	pendingCert, ok := current.TreeDBStore.RecoveredRaftCheckpoint()
+	require.True(t, ok)
+	require.NoError(t, json.Unmarshal(pendingCert, &cert))
+	require.Equal(t, uint64(8), cert.Index)
+	require.Equal(t, uint64(1), cert.PendingTransactions)
+	require.Equal(t, base+20, cert.PhysicalFloor)
+	n = reopen()
+	physical, err = current.TreeDBStore.DiscardFloor()
+	require.NoError(t, err)
+	require.Equal(t, base+20, physical)
+	require.Equal(t, 1, posting.Oracle().NumPendingTxns())
+	var fromPendingCert api.TxnContext
+	posting.Oracle().GetTxn(base+36).FillContext(&fromPendingCert, 1, false)
+	require.ElementsMatch(t, before.Keys, fromPendingCert.Keys)
+	require.ElementsMatch(t, before.Preds, fromPendingCert.Preds)
 	decisions := []raftpb.Entry{
 		checkpointEntry(t, 9, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 37, Txns: []*pb.TxnStatus{{StartTs: base + 36, CommitTs: base + 37}}}}),
 		checkpointEntry(t, 10, mutation(base+40, "must-abort")),

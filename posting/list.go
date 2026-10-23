@@ -817,6 +817,18 @@ func TypeID(edge *pb.DirectedEdge) types.TypeID {
 }
 
 func fingerprintEdge(t *pb.DirectedEdge) uint64 {
+	return fingerprintEdgeWithList(t, schema.State().IsList(t.Attr))
+}
+func fingerprintEdgeForContext(ctx context.Context, t *pb.DirectedEdge) uint64 {
+	return fingerprintEdgeWithList(t, isListForContext(ctx, t.Attr))
+}
+func isListForContext(ctx context.Context, attr string) bool {
+	if su, ok := schema.StagedWriteSchema(ctx, attr); ok {
+		return su.List
+	}
+	return schema.State().IsList(attr)
+}
+func fingerprintEdgeWithList(t *pb.DirectedEdge, isList bool) uint64 {
 	// There could be a collision if the user gives us a value with Lang = "en" and later gives
 	// us a value = "en" for the same predicate. We would end up overwriting his older lang
 	// value.
@@ -829,7 +841,7 @@ func fingerprintEdge(t *pb.DirectedEdge) uint64 {
 	switch {
 	case len(t.Lang) > 0:
 		id = farm.Fingerprint64([]byte(t.Lang))
-	case schema.State().IsList(t.Attr):
+	case isList:
 		// TODO - When values are deleted for list type, then we should only delete the UID from
 		// index if no other values produces that index token.
 		// Value for list type.
@@ -845,6 +857,10 @@ func (l *List) addMutation(ctx context.Context, txn *Txn, t *pb.DirectedEdge) er
 }
 
 func GetConflictKey(pk x.ParsedKey, key []byte, t *pb.DirectedEdge) uint64 {
+	su, _ := schema.State().Get(context.Background(), t.Attr)
+	return getConflictKeyForSchema(pk, key, t, su)
+}
+func getConflictKeyForSchema(pk x.ParsedKey, key []byte, t *pb.DirectedEdge, su pb.SchemaUpdate) uint64 {
 	getKey := func(key []byte, uid uint64) uint64 {
 		// Instead of creating a string first and then doing a fingerprint, let's do a fingerprint
 		// here to save memory allocations.
@@ -854,9 +870,9 @@ func GetConflictKey(pk x.ParsedKey, key []byte, t *pb.DirectedEdge) uint64 {
 
 	var conflictKey uint64
 	switch {
-	case schema.State().HasNoConflict(t.Attr):
+	case su.NoConflict:
 		break
-	case schema.State().HasUpsert(t.Attr):
+	case su.Upsert:
 		// Consider checking to see if a email id is unique. A user adds:
 		// <uid> <email> "email@email.org", and there's a string equal tokenizer
 		// and upsert directive on the schema.
@@ -866,7 +882,7 @@ func GetConflictKey(pk x.ParsedKey, key []byte, t *pb.DirectedEdge) uint64 {
 		// that two users don't set the same email id.
 		conflictKey = getKey(key, 0)
 
-	case pk.IsData() && schema.State().IsList(t.Attr):
+	case pk.IsData() && su.List:
 		// Data keys, irrespective of whether they are UID or values, should be judged based on
 		// whether they are lists or not. For UID, t.ValueId = UID. For value, t.ValueId =
 		// fingerprint(value) or could be fingerprint(lang) or something else.
@@ -915,7 +931,7 @@ func (l *List) addMutationInternal(ctx context.Context, txn *Txn, t *pb.Directed
 	mpost := NewPosting(t)
 	mpost.StartTs = txn.StartTs
 	if mpost.PostingType != pb.Posting_REF {
-		t.ValueId = fingerprintEdge(t)
+		t.ValueId = fingerprintEdgeForContext(ctx, t)
 		mpost.Uid = t.ValueId
 	}
 
@@ -939,7 +955,11 @@ func (l *List) addMutationInternal(ctx context.Context, txn *Txn, t *pb.Directed
 	// We ensure that commit marks are applied to posting lists in the right
 	// order. We can do so by proposing them in the same order as received by the Oracle delta
 	// stream from Zero, instead of in goroutines.
-	txn.addConflictKey(GetConflictKey(pk, l.key, t))
+	if staged, ok := schema.StagedWriteSchema(ctx, t.Attr); ok {
+		txn.addConflictKey(getConflictKeyForSchema(pk, l.key, t, staged))
+	} else {
+		txn.addConflictKey(GetConflictKey(pk, l.key, t))
+	}
 	return nil
 }
 

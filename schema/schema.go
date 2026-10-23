@@ -40,9 +40,24 @@ var (
 type contextKey int
 
 const (
-	IsWrite           contextKey = iota
-	IsUniqueDgraphXid            = true
+	IsWrite contextKey = iota
+	stagedWriteSchema
+	IsUniqueDgraphXid = true
 )
+
+// WithStagedWriteSchema supplies private inferred schemas to a staged mutation.
+// The map belongs to the caller and is immutable for the context lifetime. No
+// query/global schema is published until the staged mutation is accepted.
+func WithStagedWriteSchema(ctx context.Context, overrides map[string]pb.SchemaUpdate) context.Context {
+	return context.WithValue(ctx, stagedWriteSchema, overrides)
+}
+
+// StagedWriteSchema reads only the private override, without consulting globals.
+func StagedWriteSchema(ctx context.Context, pred string) (pb.SchemaUpdate, bool) {
+	overrides, _ := ctx.Value(stagedWriteSchema).(map[string]pb.SchemaUpdate)
+	value, ok := overrides[pred]
+	return value, ok
+}
 
 // GetWriteContext returns a context that sets the schema context for writing.
 func GetWriteContext(ctx context.Context) context.Context {
@@ -243,6 +258,13 @@ func (s *state) SetType(typeName string, typ *pb.TypeUpdate) {
 // Get gets the schema for the given predicate.
 func (s *state) Get(ctx context.Context, pred string) (pb.SchemaUpdate, bool) {
 	isWrite, _ := ctx.Value(IsWrite).(bool)
+	if isWrite {
+		if overrides, ok := ctx.Value(stagedWriteSchema).(map[string]pb.SchemaUpdate); ok {
+			if value, ok := overrides[pred]; ok {
+				return value, true
+			}
+		}
+	}
 	s.RLock()
 	defer s.RUnlock()
 	// If this is write context, mutSchema will have the updated schema.

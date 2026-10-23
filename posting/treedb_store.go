@@ -86,6 +86,7 @@ type TreeDBStore struct {
 	raftReadChanged   chan struct{}
 	raftReadDraining  bool
 	raftSemanticFloor uint64
+	raftPending       RaftPendingManifest
 	commitWG          sync.WaitGroup
 	workerWG          sync.WaitGroup
 	queueActive       bool

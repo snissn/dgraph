@@ -178,12 +178,20 @@ func TestRaftSemanticRejectionAndOrderedAbortReplay(t *testing.T) {
 		require.NoError(t, apply(e))
 	}
 	require.Equal(t, 1, posting.Oracle().NumPendingTxns())
-	require.NoError(t, n.checkpointRaftCut(last, true))
-	require.Equal(t, uint64(7), atomic.LoadUint64(&n.raftCertifiedIndex))
 	require.ErrorContains(t, n.proposeAndWait(context.Background(), mutation(base+7, edge(pred, "blocked"))), "recovery debt limit")
 	abortProposal := &pb.Proposal{Delta: &pb.OracleDelta{Txns: []*pb.TxnStatus{{StartTs: base + 6}}}}
 	require.ErrorContains(t, n.proposeAndWait(context.Background(), abortProposal), "Raft isn't initialized",
 		"decision passes debt admission and reaches the deliberately absent transport")
+	// Capturing the canonical pending overlay now releases debt without waiting
+	// for Zero to decide the long transaction.
+	require.NoError(t, n.checkpointRaftCut(last, true))
+	require.Equal(t, last, atomic.LoadUint64(&n.raftCertifiedIndex))
+	releasePending, err := n.reserveRaftRecoveryDebt(1)
+	require.NoError(t, err)
+	releasePending()
+	n = reopen()
+	require.Equal(t, last, n.Cfg.Applied)
+	require.Equal(t, 1, posting.Oracle().NumPendingTxns())
 	abort := checkpointEntry(t, last+1, abortProposal)
 	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: last + 1}, []raftpb.Entry{abort}, &raftpb.Snapshot{}))
 	require.NoError(t, wal.Sync())

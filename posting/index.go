@@ -510,7 +510,7 @@ func (txn *Txn) addMutationHelper(ctx context.Context, l *List, doUpdateIndex bo
 		if t.ValueType == pb.Posting_UID {
 			return t.ValueId
 		}
-		return fingerprintEdge(t)
+		return fingerprintEdgeForContext(ctx, t)
 	}
 
 	// For countIndex we need to check if some posting already exists for uid and length of posting
@@ -522,7 +522,7 @@ func (txn *Txn) addMutationHelper(ctx context.Context, l *List, doUpdateIndex bo
 	var found bool
 	var err error
 
-	isScalarPredicate := !schema.State().IsList(t.Attr)
+	isScalarPredicate := !isListForContext(ctx, t.Attr)
 	delNonListPredicate := isScalarPredicate &&
 		t.Op == pb.DirectedEdge_DEL && string(t.Value) != x.Star
 
@@ -533,7 +533,7 @@ func (txn *Txn) addMutationHelper(ctx context.Context, l *List, doUpdateIndex bo
 			return val, false, emptyCountParams, errors.Wrapf(ErrTsTooOld, "Add mutation count index")
 		}
 	case doUpdateIndex || delNonListPredicate:
-		found, currPost, err = l.findPosting(txn.StartTs, fingerprintEdge(t))
+		found, currPost, err = l.findPosting(txn.StartTs, fingerprintEdgeForContext(ctx, t))
 		if err != nil {
 			return val, found, emptyCountParams, err
 		}

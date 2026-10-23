@@ -35,7 +35,7 @@ func checkRaftSupportedProposal(p *pb.Proposal) error {
 		if m.StartTs == 0 || m.DropValue == "" || x.IsPreDefinedType(m.DropValue) || len(m.Edges)+len(m.Schema)+len(m.Types) != 0 {
 			return fmt.Errorf("raft_checkpoint requires an isolated timestamped type deletion")
 		}
-		return nil
+		return validateRaftPendingSchemaTransition(m)
 	}
 	if m.DropOp != pb.Mutations_NONE {
 		return fmt.Errorf("raft_checkpoint does not support drop")
@@ -55,7 +55,75 @@ func checkRaftSupportedProposal(p *pb.Proposal) error {
 			return fmt.Errorf("raft_checkpoint requires a named type definition")
 		}
 	}
+	return validateRaftPendingSchemaTransition(m)
+}
+
+// validateRaftPendingSchemaTransition is a pure check against preceding ordered
+// state. The canonical pending overlay must keep the schema under which its
+// deltas and conflict keys were constructed. It never asks Zero to abort a
+// transaction: a rejected schema request is a recorded no-op, and its caller may
+// propose a fresh request after ordered transaction decisions have completed.
+func validateRaftPendingSchemaTransition(m *pb.Mutations) error {
+	if posting.Oracle().NumPendingTxns() == 0 {
+		return nil
+	}
+	if m.DropOp == pb.Mutations_TYPE {
+		if _, exists := schema.State().GetType(m.DropValue); exists {
+			return &raftSemanticRejection{reason: "type deletion conflicts with pending transactions"}
+		}
+		return nil
+	}
+	for _, update := range m.Schema {
+		old, exists := schema.State().Get(context.Background(), update.Predicate)
+		if exists && proto.Equal(&old, update) {
+			continue
+		}
+		if posting.RaftPendingPredicateInUse(update.Predicate) {
+			return &raftSemanticRejection{reason: fmt.Sprintf("schema transition for %s conflicts with pending transactions", update.Predicate)}
+		}
+	}
+	for _, update := range m.Types {
+		old, exists := schema.State().GetType(update.TypeName)
+		if !exists || !proto.Equal(&old, update) {
+			return &raftSemanticRejection{reason: "type transition conflicts with pending transactions"}
+		}
+	}
 	return nil
+}
+
+// raftSchemaMutationIsNoop lets ordered apply skip even timestamped duplicate
+// writes. In particular, an exact retry must not launch legacy pending aborts
+// or require a new Oracle frontier just to publish an identical definition.
+func raftSchemaMutationIsNoop(m *pb.Mutations) bool {
+	if m == nil || len(m.Edges) != 0 {
+		return false
+	}
+	if m.DropOp == pb.Mutations_TYPE {
+		_, exists := schema.State().GetType(m.DropValue)
+		return !exists
+	}
+	if m.DropOp != pb.Mutations_NONE || len(m.Schema)+len(m.Types) == 0 {
+		return false
+	}
+	for _, update := range m.Schema {
+		if update == nil {
+			return false
+		}
+		old, exists := schema.State().Get(context.Background(), update.Predicate)
+		if !exists || !proto.Equal(&old, update) {
+			return false
+		}
+	}
+	for _, update := range m.Types {
+		if update == nil {
+			return false
+		}
+		old, exists := schema.State().GetType(update.TypeName)
+		if !exists || !proto.Equal(&old, update) {
+			return false
+		}
+	}
+	return true
 }
 
 func validateRaftSchemaUpdate(update *pb.SchemaUpdate) error {

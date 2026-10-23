@@ -48,7 +48,7 @@ func applyCheckpointEntry(t *testing.T, n *node, e raftpb.Entry) {
 }
 
 func TestRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T) {
-	for _, cut := range []string{"after_retention", "before_retention", "failed_native_snapshot_restart"} {
+	for _, cut := range []string{"after_retention", "before_retention", "failed_native_snapshot_restart", "pending_certificate", "pending_commit_certificate"} {
 		t.Run(cut, func(t *testing.T) { testRaftCheckpointRealMutationDeltaExactRootReplay(t, cut) })
 	}
 }
@@ -93,6 +93,16 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 		return n
 	}
 	n := open()
+	pendingCertificate := cut == "pending_certificate" || cut == "pending_commit_certificate"
+	certifiedIndex := uint64(2)
+	if pendingCertificate {
+		// Exercise the normal indexed posting pipeline, including its canonical
+		// index deltas, rather than merely persisting raw input edges.
+		su := &pb.SchemaUpdate{Predicate: x.AttrInRootNamespace("name"), ValueType: pb.Posting_STRING,
+			Directive: pb.SchemaUpdate_INDEX, Tokenizer: []string{"exact"}}
+		require.NoError(t, writeSchema(su, posting.Oracle().MaxAssigned()+1))
+		schema.State().Set(su.Predicate, su)
+	}
 	base := posting.Oracle().MaxAssigned() + 10
 	predicate := x.AttrInRootNamespace("name")
 	mutation := func(ts uint64, value string) *pb.Proposal {
@@ -119,7 +129,7 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 	applyCheckpointEntry(t, n, entries[0])
 	applyCheckpointEntry(t, n, entries[1])
 	if cut == "before_retention" {
-		c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: 1, RaftID: 1, Index: 2, Term: 1, OracleMaxAssigned: posting.Oracle().MaxAssigned(), ConfState: *n.ConfState()}
+		c := raftCheckpointMetadata{Version: raftCheckpointVersion, PendingOverlay: posting.EmptyRaftPendingManifest(), Group: 1, RaftID: 1, Index: 2, Term: 1, OracleMaxAssigned: posting.Oracle().MaxAssigned(), ConfState: *n.ConfState()}
 		c.AppliedProposals = make(map[uint64]raftProposalSignature)
 		for key, p := range n.appliedProposals {
 			c.AppliedProposals[key] = raftProposalSignature{Size: p.size, StartTs: p.startTs, Digest: p.digest, SeenUnixNano: p.seen.UnixNano()}
@@ -151,8 +161,11 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 		applyCheckpointEntry(t, n, e)
 	}
 	require.Equal(t, 1, posting.Oracle().NumPendingTxns())
-	require.NoError(t, n.checkpointRaftCut(6, true))
-	require.Equal(t, uint64(2), atomic.LoadUint64(&n.raftCertifiedIndex), "pending prewrite cannot be certified away")
+	if pendingCertificate {
+		require.NoError(t, n.checkpointRaftCut(6, true))
+		certifiedIndex = 6
+		require.Equal(t, certifiedIndex, atomic.LoadUint64(&n.raftCertifiedIndex), "canonical pending state permits a bounded cut")
+	}
 	readValue := func() string {
 		list, err := posting.GetNoStore(x.DataKey(predicate, 1), math.MaxUint64)
 		require.NoError(t, err)
@@ -196,12 +209,17 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 		current.closePostingStore()
 		n = open()
 	}
-	require.Equal(t, uint64(2), n.Cfg.Applied)
-	require.Equal(t, "certified", readValue(), "uncertified working suffix must be discarded")
+	require.Equal(t, certifiedIndex, n.Cfg.Applied)
+	if pendingCertificate {
+		require.Equal(t, "suffix", readValue(), "certified pending prewrite remains invisible before its decision")
+		require.Equal(t, 1, posting.Oracle().NumPendingTxns(), "pending state restored without its pruned input log")
+	} else {
+		require.Equal(t, "certified", readValue(), "uncertified working suffix must be discarded")
+	}
 	oldSignatures := len(n.appliedProposals)
 	require.NoError(t, n.expireRaftProposals(time.Now().Add(time.Hour), 10*time.Minute))
 	require.Len(t, n.appliedProposals, oldSignatures, "clock expiry must wait through initial committed replay")
-	suffix, err := wal.Entries(3, 7, math.MaxUint64)
+	suffix, err := wal.Entries(certifiedIndex+1, 7, math.MaxUint64)
 	require.NoError(t, err)
 	for _, e := range suffix {
 		applyCheckpointEntry(t, n, e)
@@ -211,7 +229,12 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 	oldSignatures = len(n.appliedProposals)
 	require.NoError(t, n.expireRaftProposals(time.Now().Add(time.Hour), 10*time.Minute))
 	require.Len(t, n.appliedProposals, oldSignatures, "pending prewrites postpone dedup expiration")
-	abort := checkpointEntry(t, 7, decision(base+4, 0, base+5))
+	commitPending := uint64(0)
+	expectedFinal := "suffix"
+	if cut == "pending_commit_certificate" {
+		commitPending, expectedFinal = base+5, "pending"
+	}
+	abort := checkpointEntry(t, 7, decision(base+4, commitPending, base+5))
 	abortState, err := wal.HardState()
 	require.NoError(t, err)
 	abortState.Commit = 7
@@ -224,10 +247,10 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 		n.appliedProposals[key] = &appliedProposal{size: 128, seen: time.Now()}
 	}
 	require.ErrorContains(t, n.checkpointRaftCut(7, true), "1MiB")
-	require.Equal(t, uint64(2), atomic.LoadUint64(&n.raftCertifiedIndex))
+	require.Equal(t, certifiedIndex, atomic.LoadUint64(&n.raftCertifiedIndex))
 	first, err = wal.FirstIndex()
 	require.NoError(t, err)
-	require.Equal(t, uint64(3), first)
+	require.Equal(t, certifiedIndex+1, first)
 	for key := range n.appliedProposals {
 		if key >= 100 {
 			delete(n.appliedProposals, key)
@@ -236,7 +259,7 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 	require.NoError(t, n.checkpointRaftCut(7, true))
 	require.Zero(t, posting.Oracle().NumPendingTxns())
 	require.Equal(t, uint64(7), atomic.LoadUint64(&n.raftCertifiedIndex))
-	require.Equal(t, "suffix", readValue())
+	require.Equal(t, expectedFinal, readValue())
 	// Wall clocks cannot retire replicated outcomes, even after a pending-free cut.
 	count := len(n.appliedProposals)
 	require.NoError(t, n.expireRaftProposals(time.Now().Add(time.Hour), 10*time.Minute))
@@ -247,14 +270,14 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 	n = open()
 	require.Equal(t, uint64(7), n.Cfg.Applied)
 	require.Len(t, n.appliedProposals, count, "clock time must not change replicated dispositions")
-	require.Equal(t, "suffix", readValue())
+	require.Equal(t, expectedFinal, readValue())
 }
 
 func TestRaftCheckpointValidationAndDebtFailClosed(t *testing.T) {
 	wal := raftwal.Init(t.TempDir())
 	defer wal.Close()
 	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: 3}, []raftpb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1}, {Index: 3, Term: 1}}, &raftpb.Snapshot{}))
-	c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: 1, RaftID: 1, Index: 2, Term: 1}
+	c := raftCheckpointMetadata{Version: raftCheckpointVersion, PendingOverlay: posting.EmptyRaftPendingManifest(), Group: 1, RaftID: 1, Index: 2, Term: 1}
 	require.NoError(t, validateRaftCheckpoint(c, wal, 1, 1))
 	require.Error(t, validateRaftCheckpoint(c, wal, 2, 1))
 	c.Term = 2

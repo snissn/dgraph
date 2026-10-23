@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	raftCheckpointVersion  = "dgraph-normal-delta-v4"
+	raftCheckpointVersion  = "dgraph-normal-delta-v5"
 	raftCheckpointEvery    = 1024
 	raftCheckpointBytes    = 16 << 20
 	raftRecoveryMaxEntries = 4096
@@ -36,8 +36,8 @@ const (
 )
 
 // raftCheckpointMetadata is application state bound atomically to the immutable
-// TreeDB checkpoint. No uncommitted prewrite may be omitted from this cut: this
-// prototype certifies only pending-free cuts and retains history otherwise.
+// TreeDB checkpoint. Every unresolved prewrite is canonical state in the same
+// exact root; the fixed-size reference is incrementally maintained with apply.
 type raftCheckpointMetadata struct {
 	Version              string
 	Group                uint32
@@ -52,6 +52,7 @@ type raftCheckpointMetadata struct {
 	SemanticFloor        uint64
 	FloorTransitionIndex uint64
 	PhysicalFloor        uint64
+	PendingOverlay       posting.RaftPendingManifest
 }
 
 type raftProposalSignature struct {
@@ -183,8 +184,11 @@ func raftCheckpointEnabled() bool {
 // persisted CheckpointIndex as evidence. Missing history and identity mismatches
 // are startup errors, before read health can be published.
 func validateRaftApplicationMetadata(c raftCheckpointMetadata) error {
-	if c.Version != raftCheckpointVersion || c.PendingTransactions != 0 {
+	if c.Version != raftCheckpointVersion || c.PendingTransactions != c.PendingOverlay.Count {
 		return fmt.Errorf("unsupported checkpoint application state")
+	}
+	if err := posting.ValidateRaftPendingManifest(c.PendingOverlay); err != nil {
+		return err
 	}
 	for key, sig := range c.AppliedProposals {
 		if _, err := hex.DecodeString(sig.Digest); err != nil || key == 0 || sig.Size <= 0 || sig.SeenUnixNano <= 0 || len(sig.Digest) != 64 {
@@ -198,7 +202,7 @@ func validateRaftApplicationMetadata(c raftCheckpointMetadata) error {
 }
 
 func validateRaftCheckpoint(c raftCheckpointMetadata, store *raftwal.DiskStorage, gid uint32, id uint64) error {
-	if c.Version != raftCheckpointVersion || c.Group != gid || c.RaftID != id || c.PendingTransactions != 0 {
+	if c.Version != raftCheckpointVersion || c.Group != gid || c.RaftID != id || c.PendingTransactions != c.PendingOverlay.Count {
 		return fmt.Errorf("incompatible Raft TreeDB checkpoint identity or pending state")
 	}
 	if err := validateRaftApplicationMetadata(c); err != nil {
@@ -283,7 +287,7 @@ func (n *node) recoverRaftCheckpointState() error {
 		}
 	}
 	data, ok := State.TreeDBStore.RecoveredRaftCheckpoint()
-	c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: n.gid, RaftID: n.Id}
+	c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: n.gid, RaftID: n.Id, PendingOverlay: posting.EmptyRaftPendingManifest()}
 	if ok {
 		if err := json.Unmarshal(data, &c); err != nil {
 			return err
@@ -291,6 +295,12 @@ func (n *node) recoverRaftCheckpointState() error {
 	}
 	if err := validateRaftCheckpoint(c, n.Store, n.gid, n.Id); err != nil {
 		return err
+	}
+	if err := State.TreeDBStore.RestoreRaftPendingOverlay(c.PendingOverlay); err != nil {
+		return err
+	}
+	if uint64(posting.Oracle().NumPendingTxns()) != c.PendingTransactions || posting.Oracle().MinPendingStartTs() <= c.SemanticFloor {
+		return fmt.Errorf("certified pending set crosses semantic floor")
 	}
 	if err := State.TreeDBStore.RestoreRaftPostingFloor(c.SemanticFloor, c.PhysicalFloor); err != nil {
 		return err
@@ -376,14 +386,20 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 	if index < last || (!force && index-last < raftCheckpointEvery && atomic.LoadUint64(&n.raftRecoveryBytes) < raftCheckpointBytes) {
 		return nil
 	}
-	if posting.Oracle().NumPendingTxns() != 0 {
-		return nil
-	}
+
 	term, err := n.Store.Term(index)
 	if err != nil {
 		return err
 	}
 	c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: n.gid, RaftID: n.Id, Index: index, Term: term, OracleMaxAssigned: n.raftOrderedAssigned, GroupChecksum: atomic.LoadUint64(&groups().deltaChecksum), ConfState: *n.ConfState()}
+	c.PendingOverlay, err = State.TreeDBStore.RaftPendingManifest()
+	if err != nil {
+		return err
+	}
+	c.PendingTransactions = c.PendingOverlay.Count
+	if c.PendingTransactions != uint64(posting.Oracle().NumPendingTxns()) {
+		return fmt.Errorf("canonical pending overlay/Oracle count mismatch")
+	}
 	c.SemanticFloor = n.raftPostingFloor
 	c.FloorTransitionIndex = n.raftFloorIndex
 	c.PhysicalFloor, err = State.TreeDBStore.DiscardFloor()
@@ -441,7 +457,7 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 	atomic.AddUint64(&n.raftRecoveryBytes, ^(n.raftAppliedBytes - 1))
 	n.raftAppliedBytes = 0
 	n.raftConfStateDirty = false
-	glog.Infof("TreeDB raft_checkpoint certified: index=%d oracle=%d pending=0", index, c.OracleMaxAssigned)
+	glog.Infof("TreeDB raft_checkpoint certified: index=%d oracle=%d pending=%d", index, c.OracleMaxAssigned, c.PendingTransactions)
 	return nil
 }
 

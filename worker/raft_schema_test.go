@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: © 2026 Istari Digital, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package worker
 
 import (
@@ -239,6 +244,60 @@ func TestRaftSchemaSupportedBoundary(t *testing.T) {
 	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{DropOp: pb.Mutations_ALL}}))
 	require.NoError(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{StartTs: 10, DropOp: pb.Mutations_TYPE, DropValue: "0-Type"}}))
 	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{DropOp: pb.Mutations_TYPE, DropValue: "0-Type"}}))
+}
+
+func TestRaftSchemaPendingTransitionIsPureAndNoopAllowed(t *testing.T) {
+	posting.Oracle().ResetTxns()
+	t.Cleanup(posting.Oracle().ResetTxns)
+	attr, other := x.AttrInRootNamespace("pending-schema"), x.AttrInRootNamespace("other-schema")
+	old := &pb.SchemaUpdate{Predicate: attr, ValueType: pb.Posting_STRING}
+	schema.State().Set(attr, old)
+	typeName := x.AttrInRootNamespace("PendingSchemaPerson")
+	typeOld := &pb.TypeUpdate{TypeName: typeName, Fields: []*pb.SchemaUpdate{{Predicate: attr}}}
+	schema.State().SetType(typeName, typeOld)
+	txn := posting.NewTxn(posting.Oracle().MaxAssigned() + 10)
+	list, err := txn.GetFromDelta(x.DataKey(attr, 1))
+	require.NoError(t, err)
+	require.NoError(t, list.AddMutationWithIndex(context.Background(), &pb.DirectedEdge{
+		Attr: attr, Entity: 1, Value: []byte("pending"), ValueType: pb.Posting_STRING, Op: pb.DirectedEdge_SET,
+	}, txn))
+	before, err := posting.MarshalRaftPendingTxn(txn)
+	require.NoError(t, err)
+	require.NoError(t, posting.InstallRaftPendingTxn(txn))
+	indexed := proto.Clone(old).(*pb.SchemaUpdate)
+	indexed.Directive, indexed.Tokenizer = pb.SchemaUpdate_INDEX, []string{"exact"}
+	changedType := proto.Clone(typeOld).(*pb.TypeUpdate)
+	changedType.Fields = append(changedType.Fields, &pb.SchemaUpdate{Predicate: other})
+	for _, mutation := range []*pb.Mutations{
+		{Schema: []*pb.SchemaUpdate{indexed}},
+		{Types: []*pb.TypeUpdate{changedType}},
+		{StartTs: txn.StartTs + 1, DropOp: pb.Mutations_TYPE, DropValue: typeName},
+	} {
+		proposal := &pb.Proposal{Mutations: mutation}
+		err := checkRaftSupportedProposal(proposal)
+		require.True(t, isRaftSemanticRejection(err), "%v", err)
+		require.False(t, raftSchemaMutationIsNoop(mutation))
+		after, encodeErr := posting.MarshalRaftPendingTxn(txn)
+		require.NoError(t, encodeErr)
+		require.Equal(t, before, after, "eligibility cannot abort or rewrite canonical pending state")
+		current, exists := schema.State().Get(context.Background(), attr)
+		require.True(t, exists)
+		require.True(t, proto.Equal(old, &current))
+		require.False(t, txn.ShouldAbort())
+	}
+	for _, mutation := range []*pb.Mutations{
+		{Schema: []*pb.SchemaUpdate{proto.Clone(old).(*pb.SchemaUpdate)}},
+		{Types: []*pb.TypeUpdate{proto.Clone(typeOld).(*pb.TypeUpdate)}},
+		{StartTs: txn.StartTs + 1, DropOp: pb.Mutations_TYPE, DropValue: x.AttrInRootNamespace("absent-type")},
+	} {
+		require.NoError(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: mutation}))
+		require.True(t, raftSchemaMutationIsNoop(mutation))
+	}
+	// The pending overlay pins its own predicate semantics, not unrelated schema.
+	require.NoError(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{
+		Schema: []*pb.SchemaUpdate{{Predicate: other, ValueType: pb.Posting_STRING}},
+	}}))
+	require.False(t, raftSchemaMutationIsNoop(&pb.Mutations{Edges: []*pb.DirectedEdge{{Attr: attr}}}))
 }
 
 func (s *schemaCallbackGate) NewWriteTxn() posting.WriteTxn {

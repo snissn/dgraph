@@ -26,7 +26,7 @@ apply failure stops progress before certification.
 
 Before a certificate, rejection must be reproduced from the retained proposal and the schema state
 reconstructed by preceding ordered input. A cached error alone is insufficient authority. After a
-certificate, contract `dgraph-normal-delta-v4` binds successful and rejected proposal identity,
+certificate, contract `dgraph-normal-delta-v5` binds successful and rejected proposal identity,
 StartTs, canonical content SHA256, rejection disposition, and observation time into the application
 metadata. A reused retry key with different content is a deterministic rejection. The canonical hash
 excludes the Raft index, so a real retry at a different log position retains its identity. Local
@@ -54,24 +54,25 @@ retained alongside the successful runs.
 
 The semantic test also fills the actual retained-entry budget while one transaction stays pending.
 The production proposal caller refuses another mutation, but a Delta decision passes debt admission.
-After applying the ordered abort, a new certificate restores mutation capacity. This proves the
-admission/decision/certificate mechanism; a live unavailable-Zero/old-transaction timeout campaign
-is still required for operational liveness.
+A certificate now includes its canonical pending state and restores mutation capacity before the
+ordered abort arrives. Reopen restores that pending transaction without its pruned prewrite log; a
+later decision remains admissible. This proves the admission/decision/certificate mechanism;
+continuous live traffic and unavailable-Zero behavior remain separate operational gates.
 
 ## Remaining consumer completion sequence
 
-| Obligation                    | Existing path and required proof                                                                                                                                              | Status                                                                                                       |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Immediate acknowledged suffix | CommitNow response, abrupt Alpha and Zero termination before read/drain, restart and verify all acknowledged transaction decisions                                            | Initial-root server proof green; nonzero cut proof open                                                      |
-| Pending-free progress         | Retained debt admission pauses mutations; ordered commit/abort bypasses debt; old transaction abort restores a cut and credits; unavailable Zero remains visible backpressure | Controlled real apply proof green; live Zero timeout open                                                    |
-| Fresh schema/index/type       | Existing serial schema writer and normal indexed posting path; certify, recover old cut, replay, query indexes and duplicates                                                 | Fresh basic schema supported; index replay proof open                                                        |
-| Existing schema rebuild       | Scalar tokenizer rebuild uses synchronous existing aggregation with logical tombstones; captured schema/root and old-cut replay agree                                         | Scalar tokenizer proof green; other conversions guarded                                                      |
-| Drop/namespace/restore/import | Each operation needs ordered input closure, pending disposition, schema/cache invalidation and a root cut; external files require digest-bound retained authority             | Guarded; protocol open                                                                                       |
-| Peer snapshot/rejoin          | Export a certified root and dependencies at a Raft snapshot; validate transfer; atomically install with receiver identity and frontiers before retention/read health          | Adapter/WAL/startup + actual native RPC/Raft retry proofs green; multi-process activation guarded            |
-| Maintenance                   | Rollup, MVCC pruning, vlog GC/rewrite and compaction must respect current/previous certified roots and active readers through every crash cut                                 | Physical GC/compaction green; ordered S/local P baseline+prune proof green; automatic scheduling not enabled |
-| Operational routing           | Backup/export/admin and shutdown must use capability-aware store paths; no `nil` Badger dereference or bypass of owner lifecycle                                              | Existing fail-closed guards; full production routes open                                                     |
-| Retry identity/bounds         | Canonical StartTs/content binding; ordered semantic expiry and bounded metadata admission; qualify long-load limits                                                           | Focused replay and rejection proof green                                                                     |
-| Allocation and runtime        | Existing bounded mutation arena reused; capture public admission/apply/allocation profile only after correctness and root runtime grant                                       | Open                                                                                                         |
+| Obligation                    | Existing path and required proof                                                                                                                                     | Status                                                                                                               |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Immediate acknowledged suffix | CommitNow response, abrupt Alpha and Zero termination before read/drain, restart and verify all acknowledged transaction decisions                                   | Initial-root server proof green; nonzero cut proof open                                                              |
+| Pending-state progress        | Canonical overlay certifies unresolved state; retained debt admission pauses mutations until a cut; ordered decisions bypass both pending/debt limits                | Canonical pending cut/reopen/debt-release proof green; continuous live load open                                     |
+| Fresh schema/index/type       | Existing serial schema writer and normal indexed posting path; certify, recover old cut, replay, query indexes and duplicates                                        | Fresh basic schema and indexed pending commit/abort replay proof green                                               |
+| Existing schema rebuild       | Scalar tokenizer rebuild uses synchronous existing aggregation with logical tombstones; captured schema/root and old-cut replay agree                                | Scalar tokenizer proof green; other conversions guarded                                                              |
+| Drop/namespace/restore/import | Each operation needs ordered input closure, pending disposition, schema/cache invalidation and a root cut; external files require digest-bound retained authority    | Guarded; protocol open                                                                                               |
+| Peer snapshot/rejoin          | Export a certified root and dependencies at a Raft snapshot; validate transfer; atomically install with receiver identity and frontiers before retention/read health | Adapter/WAL/startup + actual native RPC/Raft retry proofs green; multi-process activation guarded                    |
+| Maintenance                   | Rollup, MVCC pruning, vlog GC/rewrite and compaction must respect current/previous certified roots and active readers through every crash cut                        | Physical GC/compaction and ordered S/local P baseline+prune green; local runner active, operational S publisher open |
+| Operational routing           | Backup/export/admin and shutdown must use capability-aware store paths; no `nil` Badger dereference or bypass of owner lifecycle                                     | Existing fail-closed guards; full production routes open                                                             |
+| Retry identity/bounds         | Canonical StartTs/content binding; ordered semantic expiry and bounded metadata admission; qualify long-load limits                                                  | Focused replay and rejection proof green                                                                             |
+| Allocation and runtime        | Existing bounded mutation arena reused; capture public admission/apply/allocation profile only after correctness and root runtime grant                              | Open                                                                                                                 |
 
 Peer installation uses the external owner's explicit generation/digest-bound export and authorized
 install APIs. The source certificate has a different Raft ID and WAL-directory owner identity.
@@ -141,10 +142,10 @@ formats fail before authorization. Native export binds the exact CURRENT generat
 Incoming source metadata cannot regress the receiver's already drained semantic or Oracle frontier.
 
 ConfChange and empty entries share the existing ordered semantic apply channel. A membership change
-forces certification as soon as pending transactions permit it; its captured ConfState is retained
-in outgoing snapshot metadata. Forwarded snapshots update transport source context without
-substituting live membership. These controls are implemented while startup/membership capability
-guards remain: a live multi-process join/rejoin campaign is still required.
+forces certification including canonical pending state; its captured ConfState is retained in
+outgoing snapshot metadata. Forwarded snapshots update transport source context without substituting
+live membership. These controls are implemented while startup/membership capability guards remain: a
+live multi-process join/rejoin campaign is still required.
 
 A stale source certificate is a preparation failure, not permission to Advance an unapplied Ready.
 The receiver first persists only current term/vote while retaining its old durable
@@ -189,16 +190,51 @@ read/commit admission above P, including split anchors. P never exceeds S and ca
 readers or newer pending starts. Partial baseline, prune or ambiguous certification errors seal
 admission until exact-root reopen; they never resume readers through a partially rewritten list.
 
-A completed pass either forces a pending-free certificate before Finish, or uses FinishWorking with
-the identical previous certificate and validated, synced retained replay history. The latter changes
-no certified frontier or retention. Crashing discards the uncertified working P and reconstructs S,
-pending state and application suffix from the previous exact cut plus WAL. Current/previous physical
-roots remain pinned through physical GC/compaction. This permits local maintenance with newer
-pending transactions, but pending-free certification remains a structural recovery-debt limit until
-the separately selected canonical pending-overlay integration is proven.
+The production runner forces a certificate, including canonical newer pending state, before Finish.
+An explicit FinishWorking capability also remains available with the identical previous certificate
+and validated, synced retained replay history. It changes no certified frontier or retention; a
+crash then reconstructs S, pending state and application suffix from the previous exact cut plus
+WAL. Current/previous physical roots remain pinned through physical GC/compaction.
 
 Focused tests cover two successive split baselines against an unpruned control, B/B+1 views,
 callback/cancellation failures, stale capability handles, task admission before cache/Oracle,
 old-root reopen after uncertified mutation, ordered-floor replay, content collisions, stale retries
 after signature retirement, and normal commit/reopen above a certified physical floor. The
 multi-process join/rejoin and continuous-pending operational gates remain separate.
+
+## Canonical pending checkpoints
+
+Version 5 binds a fixed-size overlay format/count/logical-charge reference to the same certified
+TreeDB root as posting MVCC, schema, S/P, Oracle, retry state and captured membership. Every
+accepted normal mutation executes the existing edge/index pipeline once against an isolated
+canonical Txn. Fresh inferred schema is a private write-context override until admission succeeds.
+Before any schema/raw/Oracle publication, structurally valid canonical output must fit 4,096 pending
+records and 64 MiB total logical charge. Refusal is a pure ordered no-op and preserves earlier
+proposals in the same transaction. Commit/abort decisions bypass these limits. Unknown
+read/write/callback failures retain their causes and stop certification; they are never capacity
+refusals.
+
+Each accepted proposal atomically replaces one private raw TreeDB record plus its incremental
+manifest under the existing external owner. The record contains StartTs, sealed posting/index
+deltas, exact conflict versions and conflict keys, and shouldAbort. It excludes disposable cached
+Lists and local observation clocks. Fixed-width timestamp/version slots and omission of query-only
+cache keys keep logical charge independent of local P and physical layout. Retained-state limits are
+not a total RSS bound: staging and index/delete fanout retain the ordinary execution cost.
+
+Checkpointing reads only fixed-size accounting; it neither serializes all pending transactions nor
+builds a second aggregate hash protocol. The exact DATA root is the whole-overlay authority and each
+canonical record has its own checksum. Startup/install scans the bounded record set once, verifies
+keys/checksums/count/charge, and atomically restores Oracle pending state before suffix apply or
+health. Drained commit/abort writers remove their record before the semantic frontier can certify.
+Canonical state is restored directly, never by re-executing raw edges under a later schema. Schema
+transitions that affect pending predicates are deterministic pre-effect refusals; exact no-ops avoid
+legacy asynchronous Zero abort requests. Ordered schema timestamps use the preceding ordered Delta
+frontier, not a potentially later process-local Oracle hint.
+
+Focused coverage includes indexed pending commit and abort after checkpoint/reopen with original
+prewrite WAL pruned, real full-count capacity/refusal and decision release, corruption/accounting
+refusal, pending-aware physical baselines, and pending state through native RPC/install crash cuts.
+See [RAFT_PENDING_STATE.md](RAFT_PENDING_STATE.md) for canonical format and charge details. These
+focused proofs do not replace immediate-ACK subprocess, continuous-load, full schema/admin, or real
+multi-process join/rejoin qualification. Replicated S still needs an authenticated operational
+publisher; no automatic local clock/frontier expiry has been introduced.

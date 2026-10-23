@@ -19,9 +19,9 @@ import (
 
 // pruneRaftPostingHistory changes only local physical history. Semantic expiry
 // must already be authorized by an explicit preceding replicated transition.
-// A successful pass either certifies its exact root or retains the preceding
-// certificate and every input needed to replay the newer working state. A
-// started pass that fails seals adapter admission until that root is reopened.
+// A successful pass certifies its exact root, including canonical newer pending
+// overlays. A started pass that fails seals adapter admission until its previous
+// exact certified root is reopened.
 func (n *node) pruneRaftPostingHistory(ctx context.Context, maxP uint64, batchSize int) (mvcc.PruneStats, error) {
 	var stats mvcc.PruneStats
 	if !raftCheckpointEnabled() || n == nil || State.TreeDBStore == nil {
@@ -49,9 +49,9 @@ func (n *node) pruneRaftPostingHistory(ctx context.Context, maxP uint64, batchSi
 			maxP = bound
 		}
 	}
-	// The old certificate remains authoritative if newer transactions prevent
-	// certification. Verify its exact metadata and all retained replay input
-	// before changing working history; FinishWorking never advances retention.
+	// Verify the previous exact metadata and all retained replay input before
+	// changing working history. A failed new certificate cannot remove the
+	// authority needed to recover that previous root.
 	if err := n.validateRaftMaintenanceRecovery(); err != nil {
 		return stats, err
 	}
@@ -74,13 +74,10 @@ func (n *node) pruneRaftPostingHistory(ctx context.Context, maxP uint64, batchSi
 	if err != nil {
 		return stats, err
 	}
-	if posting.Oracle().NumPendingTxns() == 0 {
-		if err := n.checkpointRaftCut(n.raftSemanticIndex, true); err != nil {
-			return stats, err
-		}
-		return stats, cap.Finish()
+	if err := n.checkpointRaftCut(n.raftSemanticIndex, true); err != nil {
+		return stats, err
 	}
-	return stats, cap.FinishWorking()
+	return stats, cap.Finish()
 }
 
 func (n *node) validateRaftMaintenanceRecovery() error {

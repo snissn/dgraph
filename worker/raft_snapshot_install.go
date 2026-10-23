@@ -58,7 +58,7 @@ func validateInstallMetadata(source td.ExternalRecoveryCheckpoint, intent *raftw
 	}
 	snapshot := intent.Snapshot.Metadata
 	if source.Generation == 0 || source.Digest == "" || source.Identity == "" ||
-		sender.Version != raftCheckpointVersion || sender.PendingTransactions != 0 ||
+		sender.Version != raftCheckpointVersion || sender.PendingTransactions != sender.PendingOverlay.Count ||
 		sender.Group != intent.Group || sender.Index != snapshot.Index || sender.Term != snapshot.Term ||
 		!protoConfStateEqual(sender.ConfState, snapshot.ConfState) {
 		return fmt.Errorf("source certificate does not authorize accepted Raft snapshot")

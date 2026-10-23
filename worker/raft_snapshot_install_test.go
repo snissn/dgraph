@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/dgraph-io/dgo/v250/protos/api"
 	"github.com/dgraph-io/dgraph/v25/posting"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/dgraph-io/dgraph/v25/raftwal"
@@ -155,14 +156,20 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 				Op: pb.DirectedEdge_SET}}}}),
 		checkpointEntry(t, 4, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 3,
 			Txns: []*pb.TxnStatus{{StartTs: base + 2, CommitTs: base + 3}}}}),
+		checkpointEntry(t, 5, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 4, Edges: []*pb.DirectedEdge{
+			{Entity: 1, Attr: predicate, Value: []byte("pending peer value"), ValueType: pb.Posting_STRING,
+				Op: pb.DirectedEdge_SET}}}}),
 	}
-	require.NoError(t, sourceWAL.Save(&raftpb.HardState{Term: 1, Commit: 4}, next, &raftpb.Snapshot{}))
+	require.NoError(t, sourceWAL.Save(&raftpb.HardState{Term: 1, Commit: 5}, next, &raftpb.Snapshot{}))
 	require.NoError(t, sourceWAL.Sync())
 	for _, entry := range next {
 		atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(entry.Data)))
 		applyCheckpointEntry(t, n, entry)
 	}
-	require.NoError(t, n.checkpointRaftCut(4, true))
+	require.NoError(t, n.checkpointRaftCut(5, true))
+	var sourcePending api.TxnContext
+	posting.Oracle().GetTxn(base+4).FillContext(&sourcePending, 1, false)
+	require.NotEmpty(t, sourcePending.Keys)
 	source, ok := state.TreeDBStore.RaftCheckpointCertificate()
 	require.True(t, ok)
 	snapshot, err := sourceWAL.Snapshot()
@@ -215,7 +222,7 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 			sourceBytes, err := json.Marshal(source)
 			require.NoError(t, err)
 			intent := raftwal.AcceptedSnapshotInstall{Version: 1, ReceiverIdentity: "dgraph-raft-v1:" + Config.WALDir,
-				Group: 1, RaftID: 2, Snapshot: snapshot, HardState: raftpb.HardState{Term: 4, Vote: 2, Commit: 4},
+				Group: 1, RaftID: 2, Snapshot: snapshot, HardState: raftpb.HardState{Term: 4, Vote: 2, Commit: 5},
 				ArchiveName: name, ArchiveBytes: int64(archive.Len()), ArchiveSHA256: hex.EncodeToString(hash[:]),
 				SourceCertificate: sourceBytes, ReceiverMetadata: receiverMetadata}
 			input, err := json.Marshal(intent)
@@ -339,25 +346,44 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 			} else {
 				require.NoError(t, n.recoverRaftCheckpoint())
 			}
-			require.Equal(t, uint64(4), n.Cfg.Applied)
+			require.Equal(t, uint64(5), n.Cfg.Applied)
 			require.Equal(t, []uint64{1, 2}, n.ConfState().Voters)
 			require.Contains(t, n.appliedProposals, uint64(1))
-			require.Equal(t, base+3, posting.Oracle().MaxAssigned())
+			require.Equal(t, base+3, n.raftOrderedAssigned)
+			require.GreaterOrEqual(t, posting.Oracle().MaxAssigned(), base+3, "process-local Oracle hints remain monotone")
 			hs, err := wal.HardState()
 			require.NoError(t, err)
 			if nativeRetry {
-				require.Equal(t, raftpb.HardState{Term: 6, Commit: 4}, hs)
+				require.Equal(t, raftpb.HardState{Term: 6, Commit: 5}, hs)
 			} else {
-				require.Equal(t, raftpb.HardState{Term: 4, Vote: 2, Commit: 4}, hs)
+				require.Equal(t, raftpb.HardState{Term: 4, Vote: 2, Commit: 5}, hs)
 			}
 			last, err := wal.LastIndex()
 			require.NoError(t, err)
-			require.Equal(t, uint64(4), last)
+			require.Equal(t, uint64(5), last)
 			list, err := posting.GetNoStore(x.DataKey(predicate, 1), math.MaxUint64)
 			require.NoError(t, err)
 			value, err := list.Value(math.MaxUint64)
 			require.NoError(t, err)
 			require.Equal(t, []byte("fresh peer value"), value.Value)
+			require.Equal(t, 1, posting.Oracle().NumPendingTxns())
+			var importedPending api.TxnContext
+			posting.Oracle().GetTxn(base+4).FillContext(&importedPending, 1, false)
+			require.ElementsMatch(t, sourcePending.Keys, importedPending.Keys, "native cut retains exact pending conflicts")
+			decision := checkpointEntry(t, 6, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 5,
+				Txns: []*pb.TxnStatus{{StartTs: base + 4, CommitTs: base + 5}}}})
+			decisionState := hs
+			decisionState.Commit = 6
+			require.NoError(t, wal.Save(&decisionState, []raftpb.Entry{decision}, &raftpb.Snapshot{}))
+			require.NoError(t, wal.Sync())
+			atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(decision.Data)))
+			applyCheckpointEntry(t, n, decision)
+			require.Zero(t, posting.Oracle().NumPendingTxns())
+			list, err = posting.GetNoStore(x.DataKey(predicate, 1), math.MaxUint64)
+			require.NoError(t, err)
+			value, err = list.Value(math.MaxUint64)
+			require.NoError(t, err)
+			require.Equal(t, []byte("pending peer value"), value.Value)
 			require.NoFileExists(t, filepath.Join(Config.WALDir, name))
 			if applyDone != nil {
 				close(n.applyCh)

@@ -7,6 +7,7 @@ package posting
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -28,6 +29,9 @@ func OpenRaftTreeDBStore(opts td.Options, identity string) (*TreeDBStore, error)
 		commitSlots: make(chan struct{}, treeDBCommitOwnershipLimit),
 	}
 	s.mutationPool.New = newTreeDBMutationBatch
+	if err := s.loadRaftPendingManifest(); err != nil {
+		return nil, errors.Join(err, owner.Close())
+	}
 	return s, nil
 }
 

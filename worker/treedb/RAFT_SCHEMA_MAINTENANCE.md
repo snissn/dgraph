@@ -99,14 +99,15 @@ callbacks drain before the pass completes. Pending transaction list caches are c
 global memory cache are then discarded. Only after the complete pass succeeds can the persisted
 floor advance and generic pruning run.
 
-With no pending transactions, the runner forces an exact certificate binding `S`, `P` and root
-before admission resumes. With newer pending transactions, it chooses `B` strictly below every
-pending StartTs and can finish as working progress: the old exact certificate and all required WAL
-remain authoritative, and no certified frontier or retention authority advances. A later valid Delta
-has CommitTs strictly above StartTs, so it cannot overwrite the baseline. Crash/reopen restores the
-old certified `S/P` and replays the retained pending input. A partial/canceled/ambiguous started
-pass seals admission until reopen; it cannot silently resume on a mixed main/split working state.
-Private read handles are invalidated and stale write epochs fenced before the capability releases.
+The runner forces an exact certificate binding `S`, `P`, root and canonical pending namespace before
+admission resumes, including when newer transactions remain pending. It chooses `B` strictly below
+every pending StartTs. A later valid Delta has CommitTs strictly above StartTs, so it cannot
+overwrite the baseline. Crash/reopen restores certified `S/P` and pending deltas/conflict versions
+before retained suffix input. The explicit working-only capability remains tested: it advances
+neither the certified frontier nor retention and restores the old `S/P` before replay. A
+partial/canceled/ambiguous started pass seals admission until reopen; it cannot silently resume on a
+mixed main/split working state. Private read handles are invalidated and stale write epochs fenced
+before the capability releases.
 
 Focused controls cover two stores with different local pruning schedules, exact `B`/`B+1` reads,
 long delta chains, cold/empty/split lists, preserved newer delta bytes, callback
@@ -118,11 +119,10 @@ controls, not power-loss or actual-server lifetime acceptance.
 
 The existing apply housekeeping tick invokes the runner outside the semantic mutex; it never selects
 a semantic floor from the clock or adds another Raft queue. Resource-budget and actual-server
-qualification remain separate gates. Working progress with pending transactions does not bound Raft
-recovery debt. The selected next integration persists an incremental canonical pending overlay under
-the same exact DATA root, allowing certificates with pending transactions without embedding all
-pending payload in JSON. Until that integration and its bounds are proven, continuous-workload
-checkpoint/debt and full bounded-lifetime acceptance remain open.
+qualification remain separate gates. The incremental canonical pending overlay allows certificates
+with pending transactions without embedding all pending payload in JSON; its format, bounded
+admission and restore contract are documented in [RAFT_PENDING_STATE.md](RAFT_PENDING_STATE.md).
+Continuous-workload resource/debt qualification and full bounded-lifetime acceptance remain open.
 
 ## Other operations and inherited boundaries
 
