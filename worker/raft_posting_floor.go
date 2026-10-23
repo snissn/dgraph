@@ -42,6 +42,7 @@ func (n *node) applyPostingFloor(p *pb.Proposal) error {
 	}
 	n.raftPostingFloor = request.Floor
 	n.raftFloorIndex = p.Index
+	n.raftFloorDirty = true
 	for key, outcome := range n.appliedProposals {
 		if outcome.startTs != 0 && outcome.startTs <= request.Floor {
 			delete(n.appliedProposals, key)

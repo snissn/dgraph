@@ -69,6 +69,7 @@ type node struct {
 	raftRecoveryBytes   uint64
 	raftSemanticIndex   uint64
 	raftConfStateDirty  bool
+	raftFloorDirty      bool
 	raftPostingFloor    uint64
 	raftOrderedAssigned uint64
 	raftFloorIndex      uint64

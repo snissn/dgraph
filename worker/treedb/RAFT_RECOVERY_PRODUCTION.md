@@ -238,3 +238,40 @@ See [RAFT_PENDING_STATE.md](RAFT_PENDING_STATE.md) for canonical format and char
 focused proofs do not replace immediate-ACK subprocess, continuous-load, full schema/admin, or real
 multi-process join/rejoin qualification. Replicated S still needs an authenticated operational
 publisher; no automatic local clock/frontier expiry has been introduced.
+
+## Operational history retirement
+
+The authenticated GraphQL `/admin` mutation is the maintained publisher of replicated S:
+
+```graphql
+mutation {
+  retirePostingHistory(floor: 123) {
+    floor
+    response {
+      code
+      message
+    }
+  }
+}
+```
+
+It applies to the addressed Alpha's Raft group through the existing ordered proposal/response path.
+It requires a configured `--security 'token=...'` and the matching `X-Dgraph-AuthToken`, in addition
+to the existing IP whitelist, Guardian-of-Galaxy middleware and admin audit logging. There is no
+unconfigured-OSS authentication bypass for this operation. Multi-group operators must explicitly
+request each group's floor and handle independent eligibility errors.
+
+This request authorizes expiry of reads and mutation retries at or below the selected floor. It is
+an operator decision; no local clock, read pin, physical floor, or inferred latest timestamp selects
+it. It must not regress S and must strictly precede the preceding ordered assigned frontier and all
+unresolved starts. CommitNow's Zero response may precede Alpha's ordered Delta: an ineligible
+request returns an error without effects and can be retried with the same explicitly chosen floor.
+An exact current floor is an idempotent success. A successful transition forces certification before
+its response, while physical P can still lag active readers. Existing admitted readers drain before
+physical reclamation; future old requests fail before cache or storage access.
+
+`raftproduction/verify_history_floor.py` exercises the actual authenticated public API,
+missing/wrong credentials, too-high and regressing floors, delayed eligibility, a successful floor
+response followed by adjacent Alpha+Zero SIGKILL, nonzero certificate recovery, stale read refusal
+and an admissible fresh exact-index query. Its failed attempts remain in diagnostic artifacts. This
+is process-crash correctness evidence, not a power-loss or performance qualification.

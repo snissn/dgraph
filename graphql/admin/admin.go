@@ -292,6 +292,11 @@ const (
 		response: Response
 	}
 
+	type RetirePostingHistoryPayload {
+		response: Response
+		floor: UInt64!
+	}
+
 	type Config {
 		cacheMb: Float
 	}
@@ -414,6 +419,13 @@ const (
 		config(input: ConfigInput!): ConfigPayload
 
 		"""
+		Explicitly retire transaction retry and read history through this floor in
+		the addressed Alpha group. Requires an admin token. The ordered request
+		must precede the assigned frontier and every unresolved transaction.
+		"""
+		retirePostingHistory(floor: UInt64!): RetirePostingHistoryPayload
+
+		"""
 		Remove a node from the cluster.
 		"""
 		removeNode(input: RemoveNodeInput!): RemoveNodePayload
@@ -497,21 +509,22 @@ var (
 		"getGroup":       minimalAdminQryMWs,
 	}
 	adminMutationMWConfig = map[string]resolve.MutationMiddlewares{
-		"backup":          gogMutMWs,
-		"config":          gogMutMWs,
-		"draining":        gogMutMWs,
-		"export":          stdAdminMutMWs, // dgraph handles the export for other namespaces by superadmin
-		"login":           minimalAdminMutMWs,
-		"restore":         gogMutMWs,
-		"restoreTenant":   gogMutMWs,
-		"shutdown":        gogMutMWs,
-		"removeNode":      gogMutMWs,
-		"moveTablet":      gogMutMWs,
-		"assign":          gogMutMWs,
-		"updateGQLSchema": stdAdminMutMWs,
-		"addNamespace":    gogAclMutMWs,
-		"deleteNamespace": gogAclMutMWs,
-		"resetPassword":   gogAclMutMWs,
+		"backup":               gogMutMWs,
+		"config":               gogMutMWs,
+		"retirePostingHistory": gogMutMWs,
+		"draining":             gogMutMWs,
+		"export":               stdAdminMutMWs, // dgraph handles the export for other namespaces by superadmin
+		"login":                minimalAdminMutMWs,
+		"restore":              gogMutMWs,
+		"restoreTenant":        gogMutMWs,
+		"shutdown":             gogMutMWs,
+		"removeNode":           gogMutMWs,
+		"moveTablet":           gogMutMWs,
+		"assign":               gogMutMWs,
+		"updateGQLSchema":      stdAdminMutMWs,
+		"addNamespace":         gogAclMutMWs,
+		"deleteNamespace":      gogAclMutMWs,
+		"resetPassword":        gogAclMutMWs,
 		// for queries and mutations related to User/Group, dgraph handles Guardian auth,
 		// so no need to apply GuardianAuth Middleware
 		"addUser":     minimalAdminMutMWs,
@@ -729,20 +742,21 @@ func newAdminResolver(
 
 func newAdminResolverFactory() resolve.ResolverFactory {
 	adminMutationResolvers := map[string]resolve.MutationResolverFunc{
-		"addNamespace":    resolveAddNamespace,
-		"backup":          resolveBackup,
-		"config":          resolveUpdateConfig,
-		"deleteNamespace": resolveDeleteNamespace,
-		"draining":        resolveDraining,
-		"export":          resolveExport,
-		"login":           resolveLogin,
-		"resetPassword":   resolveResetPassword,
-		"restore":         resolveRestore,
-		"shutdown":        resolveShutdown,
-		"removeNode":      resolveRemoveNode,
-		"moveTablet":      resolveMoveTablet,
-		"assign":          resolveAssign,
-		"restoreTenant":   resolveTenantRestore,
+		"addNamespace":         resolveAddNamespace,
+		"backup":               resolveBackup,
+		"config":               resolveUpdateConfig,
+		"retirePostingHistory": resolveRetirePostingHistory,
+		"deleteNamespace":      resolveDeleteNamespace,
+		"draining":             resolveDraining,
+		"export":               resolveExport,
+		"login":                resolveLogin,
+		"resetPassword":        resolveResetPassword,
+		"restore":              resolveRestore,
+		"shutdown":             resolveShutdown,
+		"removeNode":           resolveRemoveNode,
+		"moveTablet":           resolveMoveTablet,
+		"assign":               resolveAssign,
+		"restoreTenant":        resolveTenantRestore,
 	}
 
 	rf := resolverFactoryWithErrorMsg(errResolverNotFound).

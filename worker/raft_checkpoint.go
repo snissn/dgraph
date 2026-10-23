@@ -128,6 +128,9 @@ func raftProposalIdentity(p *pb.Proposal) (uint64, string, error) {
 	if canonical.Delta != nil {
 		start = canonical.Delta.MaxAssigned
 	}
+	if canonical.PostingFloor != nil {
+		start = canonical.PostingFloor.Floor
+	}
 	sum := sha256.Sum256(data)
 	return start, hex.EncodeToString(sum[:]), nil
 }
@@ -382,7 +385,7 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 		return nil
 	}
 	last := atomic.LoadUint64(&n.raftCertifiedIndex)
-	force = force || n.raftConfStateDirty
+	force = force || n.raftConfStateDirty || n.raftFloorDirty
 	if index < last || (!force && index-last < raftCheckpointEvery && atomic.LoadUint64(&n.raftRecoveryBytes) < raftCheckpointBytes) {
 		return nil
 	}
@@ -457,7 +460,8 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 	atomic.AddUint64(&n.raftRecoveryBytes, ^(n.raftAppliedBytes - 1))
 	n.raftAppliedBytes = 0
 	n.raftConfStateDirty = false
-	glog.Infof("TreeDB raft_checkpoint certified: index=%d oracle=%d pending=%d", index, c.OracleMaxAssigned, c.PendingTransactions)
+	n.raftFloorDirty = false
+	glog.Infof("TreeDB raft_checkpoint certified: index=%d oracle=%d pending=%d semantic_floor=%d physical_floor=%d", index, c.OracleMaxAssigned, c.PendingTransactions, c.SemanticFloor, c.PhysicalFloor)
 	return nil
 }
 
