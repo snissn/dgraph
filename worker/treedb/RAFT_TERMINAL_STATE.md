@@ -94,34 +94,52 @@ separate.
 
 `raftproduction/verify_retention_resources.py` is a bounded, actual-server diagnostic driver; landed
 source does not mean a resource campaign has run. It uses public HTTP operations, records the
-binary/driver hashes, resolved Alpha/Zero `HardSync:true`, COW activation, sampled process RSS and
-per-process high water, allocated/logical postings/WAL/private-temporary file bytes, raw
-`/debug/store`, and archived CURRENT-selected certificates. Default gates are combined sampled RSS
-<=4096 MiB, server plus scratch allocated file bytes <=8192 MiB, floor ACK including eligibility
-retries <=60 seconds, orderly Alpha Close <=30 seconds, post-retirement terminal rows <=4096 and
-retry signatures <=128, plus the source pending and metadata limits above. These are configurable
-diagnostic budgets, not promised product bounds. Eight rounds of 128 fixed-key overwrites include
-one newer pending transaction in each explicit operator-selected S certificate, low traffic, and
-pending commit after orderly Alpha reopen while Zero stays alive. The operator-supplied source
-revision is recorded, not independently attested. Sampling perturbs latency and can miss transient
-RSS or scratch peaks; schema rebuild and worst-case index/delete fanout are outside this workload.
+binary/driver/observer hashes, actual server Go buildinfo, a clean build/source manifest, resolved
+Alpha/Zero `HardSync:true`, COW activation, sampled process RSS and per-process high water,
+allocated/logical postings/WAL/private-temporary file bytes, raw `/debug/store`, and archived
+CURRENT-selected certificates. Default gates are combined sampled RSS <=4096 MiB, server plus
+scratch allocated file bytes <=8192 MiB, floor ACK including eligibility retries <=60 seconds,
+orderly Alpha Close <=30 seconds, post-retirement terminal rows <=4096 and retry signatures <=128,
+plus the source pending and metadata limits above. These are configurable diagnostic budgets, not
+promised product bounds. Eight rounds of 128 fixed-key overwrites include one newer pending
+transaction in each explicit operator-selected S certificate, low traffic, and pending commit after
+orderly Alpha reopen while Zero stays alive. The offline observer reuses the maintained livebench
+exact configuration/store parsers and checks the clean Dgraph revision against the actual binary's
+VCS buildinfo. The manifest binds the binary hash and both source trees; Go buildinfo records the
+local Gomap replacement path, not its compiled tree SHA, so this remains a build-procedure
+observation rather than reproducible-build proof. Alpha remains attached to the periodic memory
+sampler throughout orderly Close, with an explicit `closing` state. Sampling perturbs latency and
+can miss transient RSS or scratch peaks; schema rebuild and worst-case index/delete fanout are
+outside this workload.
 
-For example, from the Dgraph checkout, with an already built, source-qualified binary and an
-exclusive runtime grant:
+First build the small [offline observer](raftproduction/resourcewitness/README.md) and capture its
+immutable build/source manifest using clean, committed source. For example, from the Dgraph
+checkout, with prebuilt binaries, that manifest and an exclusive runtime grant:
 
 ```sh
 python3 worker/treedb/raftproduction/verify_retention_resources.py \
-  --dgraph-bin /absolute/path/to/dgraph --source-revision FULL_BUILD_SHA \
+  --dgraph-bin /absolute/path/to/dgraph \
+  --witness-bin /absolute/path/to/resource-witness \
+  --source-manifest /absolute/path/to/resource-build-source.json \
   --out /mnt/fast4tb/retention-resources-UNIQUE \
   --maintenance-wait-seconds 310 --require-physical-floor-progress
 ```
 
-The optional wait observes existing five-minute logical posting-history maintenance and requires a
-nonzero certified physical P, including a pass already completed during the workload. It does not
-invoke physical value-log GC or compaction: this source has no public HTTP/admin trigger for
+The optional wait observes existing five-minute logical posting-history maintenance. The
+`--require-physical-floor-progress` gate requires certified P **after this wait** to exceed P before
+the wait; it fails if an earlier pass already reached S. Use `--require-nonzero-physical-floor`
+instead when any completed pass, including one during the workload, is the intended control. A
+310-second wait allows one scheduled opportunity; it does not guarantee timely completion. Neither
+flag invokes physical value-log GC or compaction: this source has no public HTTP/admin trigger for
 `RunPostingStoreGC` or `CompactStorage`. Their cycle results remain explicitly unavailable. Live
 Raft debt counters likewise remain null; certified retry/pending/terminal counts and observed WAL
 file bytes are separate evidence. `result.json`, `samples.jsonl`, per-phase store output, logs and
 certificate copies preserve the run, including failed gates. Even a successful finite run always
 reports `equilibrium_qualified=false`; it establishes neither sustained lifetime equilibrium,
 physical GC/compaction closure, power-loss durability nor performance acceptance.
+
+Hardlink identities are deduplicated within each sampled disk component, not across components;
+external symlink targets and directory blocks are excluded. `retry_input_bytes` sums certified
+signature input sizes and is not live WAL debt. Current/previous root selectability, WAL reclamation
+and sustained physical storage equilibrium require separate retained acceptance evidence. This
+bounded diagnostic does not supply those gates.

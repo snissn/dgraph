@@ -31,6 +31,14 @@ CAPS = {"pending_rows": 4096, "pending_charge_bytes": 64 * MIB,
         "recovery_input_entries": 4096, "recovery_input_bytes": 64 * MIB}
 
 
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda: stream.read(MIB), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def disk_usage(path):
     """Allocated/logical file bytes; deduplicate hardlinks within this component.
 
@@ -125,7 +133,9 @@ def certificate(postings, archive):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dgraph-bin", required=True)
-    parser.add_argument("--source-revision", required=True, help="operator-supplied build revision; not independently attested")
+    parser.add_argument("--witness-bin", required=True, help="prebuilt resourcewitness observer; never built by this driver")
+    parser.add_argument("--source-manifest", required=True, help="immutable resourcewitness manifest captured with the clean build source")
+    parser.add_argument("--source-revision", help="optional expected revision, checked against actual Go buildinfo; not provenance authority")
     parser.add_argument("--out", required=True, help="new artifact/data directory, preferably under /mnt/fast4tb")
     parser.add_argument("--zero-offset", type=int, default=46000)
     parser.add_argument("--alpha-offset", type=int, default=47000)
@@ -139,7 +149,9 @@ def main():
     parser.add_argument("--maintenance-wait-seconds", type=float, default=0,
                         help=">=310 observes one scheduled logical-history maintenance opportunity")
     parser.add_argument("--require-physical-floor-progress", action="store_true",
-                        help="requires >=310s wait; logical P progress is distinct from GC/compaction")
+                        help="requires certified P AFTER wait > P BEFORE wait (wait>=310s); distinct from GC/compaction")
+    parser.add_argument("--require-nonzero-physical-floor", action="store_true",
+                        help="requires any completed certified logical maintenance pass, including before the wait")
     parser.add_argument("--max-wall-seconds", type=float, default=1200,
                         help="workflow budget checked between calls; startup/HTTP/cleanup also have bounded individual deadlines")
     parser.add_argument("--max-rss-mib", type=int, default=4096, help="combined sampled Alpha+Zero RSS budget")
@@ -173,15 +185,20 @@ def main():
         if offset < 0 or highest + offset > 65535:
             parser.error("offset ports must fit 1..65535")
     binary, out = Path(args.dgraph_bin).resolve(), Path(args.out).resolve()
+    witness_binary = Path(args.witness_bin).resolve()
     out.mkdir(parents=True, exist_ok=False)
     archive = out / "certificates"
     archive.mkdir()
     scratch = out / "tmp"
     scratch.mkdir()
+    source_manifest = out / "source-manifest.json"
+    with source_manifest.open("xb") as saved:
+        saved.write(Path(args.source_manifest).read_bytes())
     pending_age_seconds = math.ceil(args.max_wall_seconds) + 120
     result = {"success": False, "diagnostic_only": True, "equilibrium_qualified": False,
-              "configuration": vars(args), "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-              "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              "configuration": vars(args), "binary_sha256": file_sha256(binary),
+              "driver_sha256": file_sha256(__file__), "witness_binary_sha256": file_sha256(witness_binary),
+              "source_manifest_sha256": file_sha256(source_manifest), "runtime_witnesses": [],
               "pending_age_limit_seconds": pending_age_seconds,
               "configured_source_caps": CAPS, "commands": [], "phases": [], "rounds": [],
               "gates": {"combined_sampled_rss_bytes": args.max_rss_mib * MIB,
@@ -190,7 +207,8 @@ def main():
                         "post_retire_retry_signatures": args.max_post_retire_retries,
                         "floor_ack_seconds": args.max_floor_seconds,
                         "orderly_close_seconds": args.max_close_seconds,
-                        "physical_floor_progress_required": args.require_physical_floor_progress},
+                        "physical_floor_progress_during_wait_required": args.require_physical_floor_progress,
+                        "nonzero_physical_floor_required": args.require_nonzero_physical_floor},
               "limitations": ["No physical GC or CompactStorage public HTTP/admin endpoint exists in this source; neither cycle is invoked.",
                   "Live Raft recovery debt has no public metric; null is unavailable, not zero. Certified counters exclude the live suffix.",
                   "RSS is sampled; VmHWM is per-process kernel high water. Disk walks are non-atomic, include persistent value logs, exclude directory blocks.",
@@ -200,17 +218,27 @@ def main():
                   "Private server TMPDIR is sampled separately; artifact/log/certificate-copy bytes are outside the server-and-scratch disk budget.",
                   "Resource sampling and /debug/store walks perturb the run; observer buffers scale with files/metadata. ACK samples are diagnostic, not throughput acceptance.",
                   "Operator selects S from this isolated client's completed transactions; concurrent external clients are unsupported.",
+                  "Go buildinfo attests Dgraph revision/modified and the Gomap replacement path, not the compiled local replacement tree. The clean-source manifest is a build-procedure observation, not reproducible-build proof.",
+                  "An exact build/source manifest and immutable hashes bind observations; they do not authenticate who built the supplied binaries or prove compiler integrity.",
                   "S=0 history growth and the 65536-row new-prewrite SOFT limit are not hard terminal/heap/WAL caps."],
               "physical_gc": {"available": False, "invoked": False},
               "physical_compaction": {"available": False, "invoked": False},
               "logical_maintenance": {"schedule_seconds": 300, "wait_seconds": args.maintenance_wait_seconds}}
     token, base = "retention-resource-diagnostic", f"http://localhost:{8080 + args.alpha_offset}"
     zero = alpha = None
+    alpha_state, alpha_config = "absent", None
     logs, failures = [], []
     lock, finished = threading.Lock(), threading.Event()
     began = time.monotonic()
     peak_rss = peak_allocated = samples = 0
     sample_log = (out / "samples.jsonl").open("x")
+
+    def witness(*arguments):
+        observed = subprocess.run([str(witness_binary), *arguments], capture_output=True,
+                                  text=True, timeout=30, check=False)
+        if observed.returncode:
+            raise RuntimeError(f"resourcewitness rejected evidence: {observed.stderr.strip()}")
+        return json.loads(observed.stdout)
 
     def check():
         if time.monotonic() - began > args.max_wall_seconds:
@@ -219,7 +247,7 @@ def main():
             if failures:
                 raise RuntimeError(failures[0])
         for name, proc in (("alpha", alpha), ("zero", zero)):
-            if proc is not None and proc.poll() is not None:
+            if proc is not None and proc.poll() is not None and not (name == "alpha" and alpha_state == "closing"):
                 raise RuntimeError(f"{name} exited unexpectedly: {proc.returncode}")
 
     def sample(label):
@@ -234,7 +262,7 @@ def main():
             allocated = sum(item["allocated_bytes"] for item in disk.values())
             peak_rss, peak_allocated = max(peak_rss, rss), max(peak_allocated, allocated)
             row = {"phase": label, "elapsed_seconds": time.monotonic() - began,
-                   "memory": memory, "disk": disk, "certificate": cert,
+                   "memory": memory, "alpha_state": alpha_state, "disk": disk, "certificate": cert,
                    "combined_rss_bytes": rss, "allocated_server_and_scratch_file_bytes": allocated,
                    "collection_seconds": time.monotonic() - started}
             sample_log.write(json.dumps(row) + "\n")
@@ -257,11 +285,16 @@ def main():
         check()
         try:
             with urllib.request.urlopen(base + "/debug/store", timeout=10) as response:
-                stats = response.read(16 * MIB).decode()
-            (out / (label + "-store.txt")).write_text(stats)
-            if ("durability:raft_checkpoint" not in stats or "backend:treedb" not in stats or
-                    "treedb.cache.memtable_mode:cow_ordered" not in stats):
-                raise RuntimeError("/debug/store runtime selection mismatch")
+                raw_stats = response.read(16 * MIB + 1)
+            if len(raw_stats) > 16 * MIB:
+                raise RuntimeError("/debug/store exceeds observer response bound; truncated witnesses are refused")
+            stats = raw_stats.decode()
+            store_path = out / (label + "-store.txt")
+            with store_path.open("x") as saved:
+                saved.write(stats)
+            observed = witness("--mode=runtime", "--config-log", str(alpha_config), "--store", str(store_path))
+            result["runtime_witnesses"].append({"phase": label, "role": "alpha", "pid": alpha.pid,
+                                                 "command": alpha.args, **observed})
         except OSError as error:
             raise RuntimeError(f"/debug/store unavailable: {error}") from error
         result["phases"].append(row)
@@ -284,17 +317,25 @@ def main():
                                 cwd=out, env={**os.environ, "TMPDIR": str(scratch)})
 
     def start_alpha(label):
-        nonlocal alpha
-        alpha = launch("alpha-" + label, ["alpha", "--zero", f"localhost:{5080 + args.zero_offset}",
+        nonlocal alpha, alpha_state, alpha_config
+        process = launch("alpha-" + label, ["alpha", "--zero", f"localhost:{5080 + args.zero_offset}",
             "--postings", str(out / "p"), "--wal", str(out / "w"), f"--port_offset={args.alpha_offset}",
             "--tmp", str(scratch / "alpha"), "--limit", f"txn-abort-after={pending_age_seconds}s",
             "--survive=filesystem", "--security", f"token={token}", "--posting-store",
             "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true"])
+        with lock:
+            alpha, alpha_state = process, "running"
         healthy(alpha, base)
         for role, filename in (("zero", "zero.log"), ("alpha", "alpha-" + label + ".log")):
-            witness = re.search(r"x\.WorkerConfig: .*HardSync:true", (out / filename).read_text())
-            if witness is None:
-                raise RuntimeError(f"{role} missing resolved HardSync:true configuration witness")
+            retained = out / (label + "-" + role + ".config.log")
+            with retained.open("xb") as saved:
+                saved.write((out / filename).read_bytes())
+            observed = witness("--mode=runtime", "--config-log", str(retained))
+            process = alpha if role == "alpha" else zero
+            result["runtime_witnesses"].append({"phase": label, "role": role, "pid": process.pid,
+                                                 "command": process.args, **observed})
+            if role == "alpha":
+                alpha_config = retained
 
     def call(path, body, content="application/json", allow_error=False):
         check()
@@ -336,8 +377,12 @@ def main():
                 "response": response, "before": before["certificate"], "after": cert}
 
     def close_alpha(label):
-        nonlocal alpha
-        process, alpha = alpha, None
+        nonlocal alpha, alpha_state
+        with lock:
+            process, alpha_state = alpha, "closing"
+        # Keep alpha observable throughout SIGINT/drain/Close. Clearing it here
+        # would silently omit this process's potentially largest RSS interval.
+        sample(label + "-begin")
         started = time.monotonic()
         process.send_signal(signal.SIGINT)
         try:
@@ -348,6 +393,8 @@ def main():
             raise RuntimeError("orderly Alpha Close exceeded deadline; forced cleanup is not success") from error
         elapsed = time.monotonic() - started
         result[label] = {"seconds": elapsed, "exit_code": code}
+        with lock:
+            alpha, alpha_state = None, "exited"
         if code != 0:
             raise RuntimeError(f"orderly Alpha Close returned {code}")
         return sample(label)["certificate"]
@@ -360,6 +407,12 @@ def main():
 
     sampler = threading.Thread(target=periodic, name="resource-sampler", daemon=True)
     try:
+        result["source_packet"] = witness("--mode=verify", "--server", str(binary),
+                                           "--manifest", str(source_manifest))
+        if result["source_packet"]["server_sha256"] != result["binary_sha256"]:
+            raise RuntimeError("server hash differs from verified source packet")
+        if args.source_revision and args.source_revision != result["source_packet"]["vcs_revision"]:
+            raise RuntimeError("expected source revision differs from actual server buildinfo")
         zero = launch("zero", ["zero", "--wal", str(out / "zw"), "--replicas=1",
                               f"--port_offset={args.zero_offset}", "--survive=filesystem"])
         healthy(zero, f"http://localhost:{6080 + args.zero_offset}")
@@ -408,11 +461,10 @@ def main():
         result["logical_maintenance"].update({"physical_floor_before": old_p, "physical_floor_after": new_p,
                                              "observed_progress_during_wait": new_p > old_p,
                                              "nonzero_physical_floor_observed": new_p > 0})
-        # Maintenance may already have run during a long workload. A nonzero
-        # certified P is sufficient evidence of a completed pass; never require
-        # a second pass when P has already reached S.
-        if args.require_physical_floor_progress and new_p == 0:
-            raise RuntimeError("scheduled logical posting maintenance showed no certified P progress")
+        if args.require_physical_floor_progress and new_p <= old_p:
+            raise RuntimeError("certified P did not advance during the requested maintenance wait (including if already at S)")
+        if args.require_nonzero_physical_floor and new_p == 0:
+            raise RuntimeError("no completed certified logical posting maintenance pass was observed")
         closed_cert = close_alpha("orderly-close")
         if closed_cert is None or closed_cert["pending_rows"] != 1:
             raise RuntimeError("Close failed to preserve the pending overlay certificate")
@@ -437,8 +489,6 @@ def main():
         verify_values(expected)
         close_alpha("final-orderly-close")
         check()
-        if hashlib.sha256(binary.read_bytes()).hexdigest() != result["binary_sha256"]:
-            raise RuntimeError("measured binary changed during the diagnostic")
         result["success"] = True
     except Exception as error:
         result["error"] = repr(error)
@@ -446,6 +496,18 @@ def main():
         finished.set()
         if sampler.is_alive():
             sampler.join(timeout=30)
+        try:
+            if file_sha256(witness_binary) != result["witness_binary_sha256"]:
+                raise RuntimeError("witness binary changed during the diagnostic")
+            if file_sha256(source_manifest) != result["source_manifest_sha256"]:
+                raise RuntimeError("retained source manifest changed during the diagnostic")
+            final_source = witness("--mode=verify", "--server", str(binary), "--manifest", str(source_manifest))
+            if final_source != result.get("source_packet"):
+                raise RuntimeError("source/binary packet changed or was never verified")
+            result["source_packet_verified_after_run"] = True
+        except Exception as error:
+            result["source_packet_verified_after_run"] = False
+            failures.append(f"final provenance check failed: {error!r}")
         # Cleanup fallback may kill a hung process; it never establishes a
         # successful orderly-close gate or a power-loss durability result.
         stop(alpha)
