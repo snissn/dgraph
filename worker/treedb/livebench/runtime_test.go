@@ -121,11 +121,25 @@ func TestRuntimeIdentityRequiresActualStartupAndRestartRoutes(t *testing.T) {
 	}
 }
 
-func TestUnsupportedRecoveryPolicyCannotBeReported(t *testing.T) {
+func TestCheckpointPolicyRequiresFilesystemAndCOWBeforeAcceptance(t *testing.T) {
 	r := validResult(t, "treedb", "durable")
-	r.Config.TreeDBPolicy = "raft_checkpoint"
+	r.Config.SurvivalMode, r.Config.TreeDBPolicy, r.Config.TreeDBMemtable = "filesystem", "raft_checkpoint", "cow_ordered"
+	r.Config.PostingStore = strings.Replace(r.Config.PostingStore, "durability=durable", "durability=raft_checkpoint", 1)
+	r.Validation.DurabilityObserved = "raft_checkpoint"
+	r.Validation.Runtime = runtimeFixture(r.Config)
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"process", ""} {
+		bad := r
+		bad.Config.SurvivalMode = mode
+		if err := bad.Validate(); err == nil {
+			t.Fatal("checkpoint with weak/missing survival accepted")
+		}
+	}
+	r.Validation.Runtime[3].Memtable = "btree"
 	if err := r.Validate(); err == nil {
-		t.Fatal("unsupported server recovery policy accepted")
+		t.Fatal("restart COW mismatch accepted")
 	}
 }
 

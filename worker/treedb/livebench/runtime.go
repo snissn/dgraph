@@ -184,7 +184,7 @@ func validateRuntime(r Result) error {
 	if c.Backend == "badger" && (c.TreeDBPolicy != "" || c.TreeDBMemtable != "") {
 		return errors.New("badger config contains TreeDB selection")
 	}
-	if c.Backend == "treedb" && c.TreeDBPolicy != "store_wal" {
+	if c.Backend == "treedb" && c.TreeDBPolicy != "store_wal" && c.TreeDBPolicy != "raft_checkpoint" {
 		return errors.New("explicit TreeDB recovery policy is required")
 	}
 	backend, profile, err := expectedObserved(c)

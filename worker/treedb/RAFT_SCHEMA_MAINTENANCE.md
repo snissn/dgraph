@@ -33,12 +33,13 @@ The maintained `rebuilder` callback, posting-list decoder, index mutation code a
 rollup produce index contents. A store-neutral snapshot scan feeds those algorithms. Chunks of 256
 source lists are aggregated in temporary Badger at unique scratch timestamps, then merged into
 complete posting lists at the schema transition timestamp. Reverse edges and both forward/reverse
-count indexes reuse their maintained builders. Scalar-to-list conversion first copies complete
-source main/split contents into scratch, preserving language-tagged and untouched values while its
-conversion delta changes the scalar fingerprint. Scratch storage has no recovery authority: no
-certificate references it, it is never imported on restart, and replay recomputes it from the
-selected certified root plus retained ordered proposal. Scratch memory, disk and I/O scale with the
-rebuilt predicate; the 256-list chunk is not a constant bound on an individual list or token's size.
+count indexes reuse their maintained builders. Scalar conversions read complete logical main/split
+contents and construct a replacement image in scratch, preserving language identities and facets
+while converting values and recomputing their fingerprints. Scratch storage has no recovery
+authority: no certificate references it, it is never imported on restart, and replay recomputes it
+from the selected certified root plus retained ordered proposal. Scratch memory, disk and I/O scale
+with the rebuilt predicate; the 256-list chunk is not a constant bound on an individual list or
+token's size.
 
 Every final write callback drains before the builder returns. Only after that and the final schema
 write succeeds is the complete query schema published. There is no background builder, new Raft
