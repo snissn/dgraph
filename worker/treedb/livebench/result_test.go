@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -56,11 +57,17 @@ func validResult(backend, class string) Result {
 			metrics[name] = Metric{Unit: "count", Source: "TreeDB test diagnostic", Reason: "TreeDB-only diagnostic"}
 		}
 	}
-	return Result{SchemaVersion: SchemaVersion, RunID: backend + "-" + class, Repeat: 1,
-		Config:       Config{Backend: backend, DurabilityClass: class, PostingStore: posting, Badger: badger, DatasetNodes: 10, Concurrency: 1, WarmupOps: 1, TimedOps: 10, QueryMix: map[string]int{"read": 80, "write": 20}, Topology: "single-zero-single-alpha", Seed: 42},
-		Context:      Context{DgraphSHA: "abc", GomapVersion: "v1", GoVersion: "go1", Host: "host", Kernel: "kernel", CPU: "cpu", TotalRAMBytes: 1024, Storage: StorageContext{Scope: "artifact_and_posting", Source: "/dev/test", Model: "test", SizeBytes: 2048, Filesystem: "ext4", Mountpoint: "/mnt"}, Environment: map[string]string{"GOWORK": "off", "TMPDIR": "/tmp", "GOMAXPROCS": "", "GOFLAGS": ""}, ExactCommand: []string{"bench"}, RawPath: "/raw"},
+	r := Result{SchemaVersion: SchemaVersion, RunID: backend + "-" + class, Repeat: 1,
+		Config:       Config{SurvivalMode: "process", Backend: backend, DurabilityClass: class, PostingStore: posting, Badger: badger, DatasetNodes: 10, Concurrency: 1, WarmupOps: 1, TimedOps: 10, QueryMix: map[string]int{"read": 80, "write": 20}, Topology: "single-zero-single-alpha", Seed: 42},
+		Context:      Context{BinarySHA256: strings.Repeat("a", 64), BinaryBuildInfo: "test build identity", DgraphSHA: "abc", GomapVersion: "v1", GoVersion: "go1", Host: "host", Kernel: "kernel", CPU: "cpu", TotalRAMBytes: 1024, Storage: StorageContext{Scope: "artifact_and_posting", Source: "/dev/test", Model: "test", SizeBytes: 2048, Filesystem: "ext4", Mountpoint: "/mnt"}, Environment: map[string]string{"GOWORK": "off", "TMPDIR": "/tmp", "GOMAXPROCS": "", "GOFLAGS": ""}, ExactCommand: []string{"bench"}, RawPath: "/raw"},
 		SetupStarted: now, SetupFinished: now.Add(time.Second), TimedStarted: now.Add(2 * time.Second), TimedFinished: now.Add(3 * time.Second), Throughput: 10, LatencyMS: map[string]float64{"p50": 1, "p95": 2, "p99": 3}, Metrics: metrics,
 		Validation: Validation{BackendObserved: backend, DurabilityObserved: observed, SchemaOK: true, PostingChecksum: "same", NodeCount: 12, RestartOK: true, UnsupportedOK: true}}
+	if backend == "treedb" {
+		r.Config.TreeDBPolicy = "store_wal"
+	}
+	r.Validation.Runtime = runtimeFixture(r.Config)
+	return r
+
 }
 
 func TestExpectedObservedUsesCanonicalTreeDBProfileIntegrity(t *testing.T) {
@@ -350,4 +357,21 @@ func TestValidateSetRejectsEndpointDiagnosticEvenWithOnlyCPUProfile(t *testing.T
 	if err := ValidateSet(set, 1); err == nil || !strings.Contains(err.Error(), "is excluded: endpoint diagnostic") {
 		t.Fatalf("CPU-only endpoint result admitted to matrix: %v", err)
 	}
+}
+
+func runtimeFixture(c Config) []RuntimeIdentity {
+	var result []RuntimeIdentity
+	for _, phase := range []string{"startup", "after_alpha_restart"} {
+		for _, role := range []string{"zero", "alpha"} {
+			hardSync := c.SurvivalMode == "filesystem"
+			r := RuntimeIdentity{Process: role, Phase: phase, PID: 1, Command: []string{"dgraph", role, "--survive=" + c.SurvivalMode}, SurvivalMode: c.SurvivalMode, HardSync: hardSync, ConfigWitness: "x.WorkerConfig: {HardSync:" + strconv.FormatBool(hardSync) + "}", ConfigLogSHA256: strings.Repeat("a", 64)}
+			if role == "alpha" {
+				r.Backend, r.Durability, _ = expectedObserved(c)
+				r.Memtable = "cow_ordered"
+				r.StoreWitnessSHA256 = strings.Repeat("b", 64)
+			}
+			result = append(result, r)
+		}
+	}
+	return result
 }

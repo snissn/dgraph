@@ -145,7 +145,12 @@ func TestIssue29LegacyArtifactsRemainReportable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report != string(want) {
-		t.Fatal("schema-v3 JSON and retained profiles did not reproduce the committed report byte for byte")
+	if strings.Count(report, legacySurvivalErratum) != 1 {
+		t.Fatal("legacy survival erratum must appear exactly once")
+	}
+	// Preserve every original measured value, gate and counter-coverage note.
+	// Only the explicit later survival clarification is added by the new reader.
+	if strings.Replace(report, legacySurvivalErratum, "", 1) != string(want) {
+		t.Fatal("schema-v3 report changed beyond the explicit survival erratum")
 	}
 }

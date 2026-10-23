@@ -227,3 +227,36 @@ Timed rows include Badger managed write/read/all-version baselines and TreeDB `S
 `Stats` primitives. The posting package separately benchmarks direct gomap MVCC against
 `posting.TreeDBStore`. Skipped rows document later-tier contracts TreeDB cannot yet run: TTL, stream
 export/import, subscriptions, and encryption/key registry support.
+
+### Explicit durability benchmark identity
+
+The canonical `run_durability_ab.sh` still runs Badger/TreeDB × relaxed/durable × three repeats with
+the same gRPC workload and 3% durable throughput gate. New schema-v5 rows explicitly pass
+`--survive` to both Zero and Alpha and retain each process's resolved redacted `HardSync`
+configuration. Alpha posting backend, profile and memtable are checked before setup/timing and after
+restart. The measured executable SHA256 and Go build information are recorded and the binary is
+checked again before result publication. Raw configuration/store witnesses are immutable
+`runtime-<phase>-<process>.*` snapshots; their hashes are in the row.
+
+`SURVIVE=process` preserves the historical default. Use `SURVIVE=filesystem` for a separate matched
+filesystem-survival matrix. Survival participates in the workload fingerprint, so the report refuses
+pooling the two profiles. Existing schema-v3/v4 rows are readable unchanged: their `durable` labels
+describe posting store sync and the script omitted `--survive`, using process survival. They do not
+establish filesystem or complete RPC power-loss durability. Report rendering adds this erratum
+without editing the old artifacts.
+
+`REQUIRE_TREEDB_MEMTABLE=cow_ordered` refuses a TreeDB arm unless its actual startup and restart
+stats confirm COW. This checks the server binary's selection; it does not silently change that
+binary's memtable configuration. For the Raft-owned durable candidate, additionally set
+`TREEDB_DURABLE_POLICY=raft_checkpoint` and `SURVIVE=filesystem`. Only the TreeDB durable arm
+changes recovery owner; its relaxed arm keeps the normal relaxed posting WAL and Badger is
+unchanged. An older server lacking the candidate selector fails before measurement. Each repeat of a
+cell must use the same policy and requested memtable. Defaults do not enable the candidate.
+
+A schema-v5 row is a source/runtime-bound benchmark result, not a durability certificate. The
+existing restart timer ends at Alpha health after a **clean** Alpha restart; Zero remains running.
+Runtime observers execute outside that timer and the workload timer. Immediate-ACK SIGKILL,
+accepted-install recovery, real peer changes and filesystem power-loss qualification remain separate
+required proofs. CPU/endpoint/operation/storage diagnostics remain excluded from accepted timing
+rows. Microbenchmark stdout/stderr are retained separately; `raw.txt` remains a compatibility
+concatenation.

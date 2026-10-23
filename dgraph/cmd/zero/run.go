@@ -231,6 +231,7 @@ func run() {
 	}
 	glog.Infof("Setting Config to: %+v", opts)
 	x.WorkerConfig.Parse(Zero.Conf)
+	glog.Infof("x.WorkerConfig: %+v", x.WorkerConfig)
 
 	if opts.numReplicas < 0 || opts.numReplicas%2 == 0 {
 		log.Fatalf("ERROR: Number of replicas must be odd for consensus. Found: %d",

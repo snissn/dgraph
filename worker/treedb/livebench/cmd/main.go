@@ -32,6 +32,7 @@ import (
 )
 
 type options struct {
+	survival, treeDBPolicy, treeDBMemtable                                                                         string
 	dgraphBin, artifactDir, backend, class, cpuProfile, endpointDiagnostic, operationDiagnostic, storageDiagnostic string
 	repeat, dataset, concurrency, warmup, timed, zeroOffset, alphaOffset                                           int
 	profileSeconds                                                                                                 int
@@ -55,6 +56,9 @@ func main() {
 	flag.StringVar(&o.artifactDir, "artifact-dir", "", "new per-run artifact directory")
 	flag.StringVar(&o.backend, "backend", "", "badger or treedb")
 	flag.StringVar(&o.class, "durability", "", "relaxed or durable")
+	flag.StringVar(&o.survival, "survive", "process", "explicit Zero and Alpha survival: process or filesystem")
+	flag.StringVar(&o.treeDBPolicy, "treedb-durable-policy", "store_wal", "TreeDB durable arm recovery owner: store_wal or raft_checkpoint")
+	flag.StringVar(&o.treeDBMemtable, "require-treedb-memtable", "", "refuse startup/restart unless the observed TreeDB memtable matches")
 	flag.IntVar(&o.repeat, "repeat", 1, "one-based repeat number")
 	flag.IntVar(&o.dataset, "dataset-nodes", 500, "initial node count")
 	flag.IntVar(&o.concurrency, "concurrency", 4, "timed workload concurrency")
@@ -77,6 +81,9 @@ func main() {
 }
 
 func run(o options) (err error) {
+	if err := normalizeRuntimeOptions(&o); err != nil {
+		return err
+	}
 	if o.dgraphBin == "" || o.artifactDir == "" || (o.backend != "badger" && o.backend != "treedb") || (o.class != "relaxed" && o.class != "durable") {
 		return errors.New("--dgraph-bin, --artifact-dir, valid --backend, and valid --durability are required")
 	}
@@ -107,8 +114,8 @@ func run(o options) (err error) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	posting, badger := selectors(o.backend, o.class)
-	config := livebench.Config{Backend: o.backend, DurabilityClass: o.class, PostingStore: posting, Badger: badger, DatasetNodes: o.dataset, Concurrency: o.concurrency, WarmupOps: o.warmup, TimedOps: o.timed, QueryMix: map[string]int{"point_read": 60, "one_hop_read": 20, "write": 20}, Topology: "single-zero-single-alpha", Seed: o.seed}
+	posting, badger := runtimeSelectors(o)
+	config := runtimeConfig(o)
 	r := livebench.Result{SchemaVersion: livebench.SchemaVersion, RunID: fmt.Sprintf("%s-%s-r%d", o.backend, o.class, o.repeat), Repeat: o.repeat, Config: config, LatencyMS: map[string]float64{}, Metrics: map[string]livebench.Metric{}}
 	r.Context, err = collectContext(o)
 	if err != nil {
@@ -119,6 +126,8 @@ func run(o options) (err error) {
 
 	zeroArgs := []string{"zero", "--wal", filepath.Join(runDir, "zw"), "--replicas=1", fmt.Sprintf("--port_offset=%d", o.zeroOffset)}
 	alphaArgs := []string{"alpha", "--zero", fmt.Sprintf("localhost:%d", 5080+o.zeroOffset), "--postings", filepath.Join(runDir, "p"), "--wal", filepath.Join(runDir, "w"), fmt.Sprintf("--port_offset=%d", o.alphaOffset), "--posting-store", posting, "--badger", badger}
+	zeroArgs = append(zeroArgs, "--survive="+o.survival)
+	alphaArgs = append(alphaArgs, "--survive="+o.survival)
 	zero, err := start(o.dgraphBin, zeroArgs, filepath.Join(o.artifactDir, "zero.log"))
 	if err != nil {
 		return err
@@ -142,6 +151,10 @@ func run(o options) (err error) {
 	}
 	defer dg.Close()
 
+	r.Validation.Runtime, err = captureRuntime(o, "startup", zero, alpha, httpBase)
+	if err != nil {
+		return fmt.Errorf("startup runtime identity: %w", err)
+	}
 	r.SetupStarted = time.Now().UTC()
 	dataset, err := setup(ctx, dg, o.dataset)
 	if err != nil {
@@ -291,6 +304,11 @@ func run(o options) (err error) {
 		return fmt.Errorf("alpha restart: %w", err)
 	}
 	recoverySeconds := time.Since(recoveryStart).Seconds()
+	runtimeAfter, runtimeErr := captureRuntime(o, "after_alpha_restart", zero, alpha, httpBase)
+	if runtimeErr != nil {
+		return fmt.Errorf("restart runtime identity: %w", runtimeErr)
+	}
+	r.Validation.Runtime = append(r.Validation.Runtime, runtimeAfter...)
 	r.Metrics["recovery_seconds"] = livebench.Metric{Available: true, Value: recoverySeconds, Unit: "seconds", Source: "alpha process restart to healthy"}
 	dg, err = client(fmt.Sprintf("localhost:%d", 9080+o.alphaOffset))
 	if err != nil {
@@ -310,6 +328,9 @@ func run(o options) (err error) {
 	if len(r.Context.Contaminants) > 0 {
 		r.Context.Excluded = true
 		r.Context.ExclusionReason = strings.Join(r.Context.Contaminants, "; ")
+	}
+	if err := verifyMeasuredBinary(o.dgraphBin, r.Context.BinarySHA256); err != nil {
+		return err
 	}
 	if err := r.Validate(); err != nil {
 		return fmt.Errorf("result validation: %w", err)
@@ -1147,10 +1168,14 @@ func collectContext(o options) (livebench.Context, error) {
 	if err != nil {
 		return livebench.Context{}, err
 	}
-	gomapVersion, err := commandRequired("go", "list", "-m", "-f", "{{.Version}}", "github.com/snissn/gomap")
+	binaryRevision, gomapVersion, binaryGoVersion, binaryDirty, err := measuredSources(o.dgraphBin)
 	if err != nil {
 		return livebench.Context{}, err
 	}
+	if binaryRevision != dgraphSHA {
+		return livebench.Context{}, fmt.Errorf("measured binary source %s differs from worktree %s", binaryRevision, dgraphSHA)
+	}
+
 	host, err := commandRequired("hostname")
 	if err != nil {
 		return livebench.Context{}, err
@@ -1175,7 +1200,11 @@ func collectContext(o options) (livebench.Context, error) {
 	for _, name := range []string{"GOWORK", "TMPDIR", "GOMAXPROCS", "GOFLAGS"} {
 		environment[name] = os.Getenv(name)
 	}
-	return livebench.Context{DgraphSHA: dgraphSHA, GomapVersion: gomapVersion, Dirty: command("git", "status", "--porcelain") != "", GoVersion: runtime.Version(), Host: host, Kernel: kernel, CPU: cpu, TotalRAMBytes: ram, Storage: storage, Environment: environment, ExactCommand: cmd, RawPath: filepath.Join(o.artifactDir, "result.json")}, nil
+	binarySHA, buildInfo, err := measuredBinary(o.dgraphBin)
+	if err != nil {
+		return livebench.Context{}, err
+	}
+	return livebench.Context{BinarySHA256: binarySHA, BinaryBuildInfo: buildInfo, DgraphSHA: dgraphSHA, GomapVersion: gomapVersion, Dirty: binaryDirty || command("git", "status", "--porcelain") != "", GoVersion: binaryGoVersion, Host: host, Kernel: kernel, CPU: cpu, TotalRAMBytes: ram, Storage: storage, Environment: environment, ExactCommand: cmd, RawPath: filepath.Join(o.artifactDir, "result.json")}, nil
 }
 func command(name string, args ...string) string {
 	b, _ := exec.Command(name, args...).Output()

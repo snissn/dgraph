@@ -6,7 +6,7 @@ usage() {
 	printf '%s\n' 'usage: worker/treedb/run_durability_ab.sh [--smoke] --artifact-dir OUTSIDE_REPOSITORY_DIR' \
 		'Runs adapter microbenchmarks and the four-cell live durability matrix.' \
 		'Decision runs also collect separate relaxed/durable TreeDB CPU profiles.' \
-		'Environment overrides: REPEATS DATASET_NODES WARMUP_OPS TIMED_OPS CONCURRENCY COUNT BENCHTIME PROFILE_RELAXED_OPS PROFILE_DURABLE_OPS PROFILE_SECONDS.'
+		'Environment overrides: SURVIVE TREEDB_DURABLE_POLICY REQUIRE_TREEDB_MEMTABLE REPEATS DATASET_NODES WARMUP_OPS TIMED_OPS CONCURRENCY COUNT BENCHTIME PROFILE_RELAXED_OPS PROFILE_DURABLE_OPS PROFILE_SECONDS.'
 }
 
 smoke=0
@@ -48,6 +48,22 @@ fi
 }
 
 cd "${repo_root}"
+survive=${SURVIVE:-process}
+treedb_policy=${TREEDB_DURABLE_POLICY:-store_wal}
+required_memtable=${REQUIRE_TREEDB_MEMTABLE-}
+[[ ${survive} == process || ${survive} == filesystem ]] || {
+	echo 'SURVIVE must be process or filesystem' >&2
+	exit 2
+}
+[[ ${treedb_policy} == store_wal || ${treedb_policy} == raft_checkpoint ]] || {
+	echo 'invalid TREEDB_DURABLE_POLICY' >&2
+	exit 2
+}
+if [[ ${treedb_policy} == raft_checkpoint && (${survive} != filesystem || ${required_memtable} != cow_ordered) ]]; then
+	echo 'raft_checkpoint requires SURVIVE=filesystem REQUIRE_TREEDB_MEMTABLE=cow_ordered' >&2
+	exit 2
+fi
+runtime_args=(--survive "${survive}" --treedb-durable-policy "${treedb_policy}" --require-treedb-memtable "${required_memtable}")
 mkdir -p "${artifact_dir}/bin" "${artifact_dir}/microbench"
 
 repeats=${REPEATS:-3}
@@ -72,7 +88,9 @@ GOWORK=off go build -o "${artifact_dir}/bin/livebench" ./worker/treedb/livebench
 GOWORK=off go build -o "${artifact_dir}/bin/report" ./worker/treedb/livebench/reportcmd
 
 micro_cmd=(go test ./posting -run '^$' -bench 'Benchmark(BadgerStoreSeam|TreeDBStoreAdapterOverhead|CommitEventDisabledAndUnsubscribed)$' -benchmem -benchtime "${benchtime}" -count "${count}")
-GOWORK=off "${micro_cmd[@]}" 2>&1 | tee "${artifact_dir}/microbench/raw.txt"
+GOWORK=off "${micro_cmd[@]}" >"${artifact_dir}/microbench/raw.stdout" 2>"${artifact_dir}/microbench/raw.stderr"
+cat "${artifact_dir}/microbench/raw.stdout" "${artifact_dir}/microbench/raw.stderr" >"${artifact_dir}/microbench/raw.txt"
+cat "${artifact_dir}/microbench/raw.stdout"
 
 storage_source=$(findmnt -no SOURCE -T "${artifact_dir}")
 storage_filesystem=$(findmnt -no FSTYPE -T "${artifact_dir}")
@@ -123,6 +141,7 @@ read -r loadavg </proc/loadavg
 	echo "construction_audit=${construction_audit}"
 	echo "loadavg=${loadavg}"
 	echo "micro_command=GOWORK=off ${micro_cmd[*]}"
+	echo "survival=${survive} treedb_durable_policy=${treedb_policy} required_treedb_memtable=${required_memtable}"
 	echo "live_shape=repeats=${repeats} dataset=${dataset} warmup=${warmup} timed=${timed} concurrency=${concurrency} seed=20260711 topology=single-zero-single-alpha mix=60-point/20-one-hop/20-write"
 	echo "measurement_boundary=database creation, schema, load, and warmup precede timed operations; restart recovery is measured separately"
 } >"${artifact_dir}/context.txt"
@@ -135,6 +154,7 @@ for class in relaxed durable; do
 			run_dir="${artifact_dir}/live/${backend}-${class}-r${repeat}"
 			offset=$((23000 + cell * 100 + repeat * 2))
 			"${artifact_dir}/bin/livebench" \
+				"${runtime_args[@]}" \
 				--dgraph-bin "${artifact_dir}/bin/dgraph" --artifact-dir "${run_dir}" \
 				--backend "${backend}" --durability "${class}" --repeat "${repeat}" \
 				--dataset-nodes "${dataset}" --warmup-ops "${warmup}" --timed-ops "${timed}" \
@@ -162,6 +182,7 @@ if [[ ${smoke} -eq 0 ]]; then
 		profile_run="${profile_dir}/treedb-${profile_class}-run"
 		profile_path="${profile_dir}/treedb-${profile_class}.pprof"
 		"${artifact_dir}/bin/livebench" \
+			"${runtime_args[@]}" \
 			--dgraph-bin "${artifact_dir}/bin/dgraph" --artifact-dir "${profile_run}" \
 			--backend treedb --durability "${profile_class}" --repeat 1 \
 			--dataset-nodes "${dataset}" --warmup-ops "${warmup}" --timed-ops "${profile_ops}" \
