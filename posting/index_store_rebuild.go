@@ -167,24 +167,6 @@ func (r *rebuilder) runForStore(ctx context.Context) (retErr error) {
 		if err != nil {
 			return err
 		}
-		if r.copySource {
-			kvs, err := list.Rollup(nil, r.startTs)
-			if err != nil {
-				return err
-			}
-			// One complete main+split image shares one timestamp. Its later
-			// conversion delta must not discard untouched language postings.
-			counter++
-			for _, kv := range kvs {
-				meta := BitCompletePosting
-				if len(kv.Value) == 0 {
-					meta = BitEmptyPosting
-				}
-				if err := batch.SetEntryAt(&badger.Entry{Key: kv.Key, Value: kv.Value, UserMeta: meta}, counter); err != nil {
-					return err
-				}
-			}
-		}
 		if _, err := r.fn(pk.Uid, list, txn); err != nil {
 			return err
 		}

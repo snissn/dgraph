@@ -69,6 +69,26 @@ publication uses the same drained capability and index builders. No-conflict sch
 with upsert/unique: canonical index conflict keys must reach Zero. The existing frontend unique
 query checks and Zero arbitration remain the conflict protocol.
 
+Ordered prewrite application also validates current unique predicates after private staging and
+before schema, pending-overlay or Oracle publication. Frontend admission alone is insufficient: a
+request can pass under a non-unique schema and arrive after a unique transition. Maintained
+tokenizer indexes select candidate owners at the preceding ordered assigned timestamp; complete
+logical data values and language scope decide equality. The transaction's final canonical deltas
+project over that committed image, preserving same-owner updates, scalar swaps and explicit
+removal/reassignment. Different pending transactions continue through canonical Zero conflict keys;
+their local timing never decides a rejection. Index/hash collisions and local physical pruning
+cannot change the outcome. Unknown decoding/read/cancellation failures remain uncertain errors.
+
+Scalar type changes rewrite complete main/split data at the schema timestamp using maintained
+conversion and binary marshaling before fingerprinting. This covers scalar-to-scalar, scalar-to-list
+and list-to-list conversions. Every old untagged fingerprint is replaced; values which become equal
+merge as ordinary repeated SETs do. Facet precedence follows deterministic source UID iteration
+(last source wins), never physical commit timestamps or pruning schedules. Language identities and
+facets remain attached to their values. Count buckets rebuild when conversion can merge list members
+even if Count stays enabled. Old timestamp versions retain the original bytes, identities and
+cardinality. Disposable scratch holds the replacement image only; complete source values are visited
+through their main list, including cold split dependencies.
+
 Language directive removal follows existing Dgraph semantics: it changes later schema admission,
 without deleting historical tagged postings or their indexes. Re-enabling it exposes those retained
 values. No-conflict changes select future canonical conflict keys only after affected pending
@@ -195,8 +215,8 @@ Continuous-workload resource/debt qualification and full bounded-lifetime accept
 | Scalar tokenizer changes          | Implemented serial transition above; actual-server crash qualification remains                                                                                                                         |
 | Type definition/deletion          | Existing timestamped schema writer/tombstone; older-cut replay and reopen control implemented; no posting-data or namespace prefix deletion                                                            |
 | Count/reverse                     | Maintained builders integrated with explicit private Store, complete split sources, chunk aggregation, pending mutation and certificate/reopen proofs; inherited query limits remain                   |
-| Type/list conversion              | Maintained scalar-to-list conversion integrated with complete source copying; pure conversion/data-shape validation precedes effects; populated list-to-scalar/UID-scalar changes reject               |
-| Upsert/unique changes             | Pure complete uniqueness preflight and canonical conflict keys integrated; physical-history, pending conflict-key certificate/reopen and ordered decision controls; actual Zero qualification separate |
+| Type/list conversion              | Complete target conversion/re-key/merge through maintained builders; pure conversion/data-shape validation precedes effects; old versions retained; populated list-to-scalar/UID-scalar changes reject |
+| Upsert/unique changes             | Pure schema preflight plus ordered current-schema prewrite validation and canonical conflict keys; delayed-admission and pending certificate/reopen controls; actual Zero qualification separate       |
 | Vector                            | Factory/cache and graph side effects need exact root closure and deterministic rebuild authority; already outside ordinary TreeDB adapter capabilities                                                 |
 | Drop/predicate/namespace deletion | Ordered pending disposition, versioned tombstones, schema/cache reset and namespace admission epoch must complete before a cut; physical Badger prefix deletion is not a replacement                   |
 | Restore/import                    | External files must be immutable, digest-bound retained input; whole-root transfer must use authorized install, while selective graft needs an ordered namespace transition                            |

@@ -61,6 +61,12 @@ func (n *node) stageRaftMutation(ctx context.Context, p *pb.Proposal, inferred m
 		}
 		return err
 	}
+	if err := posting.ValidateRaftUniqueTxn(ctx, txn, n.raftOrderedAssigned); err != nil {
+		if errors.Is(err, posting.ErrSchemaDataConflict) {
+			return &raftSemanticRejection{reason: err.Error()}
+		}
+		return err
+	}
 	// Every effect follows the final deterministic capacity decision. Unknown
 	// failures here stop progress; the preceding exact certificate/WAL reconstructs
 	// the proposal instead of guessing how much storage was published.
