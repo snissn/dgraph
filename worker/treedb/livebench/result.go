@@ -27,9 +27,11 @@ const (
 	// RaftCheckpointNoCommandWAL explains absent posting-WAL grouping metrics.
 	// Raft durability is measured separately; unavailable does not mean zero syncs.
 	RaftCheckpointNoCommandWAL = "raft_checkpoint disables the posting-store command WAL; durability authority is Raft"
+	RecoveryReadCommitRead     = "read-commit-read-v1"
 )
 
 type Config struct {
+	RecoveryProbe   string         `json:"recovery_probe,omitempty"`
 	SurvivalMode    string         `json:"survival_mode,omitempty"`
 	TreeDBPolicy    string         `json:"treedb_durable_policy,omitempty"`
 	TreeDBMemtable  string         `json:"required_treedb_memtable,omitempty"`
@@ -231,6 +233,19 @@ func (r Result) Validate() error {
 		}
 		if !ok || !m.Available || math.IsNaN(m.Value) || math.IsInf(m.Value, 0) || m.Value < 0 || invalidZero {
 			errs = append(errs, fmt.Errorf("core metric %q must be available and valid", name))
+		}
+	}
+	if r.Config.RecoveryProbe != "" {
+		if r.Config.RecoveryProbe != RecoveryReadCommitRead {
+			errs = append(errs, fmt.Errorf("unknown recovery probe %q", r.Config.RecoveryProbe))
+		}
+		previous := r.Metrics["recovery_seconds"].Value
+		for _, name := range []string{"recovery_read_seconds", "recovery_read_write_seconds"} {
+			m, ok := r.Metrics[name]
+			if !ok || !m.Available || m.Unit != "seconds" || m.Source == "" || math.IsNaN(m.Value) || math.IsInf(m.Value, 0) || m.Value <= 0 || m.Value < previous {
+				errs = append(errs, fmt.Errorf("aligned recovery metric %q missing, invalid or out of order", name))
+			}
+			previous = m.Value
 		}
 	}
 	if r.Context.DgraphSHA == "" || r.Context.GomapVersion == "" || r.Context.GoVersion == "" || r.Context.Host == "" || r.Context.Kernel == "" || r.Context.CPU == "" || r.Context.TotalRAMBytes == 0 || len(r.Context.ExactCommand) == 0 || r.Context.RawPath == "" {

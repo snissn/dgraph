@@ -84,6 +84,44 @@ func TestExpectedObservedUsesCanonicalTreeDBProfileIntegrity(t *testing.T) {
 	}
 }
 
+func TestAlignedRecoveryProtocolRejectsMissingOrReversedReadiness(t *testing.T) {
+	for _, bad := range []string{"", "missing read", "missing write", "before health", "before read", "nan", "unknown"} {
+		t.Run(bad, func(t *testing.T) {
+			r := validResult(t, "badger", "durable")
+			legacyFingerprint := r.Config.Fingerprint()
+			r.Config.RecoveryProbe = RecoveryReadCommitRead
+			r.Metrics["recovery_read_seconds"] = Metric{Available: true, Value: 2, Unit: "seconds", Source: "validated read"}
+			r.Metrics["recovery_read_write_seconds"] = Metric{Available: true, Value: 3, Unit: "seconds", Source: "committed write then read"}
+			switch bad {
+			case "missing read":
+				delete(r.Metrics, "recovery_read_seconds")
+			case "missing write":
+				delete(r.Metrics, "recovery_read_write_seconds")
+			case "before health":
+				m := r.Metrics["recovery_read_seconds"]
+				m.Value = 0.5
+				r.Metrics["recovery_read_seconds"] = m
+			case "before read":
+				m := r.Metrics["recovery_read_write_seconds"]
+				m.Value = 1.5
+				r.Metrics["recovery_read_write_seconds"] = m
+			case "nan":
+				m := r.Metrics["recovery_read_seconds"]
+				m.Value = math.NaN()
+				r.Metrics["recovery_read_seconds"] = m
+			case "unknown":
+				r.Config.RecoveryProbe = "unknown"
+			}
+			if legacyFingerprint == r.Config.Fingerprint() {
+				t.Fatal("new recovery protocol must not pool with health-only results")
+			}
+			if err := r.Validate(); (err == nil) != (bad == "") {
+				t.Fatalf("invalid result disposition for %q: %v", bad, err)
+			}
+		})
+	}
+}
+
 func TestResultRejectsWrongBackendDurabilityMissingMetricAndSetupLeakage(t *testing.T) {
 	tests := []struct {
 		name, want string

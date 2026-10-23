@@ -116,6 +116,7 @@ func run(o options) (err error) {
 	defer cancel()
 	posting, badger := runtimeSelectors(o)
 	config := runtimeConfig(o)
+	config.RecoveryProbe = livebench.RecoveryReadCommitRead
 	r := livebench.Result{SchemaVersion: livebench.SchemaVersion, RunID: fmt.Sprintf("%s-%s-r%d", o.backend, o.class, o.repeat), Repeat: o.repeat, Config: config, LatencyMS: map[string]float64{}, Metrics: map[string]livebench.Metric{}}
 	r.Context, err = collectContext(o)
 	if err != nil {
@@ -320,6 +321,11 @@ func run(o options) (err error) {
 	if err != nil {
 		return fmt.Errorf("restart validation: %w", err)
 	}
+	r.Metrics["recovery_read_seconds"] = livebench.Metric{Available: true, Value: time.Since(recoveryStart).Seconds(), Unit: "seconds", Source: "alpha restart through runtime witness and fresh full posting validation"}
+	if err := validateRecoveryWrite(ctx, dg); err != nil {
+		return fmt.Errorf("restart write readiness: %w", err)
+	}
+	r.Metrics["recovery_read_write_seconds"] = livebench.Metric{Available: true, Value: time.Since(recoveryStart).Seconds(), Unit: "seconds", Source: "alpha restart through full posting validation, new CommitNow ACK and fresh read of committed probe"}
 	for _, contaminant := range contaminants(o.maxLoad) {
 		if !contains(r.Context.Contaminants, contaminant) {
 			r.Context.Contaminants = append(r.Context.Contaminants, contaminant)
@@ -473,6 +479,30 @@ func dgraphQueryWithVars(ctx context.Context, dg *dgo.Dgraph, query string, vars
 	return withDgraphRPCTimeout(ctx, dgraphRPCTimeout, func(rpcCtx context.Context) (*api.Response, error) {
 		return dg.NewReadOnlyTxn().QueryWithVars(rpcCtx, query, vars)
 	})
+}
+
+// validateRecoveryWrite runs after the measured workload and restart checksum.
+// A new node ensures readiness includes a real write, even if the fixture's
+// existing values would make an overwrite redundant. It never enters throughput,
+// posting disk/RSS counters, or the unchanged pre/post-restart checksum.
+func validateRecoveryWrite(ctx context.Context, dg *dgo.Dgraph) error {
+	const probeValue = "recovery-probe-v1"
+	resp, err := dgraphMutate(ctx, dg, &api.Mutation{SetNquads: []byte("_:recovery <bench.value> \"" + probeValue + "\" ."), CommitNow: true})
+	if err != nil {
+		return err
+	}
+	if resp == nil || resp.Txn == nil || resp.Txn.CommitTs == 0 || resp.Uids["recovery"] == "" {
+		return errors.New("recovery probe lacks committed timestamp or allocated UID")
+	}
+	uid := resp.Uids["recovery"]
+	read, err := dgraphQueryWithVars(ctx, dg, "query q($id: string) { q(func: uid($id)) { uid bench.value } }", map[string]string{"$id": uid})
+	if err != nil {
+		return err
+	}
+	if read == nil || read.Txn == nil || read.Txn.StartTs < resp.Txn.CommitTs {
+		return errors.New("recovery probe read precedes committed timestamp")
+	}
+	return validateReadResponse(read.Json, uid, expectedNode{Value: probeValue}, false)
 }
 
 func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]expectedNode, error) {

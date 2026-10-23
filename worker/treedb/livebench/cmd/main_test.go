@@ -501,6 +501,48 @@ func operationClient(t *testing.T, query func(context.Context, *api.Request) (*a
 	return dg
 }
 
+func TestRecoveryProbeRequiresCommittedWriteAndFreshVerifiedRead(t *testing.T) {
+	for _, outcome := range []string{"ok", "uncommitted", "missing uid", "old read", "wrong value", "write error"} {
+		t.Run(outcome, func(t *testing.T) {
+			calls := 0
+			dg := operationClient(t, func(_ context.Context, req *api.Request) (*api.Response, error) {
+				calls++
+				if len(req.Mutations) != 0 {
+					if !req.CommitNow || len(req.Mutations) != 1 || !strings.Contains(string(req.Mutations[0].SetNquads), "_:recovery") {
+						t.Errorf("probe is not a new CommitNow mutation: %+v", req)
+					}
+					if outcome == "write error" {
+						return nil, status.Error(codes.Unavailable, "not writable")
+					}
+					resp := &api.Response{Txn: &api.TxnContext{StartTs: 11, CommitTs: 12}, Uids: map[string]string{"recovery": "0x42"}}
+					if outcome == "uncommitted" {
+						resp.Txn.CommitTs = 0
+					}
+					if outcome == "missing uid" {
+						resp.Uids = nil
+					}
+					return resp, nil
+				}
+				if calls != 2 || !req.ReadOnly || req.Vars["$id"] != "0x42" {
+					t.Errorf("expected fresh read after committed probe: %+v", req)
+				}
+				resp := &api.Response{Txn: &api.TxnContext{StartTs: 13}, Json: []byte(`{"q":[{"uid":"0x42","bench.value":"recovery-probe-v1"}]}`)}
+				if outcome == "old read" {
+					resp.Txn.StartTs = 11
+				}
+				if outcome == "wrong value" {
+					resp.Json = []byte(`{"q":[{"uid":"0x42","bench.value":"wrong"}]}`)
+				}
+				return resp, nil
+			})
+			err := validateRecoveryWrite(context.Background(), dg)
+			if (err == nil) != (outcome == "ok") {
+				t.Fatalf("outcome=%s err=%v", outcome, err)
+			}
+		})
+	}
+}
+
 func TestOperationDiagnosticRecordsIdentityPhasesAndFullWall(t *testing.T) {
 	var writes atomic.Int64
 	dg := operationClient(t, func(ctx context.Context, req *api.Request) (*api.Response, error) {

@@ -32,6 +32,17 @@ available write/GC/flush/checkpoint counters, recovery time, runtime-observed ba
 schema status, posting checksum/count, restart parity, unsupported-feature status, SHAs, dirty
 state, command, CPU/RAM/storage/filesystem/environment, and contamination.
 
+`recovery_seconds` retains its original restart-to-HTTP-health boundary. That boundary differs by
+backend: Raft-owned TreeDB waits for election and ordered replay, while legacy Badger can report
+health before election. New runs also record `recovery_read_seconds` through runtime identity checks
+and a fresh full posting validation, then `recovery_read_write_seconds` through a new-node CommitNow
+ACK and a fresh verified read at or after its commit timestamp. Both start at the same Alpha exec
+boundary. These include the declared validation work, rather than estimating an internal open-only
+latency. The new probe runs after all timed metrics and restart checksums; its node does not enter
+them. The `recovery_probe=read-commit-read-v1` configuration is fingerprinted so these results
+cannot silently pool with older health-only runs. This is a clean Alpha restart with Zero alive, not
+a crash or power-loss recovery measurement.
+
 Aggregation fails on an incomplete matrix, wrong backend or durability, workload mismatch, missing
 metric contract, setup/timed overlap, dirty or excluded run, cross-run
 revision/host/storage/environment mismatch, duplicate run ID, missing or duplicate per-cell repeat
