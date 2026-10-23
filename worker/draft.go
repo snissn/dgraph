@@ -351,6 +351,11 @@ func detectPendingTxns(attr string) error {
 // involving the predicate are aborted until schema mutations are done.
 func (n *node) applyMutations(ctx context.Context, proposal *pb.Proposal) (rerr error) {
 	span := trace.SpanFromContext(ctx)
+	if raftCheckpointEnabled() {
+		if handled, err := n.applyRaftAdminDrop(ctx, proposal); handled {
+			return err
+		}
+	}
 	if raftCheckpointEnabled() && raftSchemaMutationIsNoop(proposal.Mutations) {
 		return nil
 	}
@@ -585,6 +590,10 @@ func (n *node) applyCommitted(proposal *pb.Proposal, key uint64) error {
 		}
 		if proposal.PostingFloor != nil {
 			return n.applyPostingFloor(proposal)
+		}
+		if proposal.DeleteNs != nil {
+			_, err := n.applyRaftAdminDrop(n.Ctx(key), proposal)
+			return err
 		}
 		if proposal.Snapshot != nil {
 			return nil

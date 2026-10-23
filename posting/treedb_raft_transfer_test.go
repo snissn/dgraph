@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dgraph-io/badger/v4"
 	td "github.com/snissn/gomap/TreeDB"
 	"github.com/stretchr/testify/require"
 )
@@ -30,6 +31,7 @@ func openRaftTransferStore(t *testing.T, identity string) *TreeDBStore {
 func TestRaftTreeDBTransferDrainsReadersAndRejectsStaleWriters(t *testing.T) {
 	source := openRaftTransferStore(t, "source")
 	commitStoreEntry(t, source, 1, Entry{Key: []byte("key"), Value: []byte("source")})
+	require.NoError(t, source.BanRaftNamespace(7))
 	require.NoError(t, source.CheckpointRaft(context.Background(), []byte("source-cut")))
 	cert, ok := source.RaftCheckpointCertificate()
 	require.True(t, ok)
@@ -110,4 +112,6 @@ func TestRaftTreeDBTransferDrainsReadersAndRejectsStaleWriters(t *testing.T) {
 	require.Equal(t, "receiver", installed.Identity)
 	require.Equal(t, []byte("receiver-accepted-cut"), installed.Metadata)
 	require.Equal(t, cert.Root, installed.Root)
+	require.NoError(t, receiver.ValidateRaftNamespaceBans())
+	require.ErrorIs(t, receiver.CheckRaftNamespace(7), badger.ErrBannedKey, "peer install preserves namespace authority")
 }

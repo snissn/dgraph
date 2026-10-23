@@ -299,6 +299,9 @@ func (n *node) recoverRaftCheckpointState() error {
 	if err := validateRaftCheckpoint(c, n.Store, n.gid, n.Id); err != nil {
 		return err
 	}
+	if err := State.TreeDBStore.ValidateRaftNamespaceBans(); err != nil {
+		return err
+	}
 	if err := State.TreeDBStore.RestoreRaftPendingOverlay(c.PendingOverlay); err != nil {
 		return err
 	}

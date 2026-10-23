@@ -306,6 +306,27 @@ func (s *ServerState) GetTimestamp(readOnly bool) uint64 {
 	return <-tr.ch
 }
 
+// GetTimestampContext waits for an assigned timestamp until the caller or store stops.
+// Buffered delivery lets the dispatcher complete a batch after a caller cancels.
+func (s *ServerState) GetTimestampContext(ctx context.Context, readOnly bool) (uint64, error) {
+	tr := tsReq{readOnly: readOnly, ch: make(chan uint64, 1)}
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-s.gcCloser.HasBeenClosed():
+		return 0, context.Canceled
+	case s.needTs <- tr:
+	}
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-s.gcCloser.HasBeenClosed():
+		return 0, context.Canceled
+	case ts := <-tr.ch:
+		return ts, nil
+	}
+}
+
 func (s *ServerState) fillTimestampRequests() {
 	const (
 		initDelay = 10 * time.Millisecond

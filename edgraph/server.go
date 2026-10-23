@@ -112,7 +112,12 @@ type existingGQLSchemaQryResp struct {
 // GetGQLSchema queries for the GraphQL schema node, and returns the uid and the GraphQL schema.
 // If multiple schema nodes were found, it returns an error.
 func GetGQLSchema(namespace uint64) (uid, graphQLSchema string, err error) {
-	ctx := context.WithValue(context.Background(), Authorize, false)
+	return GetGQLSchemaContext(context.Background(), namespace)
+}
+
+// GetGQLSchemaContext permits startup schema loading to stop with its server.
+func GetGQLSchemaContext(ctx context.Context, namespace uint64) (uid, graphQLSchema string, err error) {
+	ctx = context.WithValue(ctx, Authorize, false)
 	ctx = x.AttachNamespace(ctx, namespace)
 	resp, err := (&Server{}).QueryNoGrpc(ctx,
 		&api.Request{
@@ -1605,7 +1610,11 @@ func processQuery(ctx context.Context, qc *queryContext) (*api.Response, error) 
 
 	if qc.req.StartTs == 0 {
 		assignTimestampStart := time.Now()
-		qc.req.StartTs = worker.State.GetTimestamp(qc.req.ReadOnly)
+		assigned, err := worker.State.GetTimestampContext(ctx, qc.req.ReadOnly)
+		if err != nil {
+			return resp, err
+		}
+		qc.req.StartTs = assigned
 		qc.latency.AssignTimestamp = time.Since(assignTimestampStart)
 	}
 

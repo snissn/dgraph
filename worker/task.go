@@ -1014,6 +1014,9 @@ func processTask(ctx context.Context, q *pb.Query, gid uint32) (*pb.Result, erro
 		if err := State.TreeDBStore.CheckRaftReadTimestamp(q.ReadTs); err != nil {
 			return nil, err
 		}
+		if err := State.TreeDBStore.CheckRaftNamespace(x.ParseNamespace(q.Attr)); err != nil {
+			return nil, err
+		}
 	}
 	safeAttr := x.SafeUTF8(q.Attr)
 	ctx, span := otel.Tracer("").Start(ctx, "processTask."+safeAttr)
@@ -1048,6 +1051,9 @@ func processTask(ctx context.Context, q *pb.Query, gid uint32) (*pb.Result, erro
 		// ServeTask may return on cancellation while this goroutine unwinds;
 		// retain admission through its actual cache/storage lifetime.
 		defer release()
+		if err := State.TreeDBStore.CheckRaftNamespace(x.ParseNamespace(q.Attr)); err != nil {
+			return nil, err
+		}
 	}
 
 	// If a group stops serving tablet and it gets partitioned away from group

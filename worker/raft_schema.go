@@ -22,6 +22,9 @@ import (
 // applied. A failure after side effects is an uncertain apply failure, never a
 // terminal normal-mutation rejection or a certifiable partial schema outcome.
 func checkRaftSupportedProposal(p *pb.Proposal) error {
+	if handled, err := checkRaftAdminProposal(p); handled {
+		return err
+	}
 	if p.Kv != nil || p.CleanPredicate != "" || p.Restore != nil || p.DeleteNs != nil || p.ExtSnapshotState != nil || p.CdcState != nil {
 		return fmt.Errorf("raft_checkpoint does not support external/admin materialization")
 	}
