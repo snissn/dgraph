@@ -254,7 +254,7 @@ func doStreamSnapshot(snap *pb.Snapshot, out pb.Worker_StreamSnapshotServer) err
 	return nil
 }
 
-func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) error {
+func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) (err error) {
 	snap, err := stream.Recv()
 	if err != nil {
 		// If we don't even receive a request (here or if no StreamSnapshot is called), we can't
@@ -265,6 +265,21 @@ func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) error
 		// but timeouts are always hard to get right.
 		return err
 	}
+	// Once the requester is known, every failed transfer must release its Raft
+	// snapshot progress, including native-format validation and transport errors.
+	// Retain the same Raft owner throughout the RPC rather than looking it up
+	// again after a restart or node replacement.
+	n := groups().Node
+	if n != nil {
+		if owner := n.Raft(); owner != nil {
+			defer func() {
+				if err != nil {
+					glog.Errorf("While streaming snapshot: %v. Reporting failure.", err)
+					owner.ReportSnapshot(snap.GetContext().GetId(), raft.SnapshotFailure)
+				}
+			}()
+		}
+	}
 	if raftCheckpointEnabled() {
 		return streamRaftCheckpoint(snap, stream)
 	}
@@ -274,17 +289,15 @@ func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) error
 	if _, err := requireBadgerPostingStore("Raft snapshot send"); err != nil {
 		return err
 	}
+	if n == nil || n.Raft() == nil {
+		return conn.ErrNoNode
+	}
 	// Pause rollups during snapshot streaming.
-	closer, err := groups().Node.startTask(opSnapshot)
+	closer, err := n.startTask(opSnapshot)
 	if err != nil {
 		return err
 	}
 	defer closer.Done()
-
-	n := groups().Node
-	if n == nil || n.Raft() == nil {
-		return conn.ErrNoNode
-	}
 
 	// Indicate that we're streaming right now. Used to cancel
 	// calculateSnapshot.  However, this logic isn't foolproof. A leader might
@@ -296,8 +309,6 @@ func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) error
 
 	glog.Infof("Got StreamSnapshot request: %+v\n", snap)
 	if err := doStreamSnapshot(snap, stream); err != nil {
-		glog.Errorf("While streaming snapshot: %v. Reporting failure.", err)
-		n.Raft().ReportSnapshot(snap.Context.GetId(), raft.SnapshotFailure)
 		return err
 	}
 	glog.Infof("Stream snapshot: OK")

@@ -8,13 +8,17 @@ package worker
 import (
 	"bytes"
 	"context"
+	"errors"
+	"io"
 	"net"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/dgraph-io/dgraph/v25/conn"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -76,7 +80,107 @@ func readCheckpointThroughRPC(t *testing.T, stale, fresh *pb.Snapshot) ([]byte, 
 	// Read the final status so no sender can still touch global fixture state.
 	_, err = stream.Recv()
 	require.Error(t, err)
+	checkSnapshotFailureReports(t, stale, fresh)
 	return archive.Bytes(), staleError
+}
+
+type snapshotFailureReport struct {
+	id     uint64
+	status raft.SnapshotStatus
+}
+
+type snapshotReportRecorder struct {
+	raft.Node
+	reports chan snapshotFailureReport
+}
+
+func (r *snapshotReportRecorder) ReportSnapshot(id uint64, status raft.SnapshotStatus) {
+	r.reports <- snapshotFailureReport{id, status}
+}
+
+type snapshotFailureStream struct {
+	grpc.ServerStream
+	request    *pb.Snapshot
+	ack        *pb.Snapshot
+	receiveErr error
+	failSend   int
+	failDone   bool
+	sends      int
+}
+
+func (s *snapshotFailureStream) Context() context.Context { return context.Background() }
+
+func (s *snapshotFailureStream) Recv() (*pb.Snapshot, error) {
+	if s.request != nil {
+		request := s.request
+		s.request = nil
+		return request, nil
+	}
+	if s.ack != nil {
+		return s.ack, nil
+	}
+	if s.receiveErr != nil {
+		return nil, s.receiveErr
+	}
+	return nil, io.EOF
+}
+
+func (s *snapshotFailureStream) Send(chunk *pb.KVS) error {
+	s.sends++
+	if s.sends == s.failSend || (s.failDone && chunk.Done) {
+		return errors.New("injected snapshot transport failure")
+	}
+	return nil
+}
+
+// Use the certified owner already exercised through the RPC above. The real
+// handler must notify the same Raft owner exactly once for every failed native
+// transfer; successful transfers and missing initial requests must not do so.
+func checkSnapshotFailureReports(t *testing.T, stale, fresh *pb.Snapshot) {
+	t.Helper()
+	oldNode := gr.Node
+	recorder := &snapshotReportRecorder{reports: make(chan snapshotFailureReport, 16)}
+	gr.Node = &node{Node: new(conn.Node)}
+	gr.Node.SetRaft(recorder)
+	defer func() { gr.Node = oldNode }()
+	for _, tc := range []struct {
+		name       string
+		configure  func(*snapshotFailureStream)
+		wantReport bool
+		wantError  string
+	}{
+		{"missing_request", func(s *snapshotFailureStream) { s.request = nil }, false, "EOF"},
+		{"invalid_format", func(s *snapshotFailureStream) { s.request.TransferFormat = "badger" }, true, "explicit full checkpoint"},
+		{"stale_cut", func(s *snapshotFailureStream) { s.request.Index = stale.Index }, true, "no longer the current"},
+		{"header_failure", func(s *snapshotFailureStream) { s.failSend = 1 }, true, "injected snapshot transport"},
+		{"body_failure", func(s *snapshotFailureStream) { s.failSend = 2 }, true, "injected snapshot transport"},
+		{"terminal_failure", func(s *snapshotFailureStream) { s.failDone = true }, true, "injected snapshot transport"},
+		{"missing_ack", func(s *snapshotFailureStream) {}, true, "EOF"},
+		{"invalid_ack", func(s *snapshotFailureStream) { s.ack = &pb.Snapshot{Done: true} }, true, "did not acknowledge"},
+		{"success", func(s *snapshotFailureStream) {
+			s.ack = &pb.Snapshot{Done: true, TransferFormat: raftCheckpointTransferFormat}
+		}, false, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := proto.Clone(fresh).(*pb.Snapshot)
+			request.Context = proto.Clone(fresh.Context).(*pb.RaftContext)
+			request.Context.Id = 42
+			stream := &snapshotFailureStream{request: request}
+			tc.configure(stream)
+			err := (&grpcWorker{}).StreamSnapshot(stream)
+			if tc.wantError == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.wantError)
+			}
+			if tc.wantReport {
+				require.Len(t, recorder.reports, 1)
+				require.Equal(t, snapshotFailureReport{42, raft.SnapshotFailure}, <-recorder.reports)
+			} else {
+				require.Empty(t, recorder.reports)
+			}
+		})
+	}
 }
 
 // Invalid transport input must be rejected before either owner authorization or
