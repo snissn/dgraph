@@ -13,6 +13,7 @@ import (
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/dgraph-io/dgraph/v25/schema"
 	"github.com/dgraph-io/dgraph/v25/types"
+	"github.com/dgraph-io/dgraph/v25/x"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -28,6 +29,14 @@ func checkRaftSupportedProposal(p *pb.Proposal) error {
 	if m == nil {
 		return nil
 	}
+	if m.DropOp == pb.Mutations_TYPE {
+		// Unlike prefix/data deletion, this existing schema-store operation is
+		// one timestamped tombstone and never rewrites posting data or Oracle.
+		if m.StartTs == 0 || m.DropValue == "" || x.IsPreDefinedType(m.DropValue) || len(m.Edges)+len(m.Schema)+len(m.Types) != 0 {
+			return fmt.Errorf("raft_checkpoint requires an isolated timestamped type deletion")
+		}
+		return nil
+	}
 	if m.DropOp != pb.Mutations_NONE {
 		return fmt.Errorf("raft_checkpoint does not support drop")
 	}
@@ -39,6 +48,11 @@ func checkRaftSupportedProposal(p *pb.Proposal) error {
 	for _, update := range m.Schema {
 		if err := validateRaftSchemaUpdate(update); err != nil {
 			return err
+		}
+	}
+	for _, update := range m.Types {
+		if update == nil || update.TypeName == "" {
+			return fmt.Errorf("raft_checkpoint requires a named type definition")
 		}
 	}
 	return nil

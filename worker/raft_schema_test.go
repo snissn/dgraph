@@ -80,17 +80,20 @@ func TestRaftScalarSchemaRebuildCertifiedReplay(t *testing.T) {
 	indexed := &pb.SchemaUpdate{Predicate: attr, ValueType: pb.Posting_STRING, Directive: pb.SchemaUpdate_INDEX, Tokenizer: []string{"exact"}}
 	secondIndexed := proto.Clone(indexed).(*pb.SchemaUpdate)
 	secondIndexed.Predicate = secondAttr
+	typeName := x.AttrInRootNamespace("RaftSchemaPerson")
+	typeUpdate := &pb.TypeUpdate{TypeName: typeName, Fields: []*pb.SchemaUpdate{{Predicate: attr}}}
 	entries := []raftpb.Entry{
 		checkpointEntry(t, 1, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base, Edges: edges}}),
 		checkpointEntry(t, 2, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 1, Txns: []*pb.TxnStatus{{StartTs: base, CommitTs: base + 1}}}}),
-		checkpointEntry(t, 3, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 2, Schema: []*pb.SchemaUpdate{indexed, secondIndexed}}}),
+		checkpointEntry(t, 3, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 2, Schema: []*pb.SchemaUpdate{indexed, secondIndexed}, Types: []*pb.TypeUpdate{typeUpdate}}}),
 		checkpointEntry(t, 4, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 3, Edges: []*pb.DirectedEdge{{Entity: 1, Attr: attr, Value: []byte("suffix"), ValueType: pb.Posting_STRING, Op: pb.DirectedEdge_SET}, {Entity: 1, Attr: blob, Value: []byte(strings.Repeat("new-blob", 1024)), ValueType: pb.Posting_STRING, Op: pb.DirectedEdge_SET}}}}),
 		checkpointEntry(t, 5, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 4, Txns: []*pb.TxnStatus{{StartTs: base + 3, CommitTs: base + 4}}}}),
 	}
 	duplicate := entries[2]
 	duplicate.Index = 6
 	entries = append(entries, duplicate)
-	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: 6}, entries, &raftpb.Snapshot{}))
+	entries = append(entries, checkpointEntry(t, 7, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 5, DropOp: pb.Mutations_TYPE, DropValue: typeName}}))
+	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: 7}, entries, &raftpb.Snapshot{}))
 	require.NoError(t, wal.Sync())
 	for _, e := range entries {
 		atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(e.Data)))
@@ -187,6 +190,20 @@ func TestRaftScalarSchemaRebuildCertifiedReplay(t *testing.T) {
 	var cert raftCheckpointMetadata
 	require.NoError(t, json.Unmarshal(data, &cert))
 	require.Equal(t, uint64(3), cert.Index)
+	_, exists := schema.State().GetType(typeName)
+	require.False(t, exists, "retained type deletion must be applied after suffix replay")
+	n = reopen()
+	_, exists = schema.State().GetType(typeName)
+	require.True(t, exists, "old certificate restores the timestamped type before replay")
+	for _, entry := range entries[3:] {
+		applyCheckpointEntry(t, n, entry)
+	}
+	_, exists = schema.State().GetType(typeName)
+	require.False(t, exists)
+	require.NoError(t, n.checkpointRaftCut(7, true))
+	n = reopen()
+	_, exists = schema.State().GetType(typeName)
+	require.False(t, exists, "certified type tombstone survives reopen")
 }
 
 type schemaCallbackGate struct {
@@ -220,6 +237,8 @@ func TestRaftSchemaSupportedBoundary(t *testing.T) {
 	}
 	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{nil}}}))
 	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{DropOp: pb.Mutations_ALL}}))
+	require.NoError(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{StartTs: 10, DropOp: pb.Mutations_TYPE, DropValue: "0-Type"}}))
+	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{DropOp: pb.Mutations_TYPE, DropValue: "0-Type"}}))
 }
 
 func (s *schemaCallbackGate) NewWriteTxn() posting.WriteTxn {

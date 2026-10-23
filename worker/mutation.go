@@ -352,14 +352,15 @@ func createSchema(attr string, typ types.TypeID, hint pb.Metadata_HintType, ts u
 
 func runTypeMutation(ctx context.Context, update *pb.TypeUpdate, ts uint64) error {
 	current := proto.Clone(update).(*pb.TypeUpdate)
-	schema.State().SetType(update.TypeName, current)
-	return updateType(update.TypeName, update, ts)
+	return updateType(update.TypeName, current, ts)
 }
 
 // We commit schema to disk in blocking way, should be ok because this happens
 // only during schema mutations or we see a new predicate.
 func updateType(typeName string, t *pb.TypeUpdate, ts uint64) error {
-	schema.State().SetType(typeName, t)
+	if !raftCheckpointEnabled() {
+		schema.State().SetType(typeName, t)
+	}
 	txn := postingStore.NewWriteTxn()
 	defer txn.Discard()
 	data, err := proto.Marshal(t)
@@ -373,7 +374,13 @@ func updateType(typeName string, t *pb.TypeUpdate, ts uint64) error {
 	if err := txn.SetEntry(e); err != nil {
 		return err
 	}
-	return txn.CommitAt(ts, nil)
+	if err := txn.CommitAt(ts, nil); err != nil {
+		return err
+	}
+	if raftCheckpointEnabled() {
+		schema.State().SetType(typeName, t)
+	}
+	return nil
 }
 
 func hasEdges(attr string, startTs uint64) bool {

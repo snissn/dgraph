@@ -9,8 +9,9 @@ operational or production capability tier.
 Proposal admission and committed application both call `checkRaftSupportedProposal`. Existing
 predicates may change tokenizer membership while retaining their type, list, language, upsert,
 uniqueness and other schema properties. Fresh basic predicates and types keep their existing
-semantic writer. Vector, count, reverse, type/list conversion, destructive and external-file
-operations remain refused by this route.
+semantic writer. Isolated timestamped type deletion uses the existing schema-store tombstone path;
+type updates publish their in-memory definition after their schema write succeeds. Vector, count,
+reverse, type/list conversion, posting-data deletion and external-file operations remain refused.
 
 Committed input is already routed; application does not consult Zero's later tablet assignment. The
 same rule is used by ordinary `runMutation`. Schema validation precedes materialization. The query
@@ -118,6 +119,7 @@ physical maintenance paths above.
 | Flow                              | Required closure / current disposition                                                                                                                                               |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Scalar tokenizer changes          | Implemented serial transition above; actual-server crash qualification remains                                                                                                       |
+| Type definition/deletion          | Existing timestamped schema writer/tombstone; older-cut replay and reopen control implemented; no posting-data or namespace prefix deletion                                          |
 | Count/reverse                     | Maintained builders exist, but count baseline/split dependencies and query capability need adapter proofs; newly guarded standard Dgraph flows                                       |
 | Type/list conversion              | Reuse maintained `BuildData` conversion and generic aggregation only after conversion/retry/read-cut tests; currently guarded standard flow                                          |
 | Upsert/unique changes             | Requires existing-data uniqueness validation plus Zero conflict-key and retry semantics before publication; currently guarded standard flow                                          |
