@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/dgraph-io/dgraph/v25/posting"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
@@ -35,8 +36,9 @@ func applyCheckpointEntry(t *testing.T, n *node, e raftpb.Entry) {
 	require.NoError(t, proto.Unmarshal(e.Data[8:], &p))
 	p.Index = e.Index
 	updateStartTs(&p)
-	require.NoError(t, n.applyCommitted(&p, binary.BigEndian.Uint64(e.Data[:8])))
+	require.NoError(t, n.applyTrackedProposal(&p, binary.BigEndian.Uint64(e.Data[:8]), e.Size()))
 	n.raftAppliedBytes += uint64(len(e.Data))
+	n.raftSemanticIndex = e.Index
 	n.Applied.SetDoneUntil(e.Index)
 }
 
@@ -101,7 +103,10 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, publishOnl
 		checkpointEntry(t, 4, decision(base+2, base+3, base+3)),
 		checkpointEntry(t, 5, mutation(base+4, "pending")),
 	}
-	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: 5}, entries, &raftpb.Snapshot{}))
+	duplicate := entries[0]
+	duplicate.Index = 6 // Same proposal key and size, across the certified cut.
+	entries = append(entries, duplicate)
+	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: 6}, entries, &raftpb.Snapshot{}))
 	require.NoError(t, wal.Sync())
 	for _, e := range entries {
 		atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(e.Data)))
@@ -110,6 +115,10 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, publishOnl
 	applyCheckpointEntry(t, n, entries[1])
 	if publishOnly {
 		c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: 1, RaftID: 1, Index: 2, Term: 1, OracleMaxAssigned: posting.Oracle().MaxAssigned(), ConfState: *n.ConfState()}
+		c.AppliedProposals = make(map[uint64]raftProposalSignature)
+		for key, p := range n.appliedProposals {
+			c.AppliedProposals[key] = raftProposalSignature{Size: p.size, SeenUnixNano: p.seen.UnixNano()}
+		}
 		data, err := json.Marshal(c)
 		require.NoError(t, err)
 		require.NoError(t, current.TreeDBStore.CheckpointRaft(context.Background(), data))
@@ -129,6 +138,7 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, publishOnl
 	require.NoError(t, json.Unmarshal(certBytes, &cert))
 	require.Equal(t, uint64(2), cert.Index)
 	require.Equal(t, base+1, cert.OracleMaxAssigned)
+	require.Contains(t, cert.AppliedProposals, uint64(1))
 	first, err := wal.FirstIndex()
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), first)
@@ -136,7 +146,7 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, publishOnl
 		applyCheckpointEntry(t, n, e)
 	}
 	require.Equal(t, 1, posting.Oracle().NumPendingTxns())
-	require.NoError(t, n.checkpointRaftCut(5, true))
+	require.NoError(t, n.checkpointRaftCut(6, true))
 	require.Equal(t, uint64(2), atomic.LoadUint64(&n.raftCertifiedIndex), "pending prewrite cannot be certified away")
 	readValue := func() string {
 		list, err := posting.GetNoStore(x.DataKey(predicate, 1), math.MaxUint64)
@@ -154,22 +164,57 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, publishOnl
 	n = open()
 	require.Equal(t, uint64(2), n.Cfg.Applied)
 	require.Equal(t, "certified", readValue(), "uncertified working suffix must be discarded")
-	suffix, err := wal.Entries(3, 6, math.MaxUint64)
+	oldSignatures := len(n.appliedProposals)
+	require.NoError(t, n.expireRaftProposals(time.Now().Add(time.Hour), 10*time.Minute))
+	require.Len(t, n.appliedProposals, oldSignatures, "clock expiry must wait through initial committed replay")
+	suffix, err := wal.Entries(3, 7, math.MaxUint64)
 	require.NoError(t, err)
 	for _, e := range suffix {
 		applyCheckpointEntry(t, n, e)
 	}
 	require.Equal(t, "suffix", readValue())
 	require.Equal(t, 1, posting.Oracle().NumPendingTxns(), "prewrite reconstructed from retained Raft")
-	abort := checkpointEntry(t, 6, decision(base+4, 0, base+5))
-	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: 6}, []raftpb.Entry{abort}, &raftpb.Snapshot{}))
+	oldSignatures = len(n.appliedProposals)
+	require.NoError(t, n.expireRaftProposals(time.Now().Add(time.Hour), 10*time.Minute))
+	require.Len(t, n.appliedProposals, oldSignatures, "pending prewrites postpone dedup expiration")
+	abort := checkpointEntry(t, 7, decision(base+4, 0, base+5))
+	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: 7}, []raftpb.Entry{abort}, &raftpb.Snapshot{}))
 	require.NoError(t, wal.Sync())
 	atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(abort.Data)))
 	applyCheckpointEntry(t, n, abort)
-	require.NoError(t, n.checkpointRaftCut(6, true))
+	// Metadata overflow must retain the last certificate and all replay inputs.
+	for key := uint64(100); key < 30000; key++ {
+		n.appliedProposals[key] = &appliedProposal{size: 128, seen: time.Now()}
+	}
+	require.ErrorContains(t, n.checkpointRaftCut(7, true), "1MiB")
+	require.Equal(t, uint64(2), atomic.LoadUint64(&n.raftCertifiedIndex))
+	first, err = wal.FirstIndex()
+	require.NoError(t, err)
+	require.Equal(t, uint64(3), first)
+	for key := range n.appliedProposals {
+		if key >= 100 {
+			delete(n.appliedProposals, key)
+		}
+	}
+	require.NoError(t, n.checkpointRaftCut(7, true))
 	require.Zero(t, posting.Oracle().NumPendingTxns())
-	require.Equal(t, uint64(6), atomic.LoadUint64(&n.raftCertifiedIndex))
+	require.Equal(t, uint64(7), atomic.LoadUint64(&n.raftCertifiedIndex))
 	require.Equal(t, "suffix", readValue())
+	// Expiration can refresh metadata at the same semantic index, and it must
+	// be durable before any later application can observe the absent signatures.
+	require.NoError(t, n.expireRaftProposals(time.Now().Add(time.Hour), 10*time.Minute))
+	require.Empty(t, n.appliedProposals)
+	posting.Cleanup()
+	posting.Oracle().ResetTxns()
+	current.closePostingStore()
+	n = open()
+	require.Equal(t, uint64(7), n.Cfg.Applied)
+	require.Empty(t, n.appliedProposals, "same-index expiration must be certified")
+	require.Equal(t, "suffix", readValue())
+	n.appliedProposals[99] = &appliedProposal{size: 123, seen: time.Now().Add(-time.Hour)}
+	current.closePostingStore()
+	require.Error(t, n.expireRaftProposals(time.Now(), 10*time.Minute))
+	require.Contains(t, n.appliedProposals, uint64(99), "failed expiration barrier restores original dedup state")
 }
 
 func TestRaftCheckpointValidationAndDebtFailClosed(t *testing.T) {

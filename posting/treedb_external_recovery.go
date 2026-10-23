@@ -21,7 +21,7 @@ func OpenRaftTreeDBStore(opts td.Options, identity string) (*TreeDBStore, error)
 		durability: "raft_checkpoint", commitQueue: make(chan treeDBCommitRequest, treeDBCommitQueueCapacity),
 		commitSlots: make(chan struct{}, treeDBCommitOwnershipLimit),
 	}
-	s.mutationPool.New = func() any { return new(treeDBMutationBatch) }
+	s.mutationPool.New = newTreeDBMutationBatch
 	return s, nil
 }
 

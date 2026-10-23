@@ -123,13 +123,15 @@ func OpenTreeDBStore(opts treedb.Options, mode TreeDBCommitMode) (*TreeDBStore, 
 		commitQueue: make(chan treeDBCommitRequest, treeDBCommitQueueCapacity),
 		commitSlots: make(chan struct{}, treeDBCommitOwnershipLimit),
 	}
-	store.mutationPool.New = func() any {
-		return &treeDBMutationBatch{
-			mutations: make([]mvcc.Mutation, 0, 16),
-			arena:     make([]byte, 0, 4<<10),
-		}
-	}
+	store.mutationPool.New = newTreeDBMutationBatch
 	return store, nil
+}
+
+func newTreeDBMutationBatch() any {
+	return &treeDBMutationBatch{
+		mutations: make([]mvcc.Mutation, 0, 16),
+		arena:     make([]byte, 0, 4<<10),
+	}
 }
 
 func toMVCCCommitMode(mode TreeDBCommitMode) (mvcc.CommitMode, error) {

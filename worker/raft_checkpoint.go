@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/dgraph-io/dgraph/v25/posting"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
@@ -16,7 +17,7 @@ import (
 )
 
 const (
-	raftCheckpointVersion  = "dgraph-normal-delta-v1"
+	raftCheckpointVersion  = "dgraph-normal-delta-v2"
 	raftCheckpointEvery    = 1024
 	raftCheckpointBytes    = 16 << 20
 	raftRecoveryMaxEntries = 4096
@@ -36,6 +37,60 @@ type raftCheckpointMetadata struct {
 	GroupChecksum       uint64
 	PendingTransactions uint64
 	ConfState           raftpb.ConfState
+	AppliedProposals    map[uint64]raftProposalSignature
+}
+
+type raftProposalSignature struct {
+	Size         int
+	SeenUnixNano int64
+}
+
+type appliedProposal struct {
+	err  error
+	size int
+	seen time.Time
+}
+
+// Clock expiry must be a certified transition before later application can
+// observe it. Replaying a suffix never performs clock expiry; any original
+// expiry barrier is already represented by the selected CURRENT certificate.
+func (n *node) expireRaftProposals(now time.Time, maxAge time.Duration) error {
+	if n.raftSemanticIndex < n.raftReplayUntil || posting.Oracle().NumPendingTxns() != 0 {
+		return nil
+	}
+	next := make(map[uint64]*appliedProposal, len(n.appliedProposals))
+	for key, p := range n.appliedProposals {
+		if now.Sub(p.seen) <= maxAge {
+			next[key] = p
+		}
+	}
+	if len(next) == len(n.appliedProposals) {
+		return nil
+	}
+	previous := n.appliedProposals
+	n.appliedProposals = next
+	if err := n.checkpointRaftCut(n.raftSemanticIndex, true); err != nil {
+		n.appliedProposals = previous
+		return err
+	}
+	return nil
+}
+
+// Preserve the existing successful key/size dedup semantics across certified
+// cuts. Replaying a duplicate prewrite must not resurrect a completed txn.
+func (n *node) applyTrackedProposal(p *pb.Proposal, key uint64, size int) error {
+	if old := n.appliedProposals[key]; key != 0 && old != nil && old.err == nil && old.size == size {
+		old.seen = time.Now()
+		return nil
+	}
+	err := n.applyCommitted(p, key)
+	if key != 0 {
+		if n.appliedProposals == nil {
+			n.appliedProposals = make(map[uint64]*appliedProposal)
+		}
+		n.appliedProposals[key] = &appliedProposal{err: err, size: size, seen: time.Now()}
+	}
+	return err
 }
 
 func raftCheckpointEnabled() bool {
@@ -48,6 +103,11 @@ func raftCheckpointEnabled() bool {
 func validateRaftCheckpoint(c raftCheckpointMetadata, store *raftwal.DiskStorage, gid uint32, id uint64) error {
 	if c.Version != raftCheckpointVersion || c.Group != gid || c.RaftID != id || c.PendingTransactions != 0 {
 		return fmt.Errorf("incompatible Raft TreeDB checkpoint identity or pending state")
+	}
+	for key, sig := range c.AppliedProposals {
+		if key == 0 || sig.Size <= 0 || sig.SeenUnixNano <= 0 {
+			return fmt.Errorf("invalid checkpoint proposal signature")
+		}
 	}
 	hs, err := store.HardState()
 	if err != nil {
@@ -133,6 +193,16 @@ func (n *node) recoverRaftCheckpoint() error {
 		}
 	}
 	n.Cfg.Applied = c.Index
+	n.raftSemanticIndex = c.Index
+	hs, err := n.Store.HardState()
+	if err != nil {
+		return err
+	}
+	n.raftReplayUntil = hs.Commit
+	n.appliedProposals = make(map[uint64]*appliedProposal, len(c.AppliedProposals))
+	for key, sig := range c.AppliedProposals {
+		n.appliedProposals[key] = &appliedProposal{size: sig.Size, seen: time.Unix(0, sig.SeenUnixNano)}
+	}
 	n.Applied.SetDoneUntil(c.Index)
 	atomic.StoreUint64(&n.raftCertifiedIndex, c.Index)
 	n.Store.SetUint(raftwal.CheckpointIndex, c.Index)
@@ -167,7 +237,7 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 		return nil
 	}
 	last := atomic.LoadUint64(&n.raftCertifiedIndex)
-	if index <= last || (!force && index-last < raftCheckpointEvery && atomic.LoadUint64(&n.raftRecoveryBytes) < raftCheckpointBytes) {
+	if index < last || (!force && index-last < raftCheckpointEvery && atomic.LoadUint64(&n.raftRecoveryBytes) < raftCheckpointBytes) {
 		return nil
 	}
 	if posting.Oracle().NumPendingTxns() != 0 {
@@ -178,9 +248,24 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 		return err
 	}
 	c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: n.gid, RaftID: n.Id, Index: index, Term: term, OracleMaxAssigned: posting.Oracle().MaxAssigned(), GroupChecksum: atomic.LoadUint64(&groups().deltaChecksum), ConfState: *n.ConfState()}
+	c.AppliedProposals = make(map[uint64]raftProposalSignature, len(n.appliedProposals))
+	for key, p := range n.appliedProposals {
+		if p.err == nil {
+			c.AppliedProposals[key] = raftProposalSignature{Size: p.size, SeenUnixNano: p.seen.UnixNano()}
+		}
+	}
 	data, err := json.Marshal(c)
 	if err != nil {
 		return err
+	}
+	if len(data) > 1<<20 {
+		// Keep the old certificate and every required input. Admission debt stops
+		// new mutations. Never discard dedup signatures just to fit a certificate.
+		glog.Warningf("raft_checkpoint metadata exceeds 1MiB; retaining recovery history")
+		if force {
+			return fmt.Errorf("forced checkpoint metadata exceeds 1MiB")
+		}
+		return nil
 	}
 	if err := State.TreeDBStore.CheckpointRaft(context.Background(), data); err != nil {
 		return err
@@ -194,8 +279,10 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 	if err != nil {
 		return err
 	}
-	if err := n.Store.CreateSnapshot(index, &c.ConfState, snapData); err != nil {
-		return err
+	if index > last {
+		if err := n.Store.CreateSnapshot(index, &c.ConfState, snapData); err != nil {
+			return err
+		}
 	}
 	n.Store.SetUint(raftwal.CheckpointIndex, index)
 	atomic.StoreUint64(&n.raftCertifiedIndex, index)

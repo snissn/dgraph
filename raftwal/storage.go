@@ -67,8 +67,9 @@ type DiskStorage struct {
 	lock sync.Mutex
 
 	// External materialized stores may compact only a certified durable prefix.
-	checkpointGuard bool
-	certifiedIndex  uint64
+	checkpointGuard  bool
+	certifiedIndex   uint64
+	syncStageForTest func(string)
 }
 
 // Init initializes an instance of DiskStorage without encryption.
@@ -133,6 +134,8 @@ func (w *DiskStorage) reset(es []raftpb.Entry) error {
 }
 
 func (w *DiskStorage) HardState() (raftpb.HardState, error) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	if w.meta == nil {
 		return raftpb.HardState{}, errors.Errorf("uninitialized meta file")
 	}
@@ -342,7 +345,7 @@ func (w *DiskStorage) CreateSnapshot(i uint64, cs *raftpb.ConfState, data []byte
 	// Persist retention authorization before deleting any recovery input. Without
 	// this ordering a power loss could retain an old snapshot with missing logs.
 	if w.checkpointGuard {
-		if err := w.meta.Sync(); err != nil {
+		if err := w.syncLocked(); err != nil {
 			return err
 		}
 	}
@@ -421,11 +424,19 @@ func (w *DiskStorage) NumLogFiles() int {
 func (w *DiskStorage) Sync() error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
+	return w.syncLocked()
+}
 
+// syncLocked seals every dirty dependency before explicitly syncing metadata
+// with its new commit frontier. Ready and certificate publication share this order.
+func (w *DiskStorage) syncLocked() error {
 	if w.checkpointGuard {
 		for file := range w.wal.dirty {
 			if err := file.Sync(); err != nil {
 				return err
+			}
+			if w.syncStageForTest != nil {
+				w.syncStageForTest("wal")
 			}
 		}
 		if w.wal.namespaceDirty {
@@ -441,9 +452,15 @@ func (w *DiskStorage) Sync() error {
 			if closeErr != nil {
 				return closeErr
 			}
+			if w.syncStageForTest != nil {
+				w.syncStageForTest("directory")
+			}
 		}
 		if err := w.meta.Sync(); err != nil {
 			return err
+		}
+		if w.syncStageForTest != nil {
+			w.syncStageForTest("meta")
 		}
 		clear(w.wal.dirty)
 		w.wal.namespaceDirty = false

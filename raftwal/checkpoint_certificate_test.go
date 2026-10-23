@@ -1,11 +1,49 @@
 package raftwal
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
+
+func TestCheckpointCertificateSnapshotSyncOrdersReadyDependencies(t *testing.T) {
+	ds := Init(t.TempDir())
+	defer ds.Close()
+	ds.RequireCheckpointCertificate()
+	require.NoError(t, ds.Save(&raftpb.HardState{Term: 1, Commit: 2}, []raftpb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1}}, &raftpb.Snapshot{}))
+	require.NoError(t, ds.AuthorizeCheckpoint(1))
+	var stages []string
+	ds.syncStageForTest = func(stage string) { stages = append(stages, stage) }
+	// A newer Ready is saved but not synced when the apply goroutine certifies
+	// an older prefix. Snapshot publication must seal Ready's dependencies too.
+	require.NoError(t, ds.CreateSnapshot(1, &raftpb.ConfState{}, nil))
+	require.Equal(t, []string{"wal", "directory", "meta"}, stages)
+	require.Empty(t, ds.wal.dirty)
+	ds.syncStageForTest = nil
+}
+
+func TestCheckpointCertificateConcurrentHardState(t *testing.T) {
+	ds := Init(t.TempDir())
+	defer ds.Close()
+	ds.RequireCheckpointCertificate()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 1000; i++ {
+			_, err := ds.HardState()
+			if err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+	for i := uint64(1); i <= 100; i++ {
+		require.NoError(t, ds.Save(&raftpb.HardState{Term: 1, Commit: i}, []raftpb.Entry{{Index: i, Term: 1}}, &raftpb.Snapshot{}))
+	}
+	wg.Wait()
+}
 
 func TestCheckpointCertificateGuardsSnapshotRetention(t *testing.T) {
 	ds := Init(t.TempDir())

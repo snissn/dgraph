@@ -66,6 +66,9 @@ type node struct {
 	raftAppliedBytes    uint64
 	raftCertifiedIndex  uint64
 	raftRecoveryBytes   uint64
+	raftSemanticIndex   uint64
+	raftReplayUntil     uint64
+	appliedProposals    map[uint64]*appliedProposal
 	checkpointTs        uint64 // Timestamp corresponding to checkpoint.
 	streaming           int32  // Used to avoid calculating snapshot
 
@@ -885,13 +888,6 @@ func updateStartTs(p *pb.Proposal) {
 func (n *node) processApplyCh() {
 	defer n.closer.Done() // CLOSER:1
 
-	type P struct {
-		err  error
-		size int
-		seen time.Time
-	}
-	previous := make(map[uint64]*P)
-
 	// This function must be run serially.
 	handle := func(entries []raftpb.Entry) {
 		glog.V(3).Infof("handling element in applyCh with #entries %v", len(entries))
@@ -913,23 +909,19 @@ func (n *node) processApplyCh() {
 			updateStartTs(&proposal)
 
 			var perr error
-			p, ok := previous[key]
+			p, ok := n.appliedProposals[key]
 			if ok && p.err == nil && p.size == psz {
 				msg := fmt.Sprintf("Proposal with key: %d already applied. Skipping index: %d."+
 					" Delta: %+v Snapshot: %+v.\n",
 					key, proposal.Index, proposal.Delta, proposal.Snapshot)
 				glog.Infof(msg)
-				previous[key].seen = time.Now() // Update the ts.
+				n.appliedProposals[key].seen = time.Now() // Update the ts.
 				// Don't break here. We still need to call the Done below.
 
 			} else {
 				// if this applyCommitted fails, how do we ensure
 				start := time.Now()
-				perr = n.applyCommitted(&proposal, key)
-				if key != 0 {
-					p := &P{err: perr, size: psz, seen: time.Now()}
-					previous[key] = p
-				}
+				perr = n.applyTrackedProposal(&proposal, key, psz)
 				span := trace.SpanFromContext(n.ctx)
 				if perr != nil {
 					glog.Errorf("Applying proposal. Error: %v. Proposal: %q.", perr, &proposal)
@@ -957,6 +949,7 @@ func (n *node) processApplyCh() {
 					glog.Fatalf("raft_checkpoint apply failed; refusing a visibility frontier: %v", perr)
 				}
 				n.raftAppliedBytes += uint64(len(entry.Data))
+				n.raftSemanticIndex = proposal.Index
 				if err := n.checkpointRaftCut(proposal.Index, false); err != nil {
 					glog.Fatalf("raft_checkpoint failed: %v", err)
 				}
@@ -977,7 +970,7 @@ func (n *node) processApplyCh() {
 		select {
 		case entries, ok := <-n.applyCh:
 			if !ok {
-				if err := n.checkpointRaftCut(n.Applied.DoneUntil(), true); err != nil {
+				if err := n.checkpointRaftCut(n.raftSemanticIndex, true); err != nil {
 					glog.Errorf("final checkpoint: %v", err)
 				}
 				return
@@ -986,12 +979,17 @@ func (n *node) processApplyCh() {
 		case <-tick:
 			// We use this ticker to clear out previous map.
 			now := time.Now()
-			for key, p := range previous {
-				if now.Sub(p.seen) > maxAge {
-					delete(previous, key)
+			for key, p := range n.appliedProposals {
+				if !raftCheckpointEnabled() && now.Sub(p.seen) > maxAge {
+					delete(n.appliedProposals, key)
 				}
 			}
-			glog.V(3).Infof("Size of previous map: %d", len(previous))
+			if raftCheckpointEnabled() {
+				if err := n.expireRaftProposals(now, maxAge); err != nil {
+					glog.Fatalf("raft_checkpoint dedup expiration barrier failed: %v", err)
+				}
+			}
+			glog.V(3).Infof("Size of previous map: %d", len(n.appliedProposals))
 		}
 	}
 }

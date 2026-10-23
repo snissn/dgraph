@@ -48,7 +48,17 @@ A pending-free application cut binds:
 - external owner identity and application/schema contract version;
 - Alpha Raft/group identity, term/index and configuration state;
 - Oracle `MaxAssigned` visibility and group checksum;
-- zero pending transactions and replay starting at the next Raft index.
+- zero pending transactions and replay starting at the next Raft index;
+- successful proposal key/entry-size signatures and their last-seen times.
+
+The `dgraph-normal-delta-v2` contract restores proposal deduplication before replay. Its existing
+ten-minute clock expiration is postponed through initial committed replay and while transactions are
+pending. Expiration at a pending-free serial barrier synchronously publishes a new certificate,
+including at the same Raft index, before any later semantic input can use the changed dedup state. A
+failed expiration certificate stops application. This preserves the retry horizon and makes every
+expiration affecting replay part of the selected durable cut. Metadata is capped at 1 MiB. Normal
+overflow retains the old certificate and all recovery history; it never removes signatures to force
+a certificate to fit.
 
 Pending prewrites live in Oracle rather than the posting database. They are never excluded from
 required history: a nonempty pending set prevents a new certificate, and all Raft history after the
@@ -60,6 +70,9 @@ Ordering is
 the missing install protocol. Payload truncation is disabled for the guarded WAL. External Ready
 synchronization tracks dirty files at append/rotation, flushes those files and changed directory
 names before Raft metadata, and includes committed applications even when `Ready.MustSync` is false.
+Snapshot publication uses the same dependency synchronization under the storage lock, including any
+newer Ready saved during checkpoint copying. Public HardState reads take that lock as well. Shutdown
+uses the serial semantic index rather than an asynchronously updated applied watermark.
 
 On startup the owner validates digests and reconstructs working storage from exactly the immutable
 certified image. Working files, including an incidentally flushed uncertified suffix, are discarded.
@@ -101,10 +114,14 @@ The normal-mutation/Delta test certifies an old scalar value, applies a newer co
 pending prewrite, flushes/closes working storage, reopens the exact old certified value, replays to
 the newer value and reconstructed pending transaction, aborts it and certifies the next complete
 cut. It exercises both a crash after retention publication and certificate publication before
-retention, with an intentionally bogus independently saved applied hint. Validation tests reject
-identity/term/pending/history gaps and prove reservation backpressure. WAL tests refuse uncertified
-pruning/install, preserve history across authorization-only restart, and track dirty dependencies
-across rotation without syncing all retained files per Ready.
+retention, with an intentionally bogus independently saved applied hint. A suffix duplicate of a
+pre-certificate mutation must not resurrect its transaction. The test also covers certified
+same-index dedup expiration and metadata overflow retaining required history. Validation tests
+reject identity/term/pending/history gaps and prove reservation backpressure. WAL tests refuse
+uncertified pruning/install, preserve history across authorization-only restart, and track dirty
+dependencies across rotation without syncing all retained files per Ready. A deterministic
+interleaving test proves snapshot publication syncs newer Ready dependencies before metadata; a
+concurrent HardState read/write test covers the public lock.
 
 These focused tests are correctness diagnostics. The separate actual-server validation driver
 records filesystem-survival settings, acknowledged RPC data, SIGKILL/restart verification, source
