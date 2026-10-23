@@ -17,6 +17,43 @@ import (
 	"github.com/dgraph-io/dgraph/v25/x"
 )
 
+func (rb *IndexRebuild) sourceStore() Store {
+	if rb.Store != nil {
+		return rb.Store
+	}
+	return postingStore
+}
+
+func (lc *LocalCache) sourceStore() Store {
+	if lc.privateStore != nil {
+		return lc.privateStore
+	}
+	return postingStore
+}
+
+func (lc *LocalCache) loadList(key []byte, readUids bool) (*List, error) {
+	if lc.privateStore == nil {
+		return getNewForStore(key, postingStore, lc.startTs, readUids)
+	}
+	store := lc.privateStore
+	txn := store.NewReadTxn(lc.startTs)
+	defer txn.Discard()
+	it := txn.NewKeyIterator(key, IteratorOptions{AllVersions: true})
+	defer it.Close()
+	it.Seek(key)
+	list, err := readPostingListForStore(key, it, store)
+	if err != nil {
+		return nil, err
+	}
+	list.mutationMap.setTs(lc.startTs)
+	if readUids {
+		if err := list.calculateUids(); err != nil {
+			return nil, err
+		}
+	}
+	return list, nil
+}
+
 // walkStoreLists retains one read snapshot for the entire traversal. A list
 // consumes multiple versions itself; skipping the remainder here must not skip
 // the following key. Split parts are accessed through their owning main list.
@@ -30,7 +67,7 @@ func walkStoreLists(ctx context.Context, store Store, ts uint64, prefix []byte, 
 			return err
 		}
 		key := it.Item().KeyCopy(nil)
-		list, err := readPostingList(key, it)
+		list, err := readPostingListForStore(key, it, store)
 		if err != nil && !errors.Is(err, ErrInvalidKey) {
 			return err
 		}
@@ -50,14 +87,18 @@ func walkStoreLists(ctx context.Context, store Store, ts uint64, prefix []byte, 
 // available to timestamped readers and retained checkpoint roots. The caller
 // owns the schema/apply barrier; this function never advances a discard floor.
 func dropStoreIndexPrefixes(ctx context.Context, ts uint64, prefixes [][]byte) (retErr error) {
+	return dropStoreIndexPrefixesForStore(ctx, postingStore, ts, prefixes)
+}
+
+func dropStoreIndexPrefixesForStore(ctx context.Context, store Store, ts uint64, prefixes [][]byte) (retErr error) {
 	if ts == 0 {
 		return nil
 	}
-	writer := NewTxnWriterForStore(postingStore)
+	writer := NewTxnWriterForStore(store)
 	defer func() { retErr = errors.Join(retErr, writer.Flush()) }()
 	for _, prefix := range prefixes {
 		if err := func() error {
-			txn := postingStore.NewReadTxn(ts)
+			txn := store.NewReadTxn(ts)
 			defer txn.Discard()
 			it := txn.NewIterator(IteratorOptions{Prefix: prefix})
 			defer it.Close()
@@ -91,6 +132,10 @@ func (r *rebuilder) runForStore(ctx context.Context) (retErr error) {
 	if r.startTs == 0 {
 		return nil
 	}
+	store := r.store
+	if store == nil {
+		store = postingStore
+	}
 	dir, err := os.MkdirTemp(x.WorkerConfig.TmpDir, "dgraph_store_index_")
 	if err != nil {
 		return err
@@ -112,7 +157,12 @@ func (r *rebuilder) runForStore(ctx context.Context) (retErr error) {
 	defer func() { retErr = errors.Join(retErr, tmp.Close()) }()
 	batch := tmp.NewManagedWriteBatch()
 	defer batch.Cancel()
-	txn := NewTxn(r.startTs)
+	newTxn := func() *Txn {
+		txn := NewTxn(r.startTs)
+		txn.cache.privateStore = store
+		return txn
+	}
+	txn := newTxn()
 	var counter uint64 = 1
 	flushChunk := func() error {
 		txn.Update()
@@ -122,14 +172,32 @@ func (r *rebuilder) runForStore(ctx context.Context) (retErr error) {
 				return err
 			}
 		}
-		txn = NewTxn(r.startTs)
+		txn = newTxn()
 		return nil
 	}
 	count := 0
-	if err := walkStoreLists(ctx, postingStore, r.startTs, r.prefix, func(key []byte, list *List) error {
+	if err := walkStoreLists(ctx, store, r.startTs, r.prefix, func(key []byte, list *List) error {
 		pk, err := x.Parse(key)
 		if err != nil {
 			return err
+		}
+		if r.copySource {
+			kvs, err := list.Rollup(nil, r.startTs)
+			if err != nil {
+				return err
+			}
+			// One complete main+split image shares one timestamp. Its later
+			// conversion delta must not discard untouched language postings.
+			counter++
+			for _, kv := range kvs {
+				meta := BitCompletePosting
+				if len(kv.Value) == 0 {
+					meta = BitEmptyPosting
+				}
+				if err := batch.SetEntryAt(&badger.Entry{Key: kv.Key, Value: kv.Value, UserMeta: meta}, counter); err != nil {
+					return err
+				}
+			}
 		}
 		if _, err := r.fn(pk.Uid, list, txn); err != nil {
 			return err
@@ -148,7 +216,7 @@ func (r *rebuilder) runForStore(ctx context.Context) (retErr error) {
 	if err := batch.Flush(); err != nil {
 		return err
 	}
-	writer := NewTxnWriterForStore(postingStore)
+	writer := NewTxnWriterForStore(store)
 	defer func() { retErr = errors.Join(retErr, writer.Flush()) }()
 	return walkStoreLists(ctx, NewBadgerStore(tmp), counter, nil, func(key []byte, list *List) error {
 		kvs, err := list.Rollup(nil, math.MaxUint64)

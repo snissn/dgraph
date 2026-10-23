@@ -7,12 +7,12 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/dgraph-io/dgraph/v25/posting"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/dgraph-io/dgraph/v25/schema"
-	"github.com/dgraph-io/dgraph/v25/types"
 	"github.com/dgraph-io/dgraph/v25/x"
 	"google.golang.org/protobuf/proto"
 )
@@ -45,10 +45,15 @@ func checkRaftSupportedProposal(p *pb.Proposal) error {
 			return fmt.Errorf("raft_checkpoint does not support predicate deletion or nil edges")
 		}
 	}
+	seen := make(map[string]struct{}, len(m.Schema))
 	for _, update := range m.Schema {
 		if err := validateRaftSchemaUpdate(update); err != nil {
 			return err
 		}
+		if _, exists := seen[update.Predicate]; exists {
+			return &raftSemanticRejection{reason: "duplicate predicate schema in one proposal"}
+		}
+		seen[update.Predicate] = struct{}{}
 	}
 	for _, update := range m.Types {
 		if update == nil || update.TypeName == "" {
@@ -130,20 +135,26 @@ func validateRaftSchemaUpdate(update *pb.SchemaUpdate) error {
 	if update == nil {
 		return fmt.Errorf("raft_checkpoint: nil schema update")
 	}
-	if update.Directive == pb.SchemaUpdate_DELETE || len(update.IndexSpecs) > 0 || update.Count || update.Directive == pb.SchemaUpdate_REVERSE || update.ValueType == pb.Posting_VFLOAT {
-		return fmt.Errorf("raft_checkpoint requires scalar tokenizer schema; delete/vector/count/reverse need an owned lifecycle")
+	if update.Directive == pb.SchemaUpdate_DELETE || len(update.IndexSpecs) > 0 || update.ValueType == pb.Posting_VFLOAT {
+		return fmt.Errorf("raft_checkpoint does not own predicate deletion or vector lifecycle")
+	}
+	if err := checkSchemaWithDataCheck(proto.Clone(update).(*pb.SchemaUpdate), func(string) bool { return false }); err != nil {
+		return &raftSemanticRejection{reason: err.Error()}
 	}
 	old, exists := schema.State().Get(context.Background(), update.Predicate)
 	if !exists || proto.Equal(&old, update) {
 		return nil
 	}
-	// This batch deliberately changes only tokenizer membership. Data/type/list,
-	// language, uniqueness and conflict semantics stay with their existing schema.
+	// Data/type/list and derived indexes use maintained synchronous builders.
+	// Remaining metadata changes require their separate conflict/uniqueness proofs.
 	before, after := proto.Clone(&old).(*pb.SchemaUpdate), proto.Clone(update).(*pb.SchemaUpdate)
 	before.Tokenizer, after.Tokenizer = nil, nil
 	before.Directive, after.Directive = pb.SchemaUpdate_NONE, pb.SchemaUpdate_NONE
-	if !types.TypeID(old.ValueType).IsScalar() || !proto.Equal(before, after) {
-		return fmt.Errorf("raft_checkpoint supports only scalar tokenizer changes on existing predicate %s", update.Predicate)
+	before.ValueType, after.ValueType = 0, 0
+	before.List, after.List = false, false
+	before.Count, after.Count = false, false
+	if !proto.Equal(before, after) {
+		return fmt.Errorf("raft_checkpoint schema metadata change needs conflict/uniqueness validation for %s", update.Predicate)
 	}
 	return nil
 }
@@ -152,22 +163,54 @@ func validateRaftSchemaUpdate(update *pb.SchemaUpdate) error {
 // and final schema publication inside the single ordered apply operation. The
 // caller excludes checkpoints until return; no asynchronous builder escapes it.
 func runRaftSchemaMutation(ctx context.Context, updates []*pb.SchemaUpdate, startTs uint64) error {
-	for _, update := range updates {
+	if len(updates) == 0 {
+		return nil
+	}
+	prepared := make([]*pb.SchemaUpdate, 0, len(updates))
+	for _, input := range updates {
+		if input == nil {
+			return fmt.Errorf("raft_checkpoint: nil schema update")
+		}
+		update := proto.Clone(input).(*pb.SchemaUpdate)
 		if err := validateRaftSchemaUpdate(update); err != nil {
 			return err
 		}
-		if err := checkSchema(update); err != nil {
-			return err
+		if err := checkSchemaWithDataCheck(update, func(string) bool { return false }); err != nil {
+			return &raftSemanticRejection{reason: err.Error()}
 		}
-		// Committed input already passed ownership admission. As with normal
-		// runMutation, replay must not query Zero's later tablet assignment.
-	}
-	for _, update := range updates {
 		old, exists := schema.State().Get(ctx, update.Predicate)
 		if exists && proto.Equal(&old, update) {
 			continue
 		}
 		rebuild := posting.IndexRebuild{Attr: update.Predicate, StartTs: startTs, OldSchema: &old, CurrentSchema: update}
+		if err := rebuild.ValidateData(ctx); err != nil {
+			if errors.Is(err, posting.ErrSchemaDataConflict) {
+				return &raftSemanticRejection{reason: err.Error()}
+			}
+			return err
+		}
+		prepared = append(prepared, update)
+		// Committed input already passed ownership admission. As with normal
+		// runMutation, replay must not query Zero's later tablet assignment.
+	}
+	if len(prepared) == 0 {
+		return nil
+	}
+	cap, err := State.TreeDBStore.BeginRaftSchemaTransition(ctx)
+	if err != nil {
+		return err
+	}
+	defer cap.Close()
+	// Reads must use the epoch-bound capability under rootGate. The ordinary
+	// writer wrapper retains callback/error instrumentation and creates writes
+	// in this capability's epoch; every callback drains before cap.Complete.
+	store := raftSchemaStore{Store: postingStore, reads: cap.Store()}
+	for _, update := range prepared {
+		old, exists := schema.State().Get(ctx, update.Predicate)
+		if exists && proto.Equal(&old, update) {
+			continue
+		}
+		rebuild := posting.IndexRebuild{Attr: update.Predicate, StartTs: startTs, OldSchema: &old, CurrentSchema: update, Store: store}
 		querySchema := rebuild.GetQuerySchema()
 		schema.State().Set(update.Predicate, querySchema)
 		schema.State().SetMutSchema(update.Predicate, update)
@@ -177,21 +220,35 @@ func runRaftSchemaMutation(ctx context.Context, updates []*pb.SchemaUpdate, star
 			if err := rebuild.DropIndexes(ctx); err != nil {
 				return err
 			}
+			// A list-to-scalar transition is eligible only after the pure scan
+			// proved it empty, so there is no list representation to convert.
+			if !old.List || update.List {
+				if err := rebuild.BuildData(schema.GetWriteContext(ctx)); err != nil {
+					return err
+				}
+			}
 			if rebuild.NeedIndexRebuild() {
 				if err := rebuild.BuildIndexes(schema.GetWriteContext(ctx)); err != nil {
 					return err
 				}
 			}
 		}
-		if err := writeSchema(update, startTs); err != nil {
+		if err := writeSchemaForStore(store, update, startTs); err != nil {
 			return err
 		}
 	}
 	// All predicates' materialization and schema writes have completed. A later
 	// predicate failure cannot expose an earlier predicate's final query schema.
-	for _, update := range updates {
+	for _, update := range prepared {
 		schema.State().Set(update.Predicate, update)
 		schema.State().DeleteMutSchema(update.Predicate)
 	}
-	return nil
+	return cap.Complete()
 }
+
+type raftSchemaStore struct {
+	posting.Store
+	reads posting.Store
+}
+
+func (s raftSchemaStore) NewReadTxn(ts uint64) posting.ReadTxn { return s.reads.NewReadTxn(ts) }

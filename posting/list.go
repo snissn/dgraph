@@ -1189,7 +1189,8 @@ loop:
 			mp = emptyPosting
 		}
 
-		valid, err := pitr.valid()
+		var valid bool
+		valid, err = pitr.valid()
 		switch {
 		case err != nil:
 			break loop

@@ -713,6 +713,10 @@ func readPostingListForStore(key []byte, it Iterator, store Store) (*List, error
 
 		switch item.UserMeta() {
 		case BitEmptyPosting:
+			// An empty complete image has the same historical boundary as a
+			// nonempty complete list. Otherwise a warmed empty cache entry can
+			// incorrectly satisfy reads preceding its tombstone timestamp.
+			l.minTs = item.Version()
 			return l, nil
 		case BitCompletePosting:
 			if err := unmarshalStoreItem(l.plist, item); err != nil {

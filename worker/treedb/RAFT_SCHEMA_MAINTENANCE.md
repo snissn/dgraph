@@ -1,39 +1,52 @@
 # Ordered schema and physical maintenance
 
-The `raft_checkpoint` policy now performs scalar tokenizer changes through the existing ordered
-apply path. This is a focused production integration packet, not acceptance of the whole TreeDB
-operational or production capability tier.
+The `raft_checkpoint` policy performs scalar tokenizer, count/reverse and type/list changes through
+the existing ordered apply path. This is a focused production integration packet, not acceptance of
+the whole TreeDB operational or production capability tier.
 
-## Scalar tokenizer transition
+## Ordered schema transition
 
 Proposal admission and committed application both call `checkRaftSupportedProposal`. Existing
-predicates may change tokenizer membership while retaining their type, list, language, upsert,
-uniqueness and other schema properties. Fresh basic predicates and types keep their existing
-semantic writer. Isolated timestamped type deletion uses the existing schema-store tombstone path;
-type updates publish their in-memory definition after their schema write succeeds. Vector, count,
-reverse, type/list conversion, posting-data deletion and external-file operations remain refused.
+predicates may change tokenizer membership, count/reverse, scalar type and scalar/list
+representation. Before effects, a complete logical scan at the preceding ordered Oracle frontier
+checks scalar conversion and refuses populated list-to-scalar or UID/scalar changes. Empty logical
+data may change shape even when replicas retain different physical deltas or baselines. Read,
+decoding and I/O errors cannot become terminal semantic rejections. Language, upsert, uniqueness and
+other schema metadata transitions retain their separate guards. Fresh basic predicates and types
+keep their existing semantic writer. Isolated timestamped type deletion uses the existing
+schema-store tombstone path; type updates publish their in-memory definition after their schema
+write succeeds. Vector and external-file lifecycle remain separate capabilities. Posting-data and
+namespace deletion are documented by their separate ordered admin integration.
 
 Committed input is already routed; application does not consult Zero's later tablet assignment. The
 same rule is used by ordinary `runMutation`. Schema validation precedes materialization. The query
 schema omits unavailable or removed tokenizers while the mutation schema supplies the intended
-tokenizers to the existing index builders. Old index keys become timestamped empty lists, including
-split keys, rather than being physically removed by `DropPrefix`.
+tokenizers to the existing index builders. A schema capability reuses the maintenance request and
+root drain, epoch fencing, private snapshot reads and callback tracking; no global Store swap
+occurs. It changes neither the physical floor nor the certificate/retention frontier. Old index keys
+become timestamped empty lists, including split keys, rather than being physically removed by
+`DropPrefix`.
 
 The maintained `rebuilder` callback, posting-list decoder, index mutation code and posting-list
 rollup produce index contents. A store-neutral snapshot scan feeds those algorithms. Chunks of 256
 source lists are aggregated in temporary Badger at unique scratch timestamps, then merged into
-complete posting lists at the schema transition timestamp. Scratch storage has no recovery
-authority: no certificate references it, it is never imported on restart, and replay recomputes it
-from the selected certified root plus retained ordered proposal. Scratch memory, disk and I/O scale
-with the rebuilt predicate; the 256-list chunk is not a constant bound on an individual list or
-token's size.
+complete posting lists at the schema transition timestamp. Reverse edges and both forward/reverse
+count indexes reuse their maintained builders. Scalar-to-list conversion first copies complete
+source main/split contents into scratch, preserving language-tagged and untouched values while its
+conversion delta changes the scalar fingerprint. Scratch storage has no recovery authority: no
+certificate references it, it is never imported on restart, and replay recomputes it from the
+selected certified root plus retained ordered proposal. Scratch memory, disk and I/O scale with the
+rebuilt predicate; the 256-list chunk is not a constant bound on an individual list or token's size.
 
 Every final write callback drains before the builder returns. Only after that and the final schema
 write succeeds is the complete query schema published. There is no background builder, new Raft
 queue or independent root publisher. The semantic apply goroutine cannot certify a partial schema
 operation. An I/O, callback or setup error is an uncertain apply failure; the current certificate
 and required history stay selectable, and recovery reruns the operation. It is not converted to a
-normal mutation's terminal semantic rejection.
+normal mutation's terminal semantic rejection. A started schema capability which fails to complete
+seals request admission until certified reopen. Successful logical schema application can resume
+without an immediate certificate because the previous exact root and retained ordered schema
+proposal remain its recovery authority.
 
 ## Physical maintenance
 
@@ -63,6 +76,21 @@ a later indexed mutation. GC and full physical compaction run with two retained 
 old/new value. Reopen restores the certified value and index, then suffix replay recreates exact
 membership. The test checks that physical compaction leaves the logical floor at zero and refuses
 unsafe reclaim.
+
+`posting.TestStoreCountReverseRebuildAggregatesAndPreservesHistory` aggregates 600 source UIDs
+across chunk boundaries, including a cold split source, shared reverse targets, forward/reverse
+counts, removal and historical reads.
+`TestStoreScalarListConversionPreservesTaggedValuesAndOldReads` checks conversion and same-timestamp
+retry without losing tagged values. Pure data-validation tests compare logical eligibility with
+different physical histories and preserve unknown error classes. Iteration callback errors and
+empty-list cache anchor timestamps have dedicated regressions.
+
+`worker.TestRaftSchemaVariantsCertifiedPendingAndRejection` applies mixed count/reverse, scalar
+type/list and token changes through the ordinary tracked proposal path. It certifies and reopens
+built indexes, checkpoints pending indexed/list mutations, reopens and commits their canonical
+deltas, rejects an incompatible later predicate before removing an earlier predicate's indexes, and
+certifies/reopens index removal while retaining older reads. Schema capability tests check
+whole-request drain, private reader invalidation, stale write fencing and sealing on failure.
 
 These are focused correctness/race controls. They do not establish real-server schema ACK-to-SIGKILL
 behavior, power-loss certification, rebuild throughput, large-predicate resource budgets or full
@@ -126,20 +154,20 @@ Continuous-workload resource/debt qualification and full bounded-lifetime accept
 
 ## Other operations and inherited boundaries
 
-| Flow                              | Required closure / current disposition                                                                                                                                               |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Scalar tokenizer changes          | Implemented serial transition above; actual-server crash qualification remains                                                                                                       |
-| Type definition/deletion          | Existing timestamped schema writer/tombstone; older-cut replay and reopen control implemented; no posting-data or namespace prefix deletion                                          |
-| Count/reverse                     | Maintained builders exist, but count baseline/split dependencies and query capability need adapter proofs; newly guarded standard Dgraph flows                                       |
-| Type/list conversion              | Reuse maintained `BuildData` conversion and generic aggregation only after conversion/retry/read-cut tests; currently guarded standard flow                                          |
-| Upsert/unique changes             | Requires existing-data uniqueness validation plus Zero conflict-key and retry semantics before publication; currently guarded standard flow                                          |
-| Vector                            | Factory/cache and graph side effects need exact root closure and deterministic rebuild authority; already outside ordinary TreeDB adapter capabilities                               |
-| Drop/predicate/namespace deletion | Ordered pending disposition, versioned tombstones, schema/cache reset and namespace admission epoch must complete before a cut; physical Badger prefix deletion is not a replacement |
-| Restore/import                    | External files must be immutable, digest-bound retained input; whole-root transfer must use authorized install, while selective graft needs an ordered namespace transition          |
-| Rollup/prune                      | Guarded posting-complete baseline/admission runner on existing housekeeping tick; bounded pending checkpoint/debt and actual-server qualification remain open                        |
-| Backup/export                     | Existing paths require Badger streams/format; export can use a pinned readTs generic scan, backup needs a matching restore format and retained incremental history contract          |
-| CDC/ACL                           | Existing configuration refusal remains; subscriptions, retained event frontier and ACL cache reconstruction need store-neutral ownership                                             |
-| Move/split                        | Source/receiver ordered authority, root/dependency transfer, pending decisions and membership ownership must be bound together; no silent KV import                                  |
+| Flow                              | Required closure / current disposition                                                                                                                                                   |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scalar tokenizer changes          | Implemented serial transition above; actual-server crash qualification remains                                                                                                           |
+| Type definition/deletion          | Existing timestamped schema writer/tombstone; older-cut replay and reopen control implemented; no posting-data or namespace prefix deletion                                              |
+| Count/reverse                     | Maintained builders integrated with explicit private Store, complete split sources, chunk aggregation, pending mutation and certificate/reopen proofs; inherited query limits remain     |
+| Type/list conversion              | Maintained scalar-to-list conversion integrated with complete source copying; pure conversion/data-shape validation precedes effects; populated list-to-scalar/UID-scalar changes reject |
+| Upsert/unique changes             | Requires existing-data uniqueness validation plus Zero conflict-key and retry semantics before publication; currently guarded standard flow                                              |
+| Vector                            | Factory/cache and graph side effects need exact root closure and deterministic rebuild authority; already outside ordinary TreeDB adapter capabilities                                   |
+| Drop/predicate/namespace deletion | Ordered pending disposition, versioned tombstones, schema/cache reset and namespace admission epoch must complete before a cut; physical Badger prefix deletion is not a replacement     |
+| Restore/import                    | External files must be immutable, digest-bound retained input; whole-root transfer must use authorized install, while selective graft needs an ordered namespace transition              |
+| Rollup/prune                      | Guarded posting-complete baseline/admission runner on existing housekeeping tick; bounded pending checkpoint/debt and actual-server qualification remain open                            |
+| Backup/export                     | Existing paths require Badger streams/format; export can use a pinned readTs generic scan, backup needs a matching restore format and retained incremental history contract              |
+| CDC/ACL                           | Existing configuration refusal remains; subscriptions, retained event frontier and ACL cache reconstruction need store-neutral ownership                                                 |
+| Move/split                        | Source/receiver ordered authority, root/dependency transfer, pending decisions and membership ownership must be bound together; no silent KV import                                      |
 
 Sort/count/inequality, Badger subscription formats, backup/restore formats and vector operational
 support are inherited adapter limitations; this packet does not create them or remove their

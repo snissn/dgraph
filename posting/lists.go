@@ -81,8 +81,9 @@ func GetNoStore(key []byte, readTs uint64) (rlist *List, err error) {
 type LocalCache struct {
 	sync.RWMutex
 
-	startTs  uint64
-	commitTs uint64
+	startTs      uint64
+	commitTs     uint64
+	privateStore Store // set only for uncached, epoch-bound schema work
 
 	// The keys for these maps is a string representation of the Badger key for the posting list.
 	// deltas keep track of the updates made by txn. These must be kept around until written to disk
@@ -169,7 +170,7 @@ func (lc *LocalCache) UpdateCommitTs(commitTs uint64) {
 }
 
 func (lc *LocalCache) Find(pred []byte, filter func([]byte) bool) (uint64, error) {
-	txn := postingStore.NewReadTxn(lc.startTs)
+	txn := lc.sourceStore().NewReadTxn(lc.startTs)
 	defer txn.Discard()
 
 	attr := string(pred)
@@ -283,7 +284,7 @@ func (lc *LocalCache) getInternal(key []byte, readFromDisk, readUids bool) (*Lis
 		lc.RLock()
 		defer lc.RUnlock()
 		if lc.plists == nil {
-			return getNewForStore(key, postingStore, lc.startTs, readUids)
+			return lc.loadList(key, readUids)
 		}
 		if l, ok := lc.plists[skey]; ok {
 			return l, nil
@@ -298,7 +299,7 @@ func (lc *LocalCache) getInternal(key []byte, readFromDisk, readUids bool) (*Lis
 	var pl *List
 	if readFromDisk {
 		var err error
-		pl, err = getNewForStore(key, postingStore, lc.startTs, readUids)
+		pl, err = lc.loadList(key, readUids)
 		if err != nil {
 			return nil, err
 		}
@@ -334,7 +335,7 @@ func (lc *LocalCache) readPostingListAt(key []byte) (*pb.PostingList, error) {
 	}
 
 	pl := &pb.PostingList{}
-	txn := postingStore.NewReadTxn(lc.startTs)
+	txn := lc.sourceStore().NewReadTxn(lc.startTs)
 	defer txn.Discard()
 
 	item, err := txn.Get(key)

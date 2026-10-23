@@ -299,7 +299,11 @@ func updateSchema(s *pb.SchemaUpdate, ts uint64) error {
 }
 
 func writeSchema(s *pb.SchemaUpdate, ts uint64) error {
-	txn := postingStore.NewWriteTxn()
+	return writeSchemaForStore(postingStore, s, ts)
+}
+
+func writeSchemaForStore(store posting.Store, s *pb.SchemaUpdate, ts uint64) error {
+	txn := store.NewWriteTxn()
 	defer txn.Discard()
 	data, err := proto.Marshal(s)
 	x.Check(err)
@@ -407,6 +411,13 @@ func hasEdges(attr string, startTs uint64) bool {
 	return false
 }
 func checkSchema(s *pb.SchemaUpdate) error {
+	return checkSchemaWithDataCheck(s, func(attr string) bool { return hasEdges(attr, math.MaxUint64) })
+}
+
+// Ordered external recovery validates logical data at its preceding frontier
+// separately. It must not use the approximate physical-version hasEdges check,
+// whose answer can differ across independently pruned replicas.
+func checkSchemaWithDataCheck(s *pb.SchemaUpdate, hasData func(string) bool) error {
 	if s == nil {
 		return errors.Errorf("Nil schema")
 	}
@@ -471,14 +482,14 @@ func checkSchema(s *pb.SchemaUpdate) error {
 	case t.IsScalar() == typ.IsScalar():
 		// If old type was list and new type is non-list, we don't allow it until user
 		// has data.
-		if schema.State().IsList(s.Predicate) && !s.List && hasEdges(s.Predicate, math.MaxUint64) {
+		if schema.State().IsList(s.Predicate) && !s.List && hasData(s.Predicate) {
 			return errors.Errorf("Schema change not allowed from [%s] => %s without"+
 				" deleting pred: %s", t.Name(), typ.Name(), x.ParseAttr(s.Predicate))
 		}
 
 	default:
 		// uid => scalar or scalar => uid. Check that there shouldn't be any data.
-		if hasEdges(s.Predicate, math.MaxUint64) {
+		if hasData(s.Predicate) {
 			return errors.Errorf("Schema change not allowed from scalar to uid or vice versa"+
 				" while there is data for pred: %s", x.ParseAttr(s.Predicate))
 		}

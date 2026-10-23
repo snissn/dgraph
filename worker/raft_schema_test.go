@@ -227,18 +227,24 @@ func TestRaftSchemaSupportedBoundary(t *testing.T) {
 	index.Directive, index.Tokenizer = pb.SchemaUpdate_INDEX, []string{"exact"}
 	require.NoError(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{index}}}))
 	for _, change := range []func(*pb.SchemaUpdate){
-		func(s *pb.SchemaUpdate) { s.List = true },
 		func(s *pb.SchemaUpdate) { s.Lang = true },
-		func(s *pb.SchemaUpdate) { s.ValueType = pb.Posting_INT },
 		func(s *pb.SchemaUpdate) { s.Unique = true },
 		func(s *pb.SchemaUpdate) { s.Upsert = true },
-		func(s *pb.SchemaUpdate) { s.Count = true },
 		func(s *pb.SchemaUpdate) { s.Directive = pb.SchemaUpdate_REVERSE },
 		func(s *pb.SchemaUpdate) { s.Directive = pb.SchemaUpdate_DELETE },
 	} {
 		update := proto.Clone(index).(*pb.SchemaUpdate)
 		change(update)
 		require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{update}}}))
+	}
+	for _, change := range []func(*pb.SchemaUpdate){
+		func(s *pb.SchemaUpdate) { s.List = true },
+		func(s *pb.SchemaUpdate) { s.ValueType = pb.Posting_INT },
+		func(s *pb.SchemaUpdate) { s.Count = true },
+	} {
+		update := proto.Clone(index).(*pb.SchemaUpdate)
+		change(update)
+		require.NoError(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{update}}}))
 	}
 	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{nil}}}))
 	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{DropOp: pb.Mutations_ALL}}))

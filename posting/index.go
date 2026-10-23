@@ -671,9 +671,11 @@ func prefixesToDeleteTokensFor(attr, tokenizerName string, hasLang bool) ([][]by
 
 // rebuilder handles the process of rebuilding an index.
 type rebuilder struct {
-	attr    string
-	prefix  []byte
-	startTs uint64
+	attr       string
+	prefix     []byte
+	startTs    uint64
+	store      Store // optional private schema source/writer; never global publication
+	copySource bool  // data conversion must retain untouched postings and split parts
 
 	// The posting list passed here is the on disk version. It is not coming
 	// from the LRU cache.
@@ -876,7 +878,7 @@ func decodeUint64MatrixUnsafe(data []byte, matrix *[][]uint64) error {
 }
 
 func (r *rebuilder) Run(ctx context.Context) error {
-	if pstore == nil {
+	if pstore == nil || r.store != nil {
 		return r.runForStore(ctx)
 	}
 	if _, err := requireBadgerOperationalStore("index rebuild stream"); err != nil {
@@ -1126,6 +1128,7 @@ type IndexRebuild struct {
 	StartTs       uint64
 	OldSchema     *pb.SchemaUpdate
 	CurrentSchema *pb.SchemaUpdate
+	Store         Store // optional epoch-bound schema capability
 }
 
 type indexOp int
@@ -1184,8 +1187,8 @@ func (rb *IndexRebuild) DropIndexes(ctx context.Context) error {
 	prefixes = append(prefixes, prefixesToDropCountIndex(ctx, rb)...)
 	prefixes = append(prefixes, prefixesToDropVectorIndexEdges(ctx, rb)...)
 	if len(prefixes) > 0 {
-		if pstore == nil {
-			return dropStoreIndexPrefixes(ctx, rb.StartTs, prefixes)
+		if pstore == nil || rb.Store != nil {
+			return dropStoreIndexPrefixesForStore(ctx, rb.sourceStore(), rb.StartTs, prefixes)
 		}
 		if _, err := requireBadgerOperationalStore("drop index prefixes"); err != nil {
 			return err
@@ -1213,13 +1216,10 @@ func (rb *IndexRebuild) NeedIndexRebuild() bool {
 
 // BuildIndexes builds indexes.
 func (rb *IndexRebuild) BuildIndexes(ctx context.Context) error {
-	if pstore == nil {
-		// The store-neutral rebuild currently supports scalar tokenizers. Its
-		// caller must serialize schema changes and await completion before a cut.
-		if len(rb.CurrentSchema.IndexSpecs) != 0 || rb.CurrentSchema.Count ||
-			rb.CurrentSchema.Directive == pb.SchemaUpdate_REVERSE ||
-			(rb.OldSchema != nil && (len(rb.OldSchema.IndexSpecs) != 0 || rb.OldSchema.Count || rb.OldSchema.Directive == pb.SchemaUpdate_REVERSE)) {
-			return errors.Errorf("store index rebuild requires scalar tokenizer schema")
+	if pstore == nil || rb.Store != nil {
+		if len(rb.CurrentSchema.IndexSpecs) != 0 ||
+			(rb.OldSchema != nil && len(rb.OldSchema.IndexSpecs) != 0) {
+			return errors.Errorf("store index rebuild does not own vector index lifecycle")
 		}
 	}
 	if err := rebuildTokIndex(ctx, rb); err != nil {
@@ -1469,7 +1469,7 @@ func rebuildTokIndex(ctx context.Context, rb *IndexRebuild) error {
 	runForVectors := (len(factorySpecs) != 0)
 
 	pk := x.ParsedKey{Attr: rb.Attr}
-	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs}
+	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs, store: rb.Store}
 	builder.fn = func(uid uint64, pl *List, txn *Txn) ([]*pb.DirectedEdge, error) {
 		edge := pb.DirectedEdge{Attr: rb.Attr, Entity: uid}
 		edges := []*pb.DirectedEdge{}
@@ -1647,7 +1647,7 @@ func rebuildCountIndex(ctx context.Context, rb *IndexRebuild) error {
 
 	// Create the forward index.
 	pk := x.ParsedKey{Attr: rb.Attr}
-	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs}
+	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs, store: rb.Store}
 	builder.fn = fn
 	if err := builder.Run(ctx); err != nil {
 		return err
@@ -1658,7 +1658,7 @@ func rebuildCountIndex(ctx context.Context, rb *IndexRebuild) error {
 	// to call builder.Run even if that's not the case as the reverse prefix
 	// will be empty.
 	reverse = true
-	builder = rebuilder{attr: rb.Attr, prefix: pk.ReversePrefix(), startTs: rb.StartTs}
+	builder = rebuilder{attr: rb.Attr, prefix: pk.ReversePrefix(), startTs: rb.StartTs, store: rb.Store}
 	builder.fn = fn
 	return builder.Run(ctx)
 }
@@ -1788,7 +1788,7 @@ func rebuildReverseEdges(ctx context.Context, rb *IndexRebuild) error {
 
 	glog.Infof("Rebuilding reverse index for %s", rb.Attr)
 	pk := x.ParsedKey{Attr: rb.Attr}
-	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs}
+	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs, store: rb.Store}
 	builder.fn = func(uid uint64, pl *List, txn *Txn) ([]*pb.DirectedEdge, error) {
 		edge := pb.DirectedEdge{Attr: rb.Attr, Entity: uid}
 		return []*pb.DirectedEdge{}, pl.Iterate(txn.StartTs, 0, func(pp *pb.Posting) error {
@@ -1839,12 +1839,14 @@ func rebuildListType(ctx context.Context, rb *IndexRebuild) error {
 	if needsRebuild, err := rb.needsListTypeRebuild(); !needsRebuild || err != nil {
 		return err
 	}
-	if _, err := requireBadgerOperationalStore("rebuild list data"); err != nil {
-		return err
+	if pstore != nil && rb.Store == nil {
+		if _, err := requireBadgerOperationalStore("rebuild list data"); err != nil {
+			return err
+		}
 	}
 
 	pk := x.ParsedKey{Attr: rb.Attr}
-	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs}
+	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs, store: rb.Store, copySource: true}
 	builder.fn = func(uid uint64, pl *List, txn *Txn) ([]*pb.DirectedEdge, error) {
 		var mpost *pb.Posting
 		err := pl.Iterate(txn.StartTs, 0, func(p *pb.Posting) error {
