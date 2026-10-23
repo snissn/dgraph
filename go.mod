@@ -26,6 +26,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang/geo v0.0.0-20260427214057-41a1a8c7eb2a
 	github.com/golang/glog v1.2.5
+	github.com/golang/protobuf v1.5.4
 	github.com/golang/snappy v1.0.0
 	github.com/google/codesearch v1.2.0
 	github.com/google/go-cmp v0.7.0
@@ -40,7 +41,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/snissn/gomap v0.6.2-0.20261023065356-2cb705090aa7
+	github.com/snissn/gomap v0.6.2-0.20261023143120-674004de0b8d
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cast v1.10.0
 	github.com/spf13/cobra v1.10.2
@@ -106,7 +107,6 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
-	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect
@@ -177,5 +177,3 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
-
-replace github.com/snissn/gomap => ../gomap

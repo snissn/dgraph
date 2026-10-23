@@ -128,11 +128,12 @@ Accepted archives survive cleanup; corrupt/missing accepted input fails before a
 Unexpected nonregular staging objects refuse startup. One serialized Ready receiver stages at most
 one bounded archive per process, and restart reclaims interrupted, unaccepted downloads.
 
-The sibling Gomap implementation now uses pinned retained roots on an independent API-only branch
-based on ordinary main, without the separate captured-WAL engine. The prototype document's
-image-copy byte accounting and maintenance limits describe its original evidence only. Consumer
-results must identify the actual dependency commit and root mechanism; a bounded certificate file
-size is not the size of the retained database or recovery working set.
+The Gomap dependency pinned in the repository's [go.mod](../../go.mod) uses retained exact roots
+without the separate captured-WAL engine. Consumer delivery uses the published module without a
+local replacement; development diagnostics may retain explicitly witnessed replacement builds. The
+prototype document's image-copy byte accounting and maintenance limits describe its original
+evidence only. Consumer results must identify the actual dependency commit and root mechanism; a
+bounded certificate file size is not the size of the retained database or recovery working set.
 
 ## Native peer transport proof (production integration in progress)
 
@@ -318,6 +319,15 @@ combined Alpha/Zero RSS, allocated posting/Raft/private-temporary file bytes, ex
 runtime witnesses, certificates and all failures. `--maintenance-wait-seconds=310` with
 `--require-physical-floor-progress` requires certified P to advance during that observation window.
 This is logical history retirement, not evidence that physical GC ran.
+
+The [offline observer](raftproduction/resourcewitness/README.md) accepts both original version-1
+local-replacement manifests and version-2 published-module manifests. The published path requires
+the binary's module version/checksum, the direct Dgraph source pin and `go.sum`, and the pristine
+Gomap checkout's official module-file checksum to agree. Nested evidence modules are excluded by
+maintained Go module rules, while the complete clean Git tree identity is recorded separately.
+Ignored build outputs can still invalidate the module checksum: use a source-only checkout and keep
+offline source hashing outside workload timing. Neither manifest mode substitutes for a reproducible
+build or changes the resource diagnostic's qualification limits.
 
 The original `repeat` payload remains the default. `--payload-mode=shake256 --value-bytes=16384`
 uses distinct, deterministic high-entropy ASCII for each overwrite so compression cannot reduce the

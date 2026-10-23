@@ -68,8 +68,6 @@ github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883 h1:bvNMNQO63//z+xNg
 github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883/go.mod h1:rCTlJbsFo29Kk6CurOXKm700vrz8f0KW0JNfpkRJY/8=
 github.com/arbovm/levenshtein v0.0.0-20160628152529-48b4e1c0c4d0 h1:jfIu9sQUG6Ig+0+Ap1h4unLjW6YQJpKZVmUzxsD4E/Q=
 github.com/arbovm/levenshtein v0.0.0-20160628152529-48b4e1c0c4d0/go.mod h1:t2tdKJDJF9BV14lnkjHmOQgcvEKgtqs5a1N3LNdJhGE=
-github.com/ashvardanian/NumKong v1.5.3-0.20260420003853-48cbd21db85c h1:g2tkK3X0S0VmY45zQBl7mbvi9yhWoqpPvNm1VDRJ+ZU=
-github.com/ashvardanian/NumKong v1.5.3-0.20260420003853-48cbd21db85c/go.mod h1:L/omoL1LFCg25bGEa2U3rMbzievEEDzdjs5l+H0dIVg=
 github.com/axiomhq/simd-go v0.0.0-20260109224133-a87ae27ede09 h1:EUeZQEHBAROz3OL4eu6QQa3xfbn4vBiMNJlRbZ2ukMk=
 github.com/axiomhq/simd-go v0.0.0-20260109224133-a87ae27ede09/go.mod h1:+R+n1WwZSFNWdcizTHorLkOwe2s+1L4VkyAXF4i6ahM=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
@@ -523,14 +521,12 @@ github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6Mwd
 github.com/sirupsen/logrus v1.6.0/go.mod h1:7uNnSEd1DgxDLC74fIahvMZmmYsHGZGEOFrfsX/uA88=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
-github.com/snissn/compress v1.18.2-snissn.0.0.20260506201017-87fb149e4721 h1:2XYKYq/WV3oldGbGi3b7M7VQoh38DIKSO0lNteuazJ0=
-github.com/snissn/compress v1.18.2-snissn.0.0.20260506201017-87fb149e4721/go.mod h1:p4xiZN07JMUF5xuybNGkG+pozT12MAblxCx36z+PIYM=
 github.com/snissn/compress v1.18.2-snissn.0.0.20261014112447-88a027b09341 h1:brG2Yps8frK2s7mVF9Lz+N3ettUty+hcX2y3vAyEMUw=
 github.com/snissn/compress v1.18.2-snissn.0.0.20261014112447-88a027b09341/go.mod h1:p4xiZN07JMUF5xuybNGkG+pozT12MAblxCx36z+PIYM=
 github.com/snissn/go-crc32-asm v0.0.0-20260522204125-08945951423a h1:uqSq50AAT36ZzDiRApq8GNsbeJASPaneZ6aKfw3KShc=
 github.com/snissn/go-crc32-asm v0.0.0-20260522204125-08945951423a/go.mod h1:PDwKLbWpRDAN2IPbK9PxIgSx0YdwQaSOLWObRawQJ58=
-github.com/snissn/gomap v0.6.2-0.20260721120929-84e3f6652651 h1:IPLiJtfKzUMhtwokgbr7HffbfBN0uJijCx+pqZYEBPU=
-github.com/snissn/gomap v0.6.2-0.20260721120929-84e3f6652651/go.mod h1:CC1uML6+VMvhfOoyhPeW71fLhP4rlLBn4qFn1ALm7zU=
+github.com/snissn/gomap v0.6.2-0.20261023143120-674004de0b8d h1:lA8aeolMzVeDsE5f2NgDCnmnRWRLZ0zC8/04Ti6i9GY=
+github.com/snissn/gomap v0.6.2-0.20261023143120-674004de0b8d/go.mod h1:ujmjsQcMGB8X4C3NGdc1Zt+UhyW5r6fHbY+CkdPQch8=
 github.com/soheilhy/cmux v0.1.5 h1:jjzc5WVemNEDTLwv9tlmemhC73tI08BNOIGwBOo10Js=
 github.com/soheilhy/cmux v0.1.5/go.mod h1:T7TcVDs9LWfQgPlPsdngu6I6QIoyIFZDDC6sNE1GqG0=
 github.com/spf13/afero v1.15.0 h1:b/YBCLWAJdFWJTN9cLhiXXcD7mzKn9Dm86dNnfyQw1I=

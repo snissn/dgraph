@@ -4,16 +4,16 @@ This package is the Dgraph-side TreeDB entry point for the posting-store replace
 and compile-tests current TreeDB APIs and supports an explicit restricted benchmark-minimal Alpha
 runtime. Badger remains the default and production backend.
 
-Current TreeDB head used by this branch:
-
-- module: `github.com/snissn/gomap`
-- version: `v0.6.2-0.20260711114710-3a3e3c72a1a8`
-- commit: `3a3e3c72a1a8f7cb208d2770bbcf4bcb7d0332be`
+The exact `github.com/snissn/gomap` dependency is pinned in the repository's [go.mod](../../go.mod).
+Resolve it with `GOWORK=off go list -m -json github.com/snissn/gomap`; qualification must record
+that version, checksum and any local replacement rather than reuse a historical source label here.
 
 What is wired here:
 
 - durable TreeDB command-WAL profile selection
 - Dgraph-shaped durable command-WAL profile selection that rejects benchmark-only no-WAL profiles
+- explicit `raft_checkpoint` selection with Raft-owned recovery and an externally owned no-WAL DATA
+  root, independent of the standalone command-WAL engine
 - TreeDB generation retention left at the profile default unless a caller explicitly overrides it
 - compile assertions for TreeDB point reads/writes, versioned values, native conditional transaction
   APIs, snapshots, forward/reverse iteration, batches, value-log GC, full storage compaction, stats,
@@ -97,13 +97,16 @@ lists can lazily read split parts at an older root `minTs`, and a cold rollup ca
 represented commit timestamp despite unrelated newer commits. These paths must remain admitted after
 snapshot application.
 
-The explicit `TreeDBStore.AdvanceDiscardFloor` API remains available to a caller that proves a safe
-reader, dependency and late-publication boundary. Automatic history pruning remains disabled. M8
-must also prove complete/delta-chain reconstruction, root/split dependency closure and whole
-rollup-output acknowledgement before reclamation can be enabled. Value-log segment deletion remains
-reachability-based. Stopping automatic advancement cannot repair an already raised monotonic floor;
-TreeDB is pre-alpha, so affected experiments should rebuild their DB directories rather than attempt
-to lower persisted floors.
+For ordinary `durable`/`relaxed` TreeDB, automatic history pruning remains disabled; the explicit
+`TreeDBStore.AdvanceDiscardFloor` API requires a caller to prove the reader, dependency and
+late-publication boundary. The `raft_checkpoint` route instead uses an explicit replicated semantic
+floor S and private maintenance admission for local physical floor P. Its complete main/split
+baselines, read drain and exact checkpoint sequence are described in
+[RAFT_RECOVERY_PRODUCTION.md](RAFT_RECOVERY_PRODUCTION.md). Snapshot `ReadTs` alone authorizes
+neither route's physical floor. Value-log segment deletion remains reachability-based. Stopping
+automatic advancement cannot repair an already raised monotonic floor; TreeDB is pre-alpha, so
+affected experiments should rebuild their DB directories rather than attempt to lower persisted
+floors.
 
 ## Compatibility blocker matrix
 
@@ -122,13 +125,14 @@ requirement. Conditional transactions and in-memory mode are excluded from the i
 Unsupported or blocker rows fail with the stable feature ID/status from `FeatureReadinessError`;
 they never fall back to Badger or return partial TreeDB behavior.
 
-The remaining direct `worker.pstore` uses are intentionally bounded: snapshot send/receive, external
-snapshot import, online restore, predicate move, indexed sort, count-range iteration, inequality
-token iteration, Badger subscriptions, and cache resizing are protected by an exported entry-point
-or immediate operation guard; offline restore always opens its own real Badger handle. Draft
-sync/discard/table sizing uses explicit `pstore != nil` Badger branches. Guard-before-state tests
-cover subscription, indexed sort, snapshot send/import, backup, export, restore, and cache resizing;
-the same `requireBadgerPostingStore` guard protects the remaining listed entry points.
+The remaining direct `worker.pstore` uses are intentionally bounded: legacy snapshot send/receive,
+external snapshot import, online restore, predicate move, indexed sort, count-range iteration,
+inequality token iteration, Badger subscriptions, and cache resizing are protected by an exported
+entry-point or immediate operation guard; offline restore always opens its own real Badger handle.
+Draft sync/discard/table sizing uses explicit `pstore != nil` Badger branches. Guard-before-state
+tests cover subscription, indexed sort, legacy snapshot send/import, backup, export, restore, and
+cache resizing; the same `requireBadgerPostingStore` guard protects the remaining listed entry
+points.
 
 ## Experimental Alpha selector
 
@@ -138,16 +142,24 @@ The explicit Alpha selector accepts a restricted TreeDB runtime:
 dgraph alpha --posting-store 'backend=badger; tier=production; durability=durable; events=false;'
 dgraph alpha --posting-store 'backend=treedb'
 dgraph alpha --posting-store 'backend=treedb; tier=benchmark_minimal; durability=durable; events=true;'
+dgraph alpha --posting-store 'backend=treedb; tier=benchmark_minimal; durability=raft_checkpoint; events=true;'
 ```
 
 Badger remains the default and continues to open through the existing managed Badger path. TreeDB
-startup accepts exactly `benchmark_minimal` with `durable` or `relaxed` durability and opens one
-TreeDB-backed posting-store owner; there is no silent fallback to Badger. Encryption, in-memory,
-nonzero TTL, backup/export/import/restore, snapshot transfer, and Badger-compatible subscriptions
+startup accepts exactly `benchmark_minimal` with `durable`, `relaxed` or `raft_checkpoint`
+durability and opens one TreeDB-backed posting-store owner; there is no silent fallback to Badger.
+`raft_checkpoint` uses the ordered Raft WAL as recovery authority and retained exact DATA roots. Its
+explicit native Raft checkpoint transport supports voter join/rejoin; learners remain guarded. It
+does not enable legacy Badger snapshot/import formats or operational backup/export/restore.
+Encryption, in-memory, nonzero TTL, those external-file routes and Badger-compatible subscriptions
 fail explicitly at their entry points. TreeDB defaults to `events=true` and rejects an explicit
 `events=false`, because ACL and GraphQL schema caches depend on matching future successful commits
 through the restricted Dgraph-owned event bridge. The low-level disabled-event path exists only for
 overhead measurement and defensive shutdown; it is not a valid TreeDB Alpha runtime selection.
+
+See [RAFT_RECOVERY_PRODUCTION.md](RAFT_RECOVERY_PRODUCTION.md) for the route's ordered schema/admin,
+retry, pending-state, maintenance and native snapshot contracts and remaining qualification gates.
+The selector does not promote TreeDB to the operational or production capability tier.
 
 ## Performance boundary
 
@@ -162,20 +174,20 @@ is intentionally not instrumented, even if it commits while that subscriber is a
 
 Issue #8 finalizes the current operator-facing gate report in `OperatorGateReport()`:
 
-| Gate                        | Current state | Operator decision                                                                                |
-| --------------------------- | ------------- | ------------------------------------------------------------------------------------------------ |
-| Badger default              | `pass`        | Badger remains the default Alpha posting-store backend.                                          |
-| Benchmark-minimal tier      | `pass`        | The explicit restricted selector may run the live Alpha benchmark.                               |
-| Operational tier            | `fail_closed` | Operational parity is later work and does not block benchmark-minimal startup.                   |
-| Production tier             | `unsupported` | Production readiness is a future decision; encryption/key-registry support is not implemented.   |
-| TreeDB primitive durability | `pass`        | TreeDB can open, write, close, reopen, run GC, and report stats through the Alpha owner.         |
-| TreeDB selector             | `pass`        | An explicit TreeDB selector opens exactly one restricted benchmark-minimal backend.              |
-| Posting/schema workflows    | `pass`        | Basic point posting mutation/read and schema persistence pass across restart.                    |
-| Backup/restore/export       | `fail_closed` | Stream backup/export/import and snapshot workflows remain Badger-only.                           |
-| Subscriptions               | `fail_closed` | Restricted internal delivery is supported with events enabled; full Badger compatibility is not. |
-| Encryption/key registry     | `unsupported` | TreeDB encryption/key-registry integration is unsupported in this integration lane.              |
-| Benchmark matrix            | `pass`        | The benchmark matrix is available for current evidence and future before/after runs.             |
-| Default decision            | `pass`        | `keep_badger_default`; TreeDB stays explicit, experimental, and restricted.                      |
+| Gate                        | Current state | Operator decision                                                                                                  |
+| --------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Badger default              | `pass`        | Badger remains the default Alpha posting-store backend.                                                            |
+| Benchmark-minimal tier      | `pass`        | The explicit restricted selector may run the live Alpha benchmark.                                                 |
+| Operational tier            | `fail_closed` | Operational parity is later work and does not block benchmark-minimal startup.                                     |
+| Production tier             | `unsupported` | Production readiness is a future decision; encryption/key-registry support is not implemented.                     |
+| TreeDB primitive durability | `pass`        | TreeDB can open, write, close, reopen, run GC, and report stats through the Alpha owner.                           |
+| TreeDB selector             | `pass`        | An explicit TreeDB selector opens exactly one restricted benchmark-minimal backend.                                |
+| Posting/schema workflows    | `pass`        | Basic point posting mutation/read and schema persistence pass across restart.                                      |
+| Backup/restore/export       | `fail_closed` | Stream backup/export/import and legacy snapshots remain Badger-only; native Raft checkpoint transport is separate. |
+| Subscriptions               | `fail_closed` | Restricted internal delivery is supported with events enabled; full Badger compatibility is not.                   |
+| Encryption/key registry     | `unsupported` | TreeDB encryption/key-registry integration is unsupported in this integration lane.                                |
+| Benchmark matrix            | `pass`        | The benchmark matrix is available for current evidence and future before/after runs.                               |
+| Default decision            | `pass`        | `keep_badger_default`; TreeDB stays explicit, experimental, and restricted.                                        |
 
 Final decision for this tracker: keep Badger as the default. TreeDB is not production-ready or a
 drop-in posting-store backend; only the benchmark-minimal tier is enabled, and later-tier workflows
