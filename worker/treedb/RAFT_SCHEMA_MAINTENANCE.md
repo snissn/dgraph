@@ -210,3 +210,22 @@ Sort/count/inequality, Badger subscription formats, backup/restore formats and v
 support are inherited adapter limitations; this packet does not create them or remove their
 capability gates. Standard Dgraph schema, namespace and maintenance flows still need the named
 integrations before a production-tier claim.
+
+## Independent count/reverse review correction
+
+Count index planning depends on both the Count flag and reverse membership. A populated
+`[uid] @count` predicate can add/remove/re-add `@reverse` while retaining Count: the maintained
+builder now drops and rebuilds count buckets through the existing path on each transition. When
+reverse is removed, retained historical empty reverse anchors do not create current reverse-count
+buckets. Forward-count membership stays correct throughout, and old timestamp views retain their
+prior reverse-count membership.
+
+The production schema regression exercises all three transitions, then restores the preceding
+count-only certificate, replays the retained suffix and certifies/reopens the result. The original
+review falsifier returned an empty reverse-count bucket instead of target UID99. A separate injected
+split-read failure demonstrated that the old Length sentinel silently skipped a subject; count
+rebuild now uses the maintained List.Iterate error path and propagates the original cause, including
+split dependencies. Cardinality overflow is refused before truncation to the count key width.
+Focused race controls cover these failures and the existing aggregated count/reverse rebuild. These
+controls do not replace an actual-server schema-transition campaign or sustained scratch-resource
+qualification.

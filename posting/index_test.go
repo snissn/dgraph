@@ -570,6 +570,14 @@ func TestNeedsCountIndexRebuild(t *testing.T) {
 	rb.OldSchema = &pb.SchemaUpdate{ValueType: pb.Posting_UID, Count: true}
 	rb.CurrentSchema = &pb.SchemaUpdate{ValueType: pb.Posting_UID, Count: false}
 	require.Equal(t, indexOp(indexDelete), rb.needsCountIndexRebuild())
+	rb.OldSchema.Count, rb.CurrentSchema.Count = true, true
+	rb.CurrentSchema.Directive = pb.SchemaUpdate_REVERSE
+	require.Equal(t, indexOp(indexRebuild), rb.needsCountIndexRebuild())
+	rb.OldSchema.Directive = pb.SchemaUpdate_REVERSE
+	rb.CurrentSchema.Directive = pb.SchemaUpdate_NONE
+	require.Equal(t, indexOp(indexRebuild), rb.needsCountIndexRebuild())
+	rb.CurrentSchema.Count, rb.OldSchema.Count = false, false
+	require.Equal(t, indexNoop, rb.needsCountIndexRebuild())
 }
 
 func TestNeedsReverseEdgesRebuild(t *testing.T) {

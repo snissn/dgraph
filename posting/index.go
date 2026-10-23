@@ -1574,10 +1574,14 @@ func (rb *IndexRebuild) needsCountIndexRebuild() indexOp {
 		old = &pb.SchemaUpdate{}
 	}
 
-	// Do nothing if the schema directive did not change.
+	// Reverse-count buckets depend on reverse membership even when Count
+	// remains enabled. Rebuild both count prefixes through the same maintained
+	// path, clearing old reverse buckets before a removal or re-addition.
 	if rb.CurrentSchema.Count == old.Count {
+		if rb.CurrentSchema.Count && rb.needsReverseEdgesRebuild() != indexNoop {
+			return indexRebuild
+		}
 		return indexNoop
-
 	}
 
 	// If the new schema does not require an index, delete the current index.
@@ -1630,12 +1634,21 @@ func rebuildCountIndex(ctx context.Context, rb *IndexRebuild) error {
 			Attr:    rb.Attr,
 			Op:      pb.DirectedEdge_SET,
 		}
-		sz := pl.Length(rb.StartTs, 0)
-		if sz == -1 {
-			return []*pb.DirectedEdge{}, nil
+		// Length's legacy -1 sentinel discards split-read errors. A schema
+		// rebuild must retain the cause and stop before certification.
+		var sz uint32
+		err := pl.Iterate(rb.StartTs, 0, func(*pb.Posting) error {
+			if sz == math.MaxUint32 {
+				return errors.Errorf("count index cardinality overflow for %s", rb.Attr)
+			}
+			sz++
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
 		for {
-			err := txn.addCountMutation(ctx, t, uint32(sz), reverse)
+			err := txn.addCountMutation(ctx, t, sz, reverse)
 			switch err {
 			case ErrRetry:
 				time.Sleep(10 * time.Millisecond)
@@ -1653,10 +1666,11 @@ func rebuildCountIndex(ctx context.Context, rb *IndexRebuild) error {
 		return err
 	}
 
-	// Create the reverse index. The count reverse index is created if this
-	// predicate has both a count and reverse directive in the schema. It's safe
-	// to call builder.Run even if that's not the case as the reverse prefix
-	// will be empty.
+	// Logical prefix deletion retains empty historical reverse anchors. They
+	// are not current reverse subjects when the directive has been removed.
+	if rb.CurrentSchema.Directive != pb.SchemaUpdate_REVERSE {
+		return nil
+	}
 	reverse = true
 	builder = rebuilder{attr: rb.Attr, prefix: pk.ReversePrefix(), startTs: rb.StartTs, store: rb.Store}
 	builder.fn = fn

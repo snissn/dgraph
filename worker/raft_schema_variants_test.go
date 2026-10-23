@@ -277,4 +277,55 @@ func TestRaftSchemaVariantsCertifiedPendingAndRejection(t *testing.T) {
 	certify(29)
 	require.Equal(t, []uint64{1}, read(tokenKey(numeric, "int", int64(44)), math.MaxUint64))
 	require.Empty(t, read(tokenKey(numeric, "int", int64(45)), math.MaxUint64))
+
+	// Keep Count enabled while adding, removing and re-adding Reverse. Count
+	// indexes depend on reverse membership, not only the Count boolean.
+	countOnly := proto.Clone(friendPlain).(*pb.SchemaUpdate)
+	countOnly.Count = true
+	require.NoError(t, apply(30, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 42, Schema: []*pb.SchemaUpdate{countOnly}}}))
+	certify(30)
+	verifyForwardCount := func() {
+		require.Equal(t, []uint64{2, 3, 4}, read(x.CountKey(friend, 1, false), math.MaxUint64))
+		require.Equal(t, []uint64{1}, read(x.CountKey(friend, 3, false), math.MaxUint64))
+	}
+	verifyReverseCount := func(ts uint64) {
+		require.Equal(t, []uint64{99}, read(x.CountKey(friend, 4, true), ts))
+		require.Equal(t, []uint64{100, 101}, read(x.CountKey(friend, 1, true), ts))
+	}
+	entries := []raftpb.Entry{
+		checkpointEntry(t, 31, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 43, Schema: []*pb.SchemaUpdate{friendIndexed}}}),
+		checkpointEntry(t, 32, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 44}}),
+		checkpointEntry(t, 33, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 45, Schema: []*pb.SchemaUpdate{countOnly}}}),
+		checkpointEntry(t, 34, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 46}}),
+		checkpointEntry(t, 35, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 47, Schema: []*pb.SchemaUpdate{friendIndexed}}}),
+	}
+	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: 35}, entries, &raftpb.Snapshot{}))
+	require.NoError(t, wal.Sync())
+	for _, entry := range entries {
+		atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(entry.Data)))
+	}
+	applySequence := func() {
+		applyCheckpointEntry(t, n, entries[0])
+		verifyForwardCount()
+		verifyReverseCount(math.MaxUint64)
+		applyCheckpointEntry(t, n, entries[1])
+		applyCheckpointEntry(t, n, entries[2])
+		verifyForwardCount()
+		require.Empty(t, read(x.CountKey(friend, 4, true), math.MaxUint64))
+		require.Empty(t, read(x.CountKey(friend, 0, true), math.MaxUint64))
+		verifyReverseCount(base + 43)
+		applyCheckpointEntry(t, n, entries[3])
+		applyCheckpointEntry(t, n, entries[4])
+		verifyForwardCount()
+		verifyReverseCount(math.MaxUint64)
+		require.Empty(t, read(x.CountKey(friend, 4, true), base+45))
+	}
+	applySequence()
+	reopen()
+	require.Equal(t, uint64(30), n.Cfg.Applied, "uncertified schema suffix must restore old count-only cut")
+	require.Empty(t, read(x.CountKey(friend, 4, true), math.MaxUint64))
+	applySequence()
+	certify(35)
+	verifyForwardCount()
+	verifyReverseCount(math.MaxUint64)
 }
