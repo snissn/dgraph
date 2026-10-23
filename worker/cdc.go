@@ -56,8 +56,18 @@ type CDC struct {
 	sentTs    uint64 // max commit ts for which we have send the events.
 }
 
+// cdcEnabled follows the same destination selection as GetSink. The default
+// superflag is nonempty, but does not configure an event destination.
+func cdcEnabled(conf string) bool {
+	if conf == "" {
+		return false
+	}
+	flag := z.NewSuperFlag(conf).MergeAndCheckDefault(CDCDefaults)
+	return flag.GetString("kafka") != "" || flag.GetPath("file") != ""
+}
+
 func newCDC() *CDC {
-	if Config.ChangeDataConf == "" || Config.ChangeDataConf == CDCDefaults {
+	if !cdcEnabled(Config.ChangeDataConf) {
 		return nil
 	}
 

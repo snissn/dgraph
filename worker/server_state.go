@@ -187,7 +187,7 @@ func (s *ServerState) openPostingStore() error {
 			return fmt.Errorf("resolve TreeDB posting store: %w", err)
 		}
 		if Config.PostingStoreDurability == PostingStoreDurabilityRaftCheckpoint {
-			if x.WorkerConfig.AclEnabled || Config.ChangeDataConf != "" {
+			if x.WorkerConfig.AclEnabled || cdcEnabled(Config.ChangeDataConf) {
 				return fmt.Errorf("raft_checkpoint prototype does not support ACL or CDC")
 			}
 			if !x.WorkerConfig.HardSync {

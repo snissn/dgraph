@@ -1125,7 +1125,7 @@ func GetFeaturesList() []string {
 	if x.WorkerConfig.Audit {
 		ee = append(ee, "audit")
 	}
-	if Config.ChangeDataConf != "" {
+	if cdcEnabled(Config.ChangeDataConf) {
 		ee = append(ee, "cdc")
 	}
 	return ee
