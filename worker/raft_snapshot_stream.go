@@ -208,8 +208,12 @@ func (n *node) receiveRaftCheckpoint(ctx context.Context, snapshot raftpb.Snapsh
 	if err := n.reloadRaftCheckpointState(ctx); err != nil {
 		return err
 	}
-	glog.Infof("Native checkpoint installed: index=%d source=%d receiver=%d pending=%d",
-		snapshot.Metadata.Index, snap.GetContext().GetId(), n.Id, posting.Oracle().NumPendingTxns())
+	manifest, err := State.TreeDBStore.RaftPendingManifest()
+	if err != nil {
+		return err
+	}
+	glog.Infof("Native checkpoint installed: index=%d source=%d receiver=%d pending=%d checksum_sequence=%d terminal=%d",
+		snapshot.Metadata.Index, snap.GetContext().GetId(), n.Id, posting.Oracle().NumPendingTxns(), n.raftChecksumSequence, manifest.TerminalCount)
 	return nil
 }
 

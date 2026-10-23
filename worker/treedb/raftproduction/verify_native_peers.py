@@ -65,9 +65,9 @@ def main():
             raise RuntimeError(f'peer{i} missing {value}: {got}')
     def native(i, label, pending=None):
         data = (out / f'alpha{i}-{label}.log').read_text()
-        matches = re.findall(r'Native checkpoint installed: index=(\d+) source=(\d+) receiver=(\d+) pending=(\d+)', data)
-        if not matches or (pending is not None and not any(int(m[3]) == pending for m in matches)):
-            raise RuntimeError(f'peer{i} missing native install with pending={pending}')
+        matches = re.findall(r'Native checkpoint installed: index=(\d+) source=(\d+) receiver=(\d+) pending=(\d+) checksum_sequence=(\d+) terminal=(\d+)', data)
+        if not matches or (pending is not None and not any(int(m[3]) == pending and int(m[4]) > 0 and int(m[5]) > 0 for m in matches)):
+            raise RuntimeError(f'peer{i} missing native install with pending={pending}, checksum authority and terminal decisions')
         installed = data.rfind('Native checkpoint installed:')
         barrier = data.rfind('committed replay completed through')
         ready = data.rfind('Server is ready: OK')
@@ -85,10 +85,15 @@ def main():
         txn = pending['extensions']['txn']
         result['pending_transaction'] = txn
         result['seed_floor'] = floor(seed_floor)
+        # A resolved transaction ABOVE S must travel in the exact native root
+        # alongside pending state and the sequenced Zero checksum authority.
+        result['retained_decision'] = call(1, '/mutate?commitNow=true', {'set': [{'uid': '_:resolved', 'peer_value': 'resolved'}]})
+        verify(1, 'resolved')
         for i in [2, 3]:
             alphas[i] = start_alpha(i, 'join')
             healthy(alphas[i], bases[i])
             verify(i, 'seed')
+            verify(i, 'resolved')
             native(i, 'join', 1)
         result['pending_commit'] = call(3, '/commit?startTs=' + str(txn['start_ts']),
             {'keys': txn.get('keys', []), 'preds': txn.get('preds', [])})
@@ -116,7 +121,7 @@ def main():
             alphas[i] = start_alpha(i, 'restart')
         for i in [1, 2, 3]:
             healthy(alphas[i], bases[i])
-            for value in ['seed', 'pending', 'after-offline', 'immediate-ack']:
+            for value in ['seed', 'resolved', 'pending', 'after-offline', 'immediate-ack']:
                 verify(i, value)
         result['success'] = True
     except Exception as error:
