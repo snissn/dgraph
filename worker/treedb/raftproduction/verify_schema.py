@@ -42,6 +42,23 @@ def source_identity(path):
                                  for name in others if name and (path / name.decode()).is_file()}}
 
 
+def recovery_frontiers(raw):
+    recovery = re.search(r'recovery: certified=(\d+) oracle=(\d+)', raw)
+    hardstates = list(re.finditer(r'Found hardstate: \{[^}\n]*\bCommit:\s*(\d+)\}', raw))
+    replay = re.search(r'committed replay completed through (\d+) before health', raw)
+    if not recovery or len(hardstates) != 1 or not replay:
+        raise RuntimeError('missing or ambiguous certified/pre-startup HardState/replay frontiers')
+    hardstate = hardstates[0]
+    if not recovery.start() < hardstate.start() < replay.start():
+        raise RuntimeError('recovery frontiers are not ordered before startup replay/health')
+    certified, durable_commit, replayed = int(recovery[1]), int(hardstate[1]), int(replay[1])
+    if not certified <= durable_commit <= replayed:
+        raise RuntimeError('startup replay did not cover the pre-startup durable commit')
+    return {'certified_index': certified, 'oracle': int(recovery[2]),
+            'pre_startup_durable_commit': durable_commit, 'replayed_through': replayed,
+            'uncertified_suffix_replayed': durable_commit > certified}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dgraph-bin', required=True)
@@ -139,12 +156,7 @@ def main():
                  'store_sha256': hashlib.sha256(store.encode()).hexdigest()}
         if alpha_generation > 1 and args.policy == 'raft_checkpoint':
             raw = (out / f'alpha-{alpha_generation}.log').read_text()
-            recovery = re.search(r'recovery: certified=(\d+) oracle=(\d+)', raw)
-            replay = re.search(r'committed replay completed through (\d+) before health', raw)
-            if not recovery or not replay:
-                raise RuntimeError('missing exact recovery/committed replay before health')
-            entry['recovery'] = {'certified_index': int(recovery[1]), 'oracle': int(recovery[2]),
-                                 'replayed_through': int(replay[1])}
+            entry['recovery'] = recovery_frontiers(raw)
         result['runtime'].append(entry)
 
     def phase(name):
@@ -229,8 +241,7 @@ def main():
             phase(name)
         if args.policy == 'raft_checkpoint':
             result['uncertified_suffix_replayed'] = any(
-                entry.get('recovery', {}).get('replayed_through', 0) >
-                entry.get('recovery', {}).get('certified_index', 0)
+                entry.get('recovery', {}).get('uncertified_suffix_replayed', False)
                 for entry in result['runtime'])
             if not result['uncertified_suffix_replayed']:
                 raise RuntimeError('no observed retained suffix replay beyond the certified index')

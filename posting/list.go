@@ -1771,11 +1771,16 @@ func (l *List) calculateUids() error {
 	return nil
 }
 
-func (l *List) canUseCalculatedUids() bool {
-	if l.mutationMap == nil {
+func (l *List) canUseCalculatedUids(readTs uint64) bool {
+	l.AssertRLock()
+	if l.mutationMap == nil || readTs < l.minTs {
 		return false
 	}
-	return l.mutationMap.isUidsCalculated && l.mutationMap.currentEntries == nil
+	// The bitmap represents the latest committed view, even when the list was
+	// loaded for a historical request. Older requests must merge their own deltas.
+	// An immutable-only list has no delta timestamp (the field is a sentinel).
+	return l.mutationMap.isUidsCalculated && l.mutationMap.currentEntries == nil &&
+		(len(l.mutationMap.committedEntries) == 0 || readTs >= l.mutationMap.committedUidsTime)
 }
 
 // Uids returns the UIDs given some query params.
@@ -1787,8 +1792,8 @@ func (l *List) Uids(opt ListOptions) (*pb.List, error) {
 	}
 
 	getUidList := func() (*pb.List, error, bool) {
-		if l.canUseCalculatedUids() {
-			l.RLock()
+		l.RLock()
+		if l.canUseCalculatedUids(opt.ReadTs) {
 
 			afterIdx := 0
 
@@ -1812,7 +1817,6 @@ func (l *List) Uids(opt ListOptions) (*pb.List, error) {
 			return out, nil, opt.Intersect != nil
 		}
 		// Pre-assign length to make it faster.
-		l.RLock()
 		defer l.RUnlock()
 		// Use approximate length for initial capacity.
 		res := make([]uint64, 0, l.ApproxLen())
