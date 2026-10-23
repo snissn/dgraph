@@ -236,7 +236,10 @@ the same gRPC workload and 3% durable throughput gate. New schema-v5 rows explic
 configuration. Alpha posting backend, profile and memtable are checked before setup/timing and after
 restart. The measured executable SHA256 and Go build information are recorded and the binary is
 checked again before result publication. Raw configuration/store witnesses are immutable
-`runtime-<phase>-<process>.*` snapshots; their hashes are in the row.
+`runtime-<phase>-<process>.*` snapshots; their hashes are in the row. Loading and reporting
+schema-v5 rows reopens every snapshot relative to the result file, verifies its hash and checks that
+the resolved configuration and posting route support the recorded claims. Missing, modified or
+contradictory witnesses are refused, including changes after loading.
 
 `SURVIVE=process` preserves the historical default. Use `SURVIVE=filesystem` for a separate matched
 filesystem-survival matrix. Survival participates in the workload fingerprint, so the report refuses

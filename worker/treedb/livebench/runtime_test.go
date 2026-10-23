@@ -2,9 +2,100 @@
 package livebench
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestLoadedRuntimeRequiresEveryUnmodifiedSidecar(t *testing.T) {
+	for _, phase := range []string{"startup", "after_alpha_restart"} {
+		for _, role := range []string{"zero", "alpha"} {
+			suffixes := []string{".config.log"}
+			if role == "alpha" {
+				suffixes = append(suffixes, ".store.txt")
+			}
+			for _, suffix := range suffixes {
+				for _, damage := range []string{"missing", "truncated", "replaced"} {
+					t.Run(phase+"/"+role+suffix+"/"+damage, func(t *testing.T) {
+						set := validSet(t, 1)
+						r := &set[0]
+						path := filepath.Join(r.runtimeArtifactDir, "result.json")
+						r.Context.RawPath = "/untrusted/json/path/result.json"
+						if err := WriteImmutable(path, *r); err != nil {
+							t.Fatal(err)
+						}
+						loaded, err := LoadResults([]string{path})
+						if err != nil {
+							t.Fatal(err)
+						}
+						set[0] = loaded[0]
+						artifact := filepath.Join(r.runtimeArtifactDir, "runtime-"+phase+"-"+role+suffix)
+						if damage == "missing" {
+							if err := os.Remove(artifact); err != nil {
+								t.Fatal(err)
+							}
+						} else {
+							body := []byte{}
+							if damage == "replaced" {
+								body = []byte("replacement witness\n")
+							}
+							if err := os.WriteFile(artifact, body, 0o644); err != nil {
+								t.Fatal(err)
+							}
+						}
+						if _, err := LoadResults([]string{path}); err == nil {
+							t.Fatal("damaged runtime artifact accepted on load")
+						}
+						if err := ValidateSet(set, 1); err == nil {
+							t.Fatal("artifact changed after load accepted by matrix")
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
+func TestRuntimeChecksWitnessMeaningEvenWithMatchingHash(t *testing.T) {
+	for name, body := range map[string]string{
+		"wrong config":     "x.WorkerConfig: {HardSync:true}\n",
+		"duplicate config": "x.WorkerConfig: {HardSync:false}\nx.WorkerConfig: {HardSync:false}\n",
+		"wrong backend":    "status=map[backend:badger profile:wal_on_sync]\nstats=map[treedb.cache.memtable_mode:cow_ordered]\n",
+		"wrong memtable":   "status=map[backend:treedb profile:wal_on_sync]\nstats=map[treedb.cache.memtable_mode:btree]\n",
+		"duplicate route":  "status=map[backend:treedb backend:badger profile:wal_on_sync]\nstats=map[treedb.cache.memtable_mode:cow_ordered]\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := validResult(t, "treedb", "durable")
+			identity := &r.Validation.Runtime[1]
+			suffix := ".store.txt"
+			sum := sha256.Sum256([]byte(body))
+			if strings.Contains(name, "config") {
+				suffix = ".config.log"
+				identity.ConfigLogSHA256 = hex.EncodeToString(sum[:])
+			} else {
+				identity.StoreWitnessSHA256 = hex.EncodeToString(sum[:])
+			}
+			path := filepath.Join(r.runtimeArtifactDir, "runtime-startup-alpha"+suffix)
+			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := r.VerifyRuntimeArtifacts(r.runtimeArtifactDir); err == nil {
+				t.Fatal("contradictory hashed witness accepted")
+			}
+		})
+	}
+}
+
+func TestMatrixRejectsRuntimeIdentitiesWithoutDiskProvenance(t *testing.T) {
+	set := validSet(t, 1)
+	set[0].runtimeArtifactDir = ""
+	if err := ValidateSet(set, 1); err == nil || !strings.Contains(err.Error(), "not verified on disk") {
+		t.Fatalf("unverified in-memory result accepted: %v", err)
+	}
+}
 
 func TestRuntimeIdentityRequiresActualStartupAndRestartRoutes(t *testing.T) {
 	for name, mutate := range map[string]func(*Result){
@@ -21,7 +112,7 @@ func TestRuntimeIdentityRequiresActualStartupAndRestartRoutes(t *testing.T) {
 		"missing memtable":            func(r *Result) { r.Validation.Runtime[1].Memtable = "" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			r := validResult("treedb", "relaxed")
+			r := validResult(t, "treedb", "relaxed")
 			mutate(&r)
 			if err := r.Validate(); err == nil {
 				t.Fatal("incomplete or mismatched runtime accepted")
@@ -31,7 +122,7 @@ func TestRuntimeIdentityRequiresActualStartupAndRestartRoutes(t *testing.T) {
 }
 
 func TestCheckpointPolicyRequiresFilesystemAndCOWBeforeAcceptance(t *testing.T) {
-	r := validResult("treedb", "durable")
+	r := validResult(t, "treedb", "durable")
 	r.Config.SurvivalMode, r.Config.TreeDBPolicy, r.Config.TreeDBMemtable = "filesystem", "raft_checkpoint", "cow_ordered"
 	r.Config.PostingStore = strings.Replace(r.Config.PostingStore, "durability=durable", "durability=raft_checkpoint", 1)
 	r.Validation.DurabilityObserved = "raft_checkpoint"
@@ -53,7 +144,7 @@ func TestCheckpointPolicyRequiresFilesystemAndCOWBeforeAcceptance(t *testing.T) 
 }
 
 func TestSurvivalProfilesHaveDifferentWorkloadFingerprints(t *testing.T) {
-	c := validResult("treedb", "durable").Config
+	c := validResult(t, "treedb", "durable").Config
 	process := c.Fingerprint()
 	c.SurvivalMode = "filesystem"
 	if c.Fingerprint() == process {

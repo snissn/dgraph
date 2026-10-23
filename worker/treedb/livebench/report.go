@@ -26,6 +26,9 @@ func LoadResults(paths []string) ([]Result, error) {
 		if err := json.Unmarshal(b, &r); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
+		if err := r.VerifyRuntimeArtifacts(filepath.Dir(path)); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
 		results = append(results, r)
 	}
 	return results, nil

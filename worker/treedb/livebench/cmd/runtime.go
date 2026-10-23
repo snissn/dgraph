@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/dgraph-io/dgraph/v25/worker/treedb/livebench"
@@ -132,16 +131,7 @@ func captureRuntime(o options, phase string, zero, alpha *process, base string) 
 		if err != nil {
 			return nil, err
 		}
-		witness := ""
-		for _, line := range strings.Split(string(raw), "\n") {
-			if strings.Contains(line, "x.WorkerConfig:") {
-				if witness != "" {
-					return nil, fmt.Errorf("ambiguous %s resolved configuration", entry.role)
-				}
-				witness = line
-			}
-		}
-		hardSync, err := livebench.ResolvedHardSync(witness)
+		witness, hardSync, err := livebench.ResolvedConfig(raw)
 		if err != nil {
 			return nil, fmt.Errorf("%s resolved configuration: %w", entry.role, err)
 		}
@@ -164,9 +154,10 @@ func captureRuntime(o options, phase string, zero, alpha *process, base string) 
 			if err := livebench.WriteImmutableBytes(prefix+".store.txt", store); err != nil {
 				return nil, err
 			}
-			status, stats := parseMapSection(string(store), "status=map["), parseMapSection(string(store), "stats=map[")
-			identity.Backend, identity.Durability = status["backend"], status["profile"]
-			identity.Memtable = stats["treedb.cache.memtable_mode"]
+			identity.Backend, identity.Durability, identity.Memtable, err = livebench.ResolvedStore(store)
+			if err != nil {
+				return nil, err
+			}
 			sum := sha256.Sum256(store)
 			identity.StoreWitnessSHA256 = hex.EncodeToString(sum[:])
 			backend, profile, err := livebench.ExpectedObserved(runtimeConfig(o))

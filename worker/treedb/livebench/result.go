@@ -105,6 +105,8 @@ type Result struct {
 	LatencyMS     map[string]float64 `json:"latency_ms"`
 	Metrics       map[string]Metric  `json:"metrics"`
 	Validation    Validation         `json:"validation"`
+
+	runtimeArtifactDir string // Set only by disk verification; never supplied by JSON.
 }
 
 var requiredTreeDBMetrics = []string{
@@ -356,6 +358,9 @@ func ValidateSet(results []Result, repeats int) error {
 	var contextIdentity *Context
 	for _, r := range results {
 		if err := r.Validate(); err != nil {
+			return fmt.Errorf("%s: %w", r.RunID, err)
+		}
+		if err := r.VerifyRuntimeArtifacts(r.runtimeArtifactDir); err != nil {
 			return fmt.Errorf("%s: %w", r.RunID, err)
 		}
 		if r.Context.Dirty {

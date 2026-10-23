@@ -335,6 +335,9 @@ func run(o options) (err error) {
 	if err := r.Validate(); err != nil {
 		return fmt.Errorf("result validation: %w", err)
 	}
+	if err := r.VerifyRuntimeArtifacts(o.artifactDir); err != nil {
+		return fmt.Errorf("result runtime artifacts: %w", err)
+	}
 	return livebench.WriteImmutable(r.Context.RawPath, r)
 }
 
