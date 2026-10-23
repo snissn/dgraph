@@ -170,6 +170,51 @@ func (n *Node) SetRaft(r raft.Node) {
 	n._raft = r
 }
 
+type semanticRestartStorage struct {
+	raft.Storage
+	confState raftpb.ConfState
+}
+
+func (s semanticRestartStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+	hs, _, err := s.Storage.InitialState()
+	return hs, s.confState, err
+}
+
+// RestartRaftAtSemanticCut keeps the drained application state and restarts
+// protocol execution at that exact applied index. InitialState carries the
+// current applied membership, which can be newer than the durable snapshot's
+// membership. All log/snapshot operations still use the unchanged owned WAL.
+// This runtime wrapper is never a disk recovery authority: a process crash
+// replays the retained ordered suffix from its certified snapshot normally.
+func (n *Node) RestartRaftAtSemanticCut(applied uint64, confState raftpb.ConfState) error {
+	hs, err := n.Store.HardState()
+	if err != nil {
+		return err
+	}
+	if applied != hs.Commit || n.Applied.DoneUntil() < applied || n.Applied.LastIndex() > applied {
+		return errors.Errorf("Raft restart requires the drained durable semantic cut")
+	}
+	encoded, err := confState.Marshal()
+	if err != nil {
+		return err
+	}
+	var captured raftpb.ConfState
+	if err := captured.Unmarshal(encoded); err != nil {
+		return err
+	}
+	n.Lock()
+	defer n.Unlock()
+	if n._raft != nil {
+		n._raft.Stop()
+	}
+	cfg := *n.Cfg
+	cfg.Applied = applied
+	cfg.Storage = semanticRestartStorage{Storage: n.Store, confState: captured}
+	n.Cfg = &cfg
+	n._raft = raft.RestartNode(n.Cfg)
+	return nil
+}
+
 // Raft would return back the raft.Node stored in the node.
 func (n *Node) Raft() raft.Node {
 	n.RLock()

@@ -32,25 +32,34 @@ func OpenRaftTreeDBStore(opts td.Options, identity string) (*TreeDBStore, error)
 }
 
 func (s *TreeDBStore) RecoveredRaftCheckpoint() ([]byte, bool) {
-	if s == nil || s.external == nil {
-		return nil, false
-	}
-	cert, ok := s.external.RecoveredCheckpoint()
+	cert, ok := s.RaftCheckpointCertificate()
 	return cert.Metadata, ok
 }
 
 func (s *TreeDBStore) RaftCheckpointCertificate() (td.ExternalRecoveryCheckpoint, bool) {
-	if s == nil || s.external == nil {
+	if s == nil {
+		return td.ExternalRecoveryCheckpoint{}, false
+	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.external == nil || s.IsClosed() {
 		return td.ExternalRecoveryCheckpoint{}, false
 	}
 	return s.external.RecoveredCheckpoint()
 }
 
 func (s *TreeDBStore) ExportRaftCheckpoint(ctx context.Context, dst io.Writer, generation uint64, digest string) error {
-	if s == nil || s.external == nil || s.IsClosed() {
+	if s == nil {
 		return fmt.Errorf("external posting store unavailable")
 	}
-	return s.external.ExportCheckpoint(ctx, dst, generation, digest)
+	s.lifecycleMu.Lock()
+	owner := s.external
+	closed := s.IsClosed()
+	s.lifecycleMu.Unlock()
+	if owner == nil || closed {
+		return fmt.Errorf("external posting store unavailable")
+	}
+	return owner.ExportCheckpoint(ctx, dst, generation, digest)
 }
 
 // InstallRaftCheckpoint drains every read transaction (and its iterators),

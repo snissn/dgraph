@@ -267,6 +267,9 @@ message Snapshot {
   bool done = 4;
   // since_ts stores the ts of the last snapshot to support diff snap updates.
   uint64 since_ts = 5;
+  // Explicit opt-in for non-Badger physical checkpoint streams. Empty preserves
+  // the legacy logical stream. Receivers must reject incompatible formats.
+  string transfer_format = 6;
 }
 
 message ZeroSnapshot {

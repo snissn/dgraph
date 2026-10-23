@@ -129,3 +129,35 @@ based on ordinary main, without the separate captured-WAL engine. The prototype 
 image-copy byte accounting and maintenance limits describe its original evidence only. Consumer
 results must identify the actual dependency commit and root mechanism; a bounded certificate file
 size is not the size of the retained database or recovery working set.
+
+## Native peer transport proof (production integration in progress)
+
+Snapshots explicitly opt in with additive `Snapshot.transfer_format` equal to
+`dgraph-treedb-checkpoint-v1`. Legacy Badger requests keep their existing field meanings; `SinceTs`
+is never a format discriminator. Native chunks are bounded to 1 MiB, total input is capped at 8 GiB,
+and receiver requests have a five-minute transport deadline. Missing, mixed-mode and malformed
+formats fail before authorization. Native export binds the exact CURRENT generation and digest.
+Incoming source metadata cannot regress the receiver's already drained semantic or Oracle frontier.
+
+ConfChange and empty entries share the existing ordered semantic apply channel. A membership change
+forces certification as soon as pending transactions permit it; its captured ConfState is retained
+in outgoing snapshot metadata. Forwarded snapshots update transport source context without
+substituting live membership. These controls are implemented while startup/membership capability
+guards remain: a live multi-process join/rejoin campaign is still required.
+
+A stale source certificate is a preparation failure, not permission to Advance an unapplied Ready.
+The receiver first persists only current term/vote while retaining its old durable
+commit/snapshot/suffix authority. After draining earlier ordered entries it stops the old Raft
+instance, verifies semantic progress equals the old durable commit, and recreates Raft with that
+semantic ConfState and the same WAL. The application state, admitted queries, Oracle and retry state
+are preserved. Only InitialState's ConfState is overridden in the runtime storage wrapper; all
+log/snapshot operations delegate to the durable store. Crashes reconstruct from the ordinary
+certificate plus retained WAL. Any accepted install intent or uncertain publication forbids this
+retry and requires process reopen.
+
+The public native test uses the actual registered gRPC handler, rejects a stale source cut, restarts
+an actual etcd Raft instance, receives a fresh MsgSnap, installs the new root and advances Ready
+only after matching WAL persistence. It also serializes an actual queued ConfChange and abruptly
+terminates a subprocess immediately after election-promise sync. Malformed header/chunk/terminal
+controls leave no staging file or accepted intent. These are focused cross-store and transport
+proofs, not a complete production feature or power-loss gate.

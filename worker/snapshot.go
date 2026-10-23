@@ -255,6 +255,22 @@ func doStreamSnapshot(snap *pb.Snapshot, out pb.Worker_StreamSnapshotServer) err
 }
 
 func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) error {
+	snap, err := stream.Recv()
+	if err != nil {
+		// If we don't even receive a request (here or if no StreamSnapshot is called), we can't
+		// report the snapshot to be a failure, because we don't know which follower is asking for
+		// one. Technically, I (the leader) can figure out from my Raft state, but I (Manish) think
+		// this is such a rare scenario, that we don't need to build a mechanism to track that. If
+		// we see it in the wild, we could add a timeout based mechanism to receive this request,
+		// but timeouts are always hard to get right.
+		return err
+	}
+	if raftCheckpointEnabled() {
+		return streamRaftCheckpoint(snap, stream)
+	}
+	if snap.TransferFormat != "" {
+		return errors.Errorf("legacy snapshot sender does not support transfer format %q", snap.TransferFormat)
+	}
 	if _, err := requireBadgerPostingStore("Raft snapshot send"); err != nil {
 		return err
 	}
@@ -278,16 +294,6 @@ func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) error
 	atomic.AddInt32(&n.streaming, 1)
 	defer atomic.AddInt32(&n.streaming, -1)
 
-	snap, err := stream.Recv()
-	if err != nil {
-		// If we don't even receive a request (here or if no StreamSnapshot is called), we can't
-		// report the snapshot to be a failure, because we don't know which follower is asking for
-		// one. Technically, I (the leader) can figure out from my Raft state, but I (Manish) think
-		// this is such a rare scenario, that we don't need to build a mechanism to track that. If
-		// we see it in the wild, we could add a timeout based mechanism to receive this request,
-		// but timeouts are always hard to get right.
-		return err
-	}
 	glog.Infof("Got StreamSnapshot request: %+v\n", snap)
 	if err := doStreamSnapshot(snap, stream); err != nil {
 		glog.Errorf("While streaming snapshot: %v. Reporting failure.", err)

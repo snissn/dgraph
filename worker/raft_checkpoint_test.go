@@ -43,12 +43,12 @@ func applyCheckpointEntry(t *testing.T, n *node, e raftpb.Entry) {
 }
 
 func TestRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T) {
-	for _, cut := range []string{"after_retention", "before_retention"} {
-		t.Run(cut, func(t *testing.T) { testRaftCheckpointRealMutationDeltaExactRootReplay(t, cut == "before_retention") })
+	for _, cut := range []string{"after_retention", "before_retention", "failed_native_snapshot_restart"} {
+		t.Run(cut, func(t *testing.T) { testRaftCheckpointRealMutationDeltaExactRootReplay(t, cut) })
 	}
 }
 
-func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, publishOnly bool) {
+func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string) {
 	oldConfig, oldState, oldPstore, oldPostingStore, oldHardSync := Config, State, pstore, postingStore, x.WorkerConfig.HardSync
 	oldNode := gr.Node
 	oldRetries := x.Config.MaxRetries
@@ -113,7 +113,7 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, publishOnl
 	}
 	applyCheckpointEntry(t, n, entries[0])
 	applyCheckpointEntry(t, n, entries[1])
-	if publishOnly {
+	if cut == "before_retention" {
 		c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: 1, RaftID: 1, Index: 2, Term: 1, OracleMaxAssigned: posting.Oracle().MaxAssigned(), ConfState: *n.ConfState()}
 		c.AppliedProposals = make(map[uint64]raftProposalSignature)
 		for key, p := range n.appliedProposals {
@@ -158,10 +158,39 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, publishOnl
 	require.Equal(t, "suffix", readValue())
 	// Close deliberately flushes working suffix data. Recovery must still select
 	// the certified root, never the latest accidentally durable working root.
-	posting.Cleanup()
-	posting.Oracle().ResetTxns()
-	current.closePostingStore()
-	n = open()
+	if cut == "failed_native_snapshot_restart" {
+		// A stale native request cannot advance its accepted-but-unapplied
+		// Ready. Preserve term/vote and the drained current application state,
+		// restart at that same cut with its exact applied membership.
+		before, err := wal.Snapshot()
+		require.NoError(t, err)
+		require.NoError(t, n.persistSnapshotElection(raftpb.HardState{Term: 2, Vote: 1, Commit: 999}))
+		hs, err := wal.HardState()
+		require.NoError(t, err)
+		require.Equal(t, raftpb.HardState{Term: 2, Vote: 1, Commit: 6}, hs)
+		require.NoError(t, n.restartAfterRaftSnapshotFailure(context.Background()))
+		defer n.Raft().Stop()
+		after, err := wal.Snapshot()
+		require.NoError(t, err)
+		require.Equal(t, before, after)
+		last, err := wal.LastIndex()
+		require.NoError(t, err)
+		require.Equal(t, uint64(6), last)
+		require.Equal(t, uint64(6), n.Cfg.Applied)
+		require.Equal(t, 1, posting.Oracle().NumPendingTxns(), "runtime restart keeps the valid pending semantic state")
+		require.Contains(t, n.appliedProposals, uint64(3))
+		require.Equal(t, "suffix", readValue(), "failed preparation must never rewind admitted reads")
+		// A later process restart still reconstructs from certificate+WAL only.
+		posting.Cleanup()
+		posting.Oracle().ResetTxns()
+		current.closePostingStore()
+		n = open()
+	} else {
+		posting.Cleanup()
+		posting.Oracle().ResetTxns()
+		current.closePostingStore()
+		n = open()
+	}
 	require.Equal(t, uint64(2), n.Cfg.Applied)
 	require.Equal(t, "certified", readValue(), "uncertified working suffix must be discarded")
 	oldSignatures := len(n.appliedProposals)
@@ -178,7 +207,10 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, publishOnl
 	require.NoError(t, n.expireRaftProposals(time.Now().Add(time.Hour), 10*time.Minute))
 	require.Len(t, n.appliedProposals, oldSignatures, "pending prewrites postpone dedup expiration")
 	abort := checkpointEntry(t, 7, decision(base+4, 0, base+5))
-	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: 7}, []raftpb.Entry{abort}, &raftpb.Snapshot{}))
+	abortState, err := wal.HardState()
+	require.NoError(t, err)
+	abortState.Commit = 7
+	require.NoError(t, wal.Save(&abortState, []raftpb.Entry{abort}, &raftpb.Snapshot{}))
 	require.NoError(t, wal.Sync())
 	atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(abort.Data)))
 	applyCheckpointEntry(t, n, abort)

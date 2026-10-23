@@ -213,6 +213,10 @@ func (n *node) recoverRaftCheckpoint() error {
 	if _, hasPeer := groups().MyPeer(); hasPeer || n.RaftContext.IsLearner {
 		return fmt.Errorf("raft_checkpoint prototype requires one Alpha; snapshot transfer is not implemented")
 	}
+	return n.recoverRaftCheckpointState()
+}
+
+func (n *node) recoverRaftCheckpointState() error {
 	n.Store.RequireCheckpointCertificate()
 	walPath, err := filepath.Abs(Config.WALDir)
 	if err != nil {
@@ -292,7 +296,8 @@ func (n *node) recoverRaftCheckpoint() error {
 			return err
 		}
 		if snap.Metadata.Index < c.Index {
-			data, err := proto.Marshal(&pb.Snapshot{Context: n.RaftContext, Index: c.Index, ReadTs: c.OracleMaxAssigned})
+			data, err := proto.Marshal(&pb.Snapshot{Context: n.RaftContext, Index: c.Index, ReadTs: c.OracleMaxAssigned,
+				TransferFormat: raftCheckpointTransferFormat})
 			if err != nil {
 				return err
 			}
@@ -318,6 +323,7 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 		return nil
 	}
 	last := atomic.LoadUint64(&n.raftCertifiedIndex)
+	force = force || n.raftConfStateDirty
 	if index < last || (!force && index-last < raftCheckpointEvery && atomic.LoadUint64(&n.raftRecoveryBytes) < raftCheckpointBytes) {
 		return nil
 	}
@@ -362,7 +368,8 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 	if err := n.Store.AuthorizeCheckpoint(index); err != nil {
 		return err
 	}
-	snapData, err := proto.Marshal(&pb.Snapshot{Context: n.RaftContext, Index: index, ReadTs: c.OracleMaxAssigned})
+	snapData, err := proto.Marshal(&pb.Snapshot{Context: n.RaftContext, Index: index, ReadTs: c.OracleMaxAssigned,
+		TransferFormat: raftCheckpointTransferFormat})
 	if err != nil {
 		return err
 	}
@@ -378,6 +385,7 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 	// application prefix included in this checkpoint, retaining concurrent suffix.
 	atomic.AddUint64(&n.raftRecoveryBytes, ^(n.raftAppliedBytes - 1))
 	n.raftAppliedBytes = 0
+	n.raftConfStateDirty = false
 	glog.Infof("TreeDB raft_checkpoint certified: index=%d oracle=%d pending=0", index, c.OracleMaxAssigned)
 	return nil
 }

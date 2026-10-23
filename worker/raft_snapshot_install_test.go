@@ -23,9 +23,12 @@ import (
 	"github.com/dgraph-io/dgraph/v25/raftwal"
 	"github.com/dgraph-io/dgraph/v25/schema"
 	"github.com/dgraph-io/dgraph/v25/x"
+	"github.com/dgraph-io/ristretto/v2/z"
 	td "github.com/snissn/gomap/TreeDB"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func snapshotInstallOptions(dir string) Options {
@@ -42,6 +45,12 @@ func TestRaftSnapshotStartupCrashHelper(t *testing.T) {
 	Config = snapshotInstallOptions(dir)
 	x.WorkerConfig.HardSync = true
 	identity := "dgraph-raft-v1:" + Config.WALDir
+	if stage == "after_election_sync" {
+		wal := raftwal.Init(Config.WALDir)
+		n := newNode(wal, 1, 2, "")
+		require.NoError(t, n.persistSnapshotElection(raftpb.HardState{Term: 5, Vote: 2, Commit: 999}))
+		os.Exit(0) // promises persist, old commit/snapshot/suffix remain authoritative
+	}
 	if stage == "accepted" {
 		input, err := os.ReadFile(filepath.Join(dir, "input.json"))
 		require.NoError(t, err)
@@ -138,14 +147,32 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 		applyCheckpointEntry(t, n, entry)
 	}
 	require.NoError(t, n.checkpointRaftCut(2, true))
+	staleSnapshot, err := sourceWAL.Snapshot()
+	require.NoError(t, err)
+	next := []raftpb.Entry{
+		checkpointEntry(t, 3, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 2, Edges: []*pb.DirectedEdge{
+			{Entity: 1, Attr: predicate, Value: []byte("fresh peer value"), ValueType: pb.Posting_STRING,
+				Op: pb.DirectedEdge_SET}}}}),
+		checkpointEntry(t, 4, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 3,
+			Txns: []*pb.TxnStatus{{StartTs: base + 2, CommitTs: base + 3}}}}),
+	}
+	require.NoError(t, sourceWAL.Save(&raftpb.HardState{Term: 1, Commit: 4}, next, &raftpb.Snapshot{}))
+	require.NoError(t, sourceWAL.Sync())
+	for _, entry := range next {
+		atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(entry.Data)))
+		applyCheckpointEntry(t, n, entry)
+	}
+	require.NoError(t, n.checkpointRaftCut(4, true))
 	source, ok := state.TreeDBStore.RaftCheckpointCertificate()
 	require.True(t, ok)
-	var archive bytes.Buffer
-	require.NoError(t, state.TreeDBStore.ExportRaftCheckpoint(context.Background(), &archive,
-		source.Generation, source.Digest))
 	snapshot, err := sourceWAL.Snapshot()
 	require.NoError(t, err)
 	require.Equal(t, []uint64{1, 2}, snapshot.Metadata.ConfState.Voters)
+	var staleRequest, freshRequest pb.Snapshot
+	require.NoError(t, proto.Unmarshal(staleSnapshot.Data, &staleRequest))
+	require.NoError(t, proto.Unmarshal(snapshot.Data, &freshRequest))
+	freshBytes, staleError := readCheckpointThroughRPC(t, &staleRequest, &freshRequest)
+	archive := bytes.NewBuffer(freshBytes)
 	posting.Cleanup()
 	posting.Oracle().ResetTxns()
 	state.closePostingStore()
@@ -153,8 +180,9 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 	state = nil
 
 	for _, stage := range []string{"before_owner_open", "after_owner_open", "after_wal_complete",
-		"corrupt_archive", "missing_archive", "corrupt_intent", "wrong_identity"} {
+		"corrupt_archive", "missing_archive", "corrupt_intent", "wrong_identity", "stale_native_retry", "election_before_restart"} {
 		t.Run(stage, func(t *testing.T) {
+			nativeRetry := stage == "stale_native_retry" || stage == "election_before_restart"
 			dir := t.TempDir()
 			Config = snapshotInstallOptions(dir)
 			require.NoError(t, os.MkdirAll(Config.WALDir, 0700))
@@ -163,9 +191,12 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 			wal.SetUint(raftwal.GroupId, 1)
 			wal.RequireCheckpointCertificate()
 			var old []raftpb.Entry
-			for index := uint64(1); index <= 4; index++ {
+			for index := uint64(1); index <= 6; index++ {
 				old = append(old, raftpb.Entry{Index: index, Term: 4, Data: []byte("divergent uncommitted tail")})
 			}
+			bootstrap, err := (&raftpb.ConfChange{Type: raftpb.ConfChangeAddNode, NodeID: 2}).Marshal()
+			require.NoError(t, err)
+			old[0].Type, old[0].Data = raftpb.EntryConfChange, bootstrap
 			require.NoError(t, wal.Save(&raftpb.HardState{Term: 4, Vote: 2, Commit: 1}, old, &raftpb.Snapshot{}))
 			require.NoError(t, wal.Sync())
 			state = &ServerState{}
@@ -184,7 +215,7 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 			sourceBytes, err := json.Marshal(source)
 			require.NoError(t, err)
 			intent := raftwal.AcceptedSnapshotInstall{Version: 1, ReceiverIdentity: "dgraph-raft-v1:" + Config.WALDir,
-				Group: 1, RaftID: 2, Snapshot: snapshot, HardState: raftpb.HardState{Term: 4, Vote: 2, Commit: 2},
+				Group: 1, RaftID: 2, Snapshot: snapshot, HardState: raftpb.HardState{Term: 4, Vote: 2, Commit: 4},
 				ArchiveName: name, ArchiveBytes: int64(archive.Len()), ArchiveSHA256: hex.EncodeToString(hash[:]),
 				SourceCertificate: sourceBytes, ReceiverMetadata: receiverMetadata}
 			input, err := json.Marshal(intent)
@@ -196,7 +227,12 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 				output, err := cmd.CombinedOutput()
 				require.NoError(t, err, "%s", output)
 			}
-			runCut("accepted")
+			if !nativeRetry {
+				runCut("accepted")
+			}
+			if stage == "election_before_restart" {
+				runCut("after_election_sync")
+			}
 			if stage == "corrupt_archive" || stage == "missing_archive" || stage == "corrupt_intent" || stage == "wrong_identity" {
 				before, err := os.ReadFile(filepath.Join(Config.PostingDir, "external-recovery.json"))
 				require.NoError(t, err)
@@ -227,7 +263,7 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 				return
 			}
 			var generation uint64
-			for restart := 0; restart < 2; restart++ {
+			for restart := 0; !nativeRetry && restart < 2; restart++ {
 				runCut(stage)
 				require.FileExists(t, filepath.Join(Config.WALDir, name), "opening owner cannot destroy install input")
 				if stage != "before_owner_open" {
@@ -250,27 +286,90 @@ func TestRaftSnapshotStartupReconcilesCertifiedOwnerBeforeReplay(t *testing.T) {
 			wal = raftwal.Init(Config.WALDir)
 			n = newNode(wal, 1, 2, "")
 			gr.Node = n
-			require.NoError(t, n.recoverRaftCheckpoint())
-			require.Equal(t, uint64(2), n.Cfg.Applied)
+			var applyDone chan struct{}
+			if nativeRetry {
+				require.NoError(t, os.Remove(filepath.Join(Config.WALDir, name)))
+				require.NoError(t, n.recoverRaftCheckpoint())
+				n.SetRaft(raft.RestartNode(n.Cfg))
+				n.SetConfState(&raftpb.ConfState{})
+				rd := <-n.Raft().Ready()
+				require.Len(t, rd.CommittedEntries, 1)
+				n.closer = z.NewCloser(1)
+				applyDone = make(chan struct{})
+				go func() { n.processApplyCh(); close(applyDone) }()
+				n.Applied.Begin(1)
+				n.raftSemanticMu.Lock()
+				atomic.AddInt64(&n.pendingSize, int64(rd.CommittedEntries[0].Size()))
+				n.applyCh <- rd.CommittedEntries
+				require.Empty(t, n.ConfState().Voters, "queued future membership cannot enter a prior semantic cut")
+				n.raftSemanticMu.Unlock()
+				n.Raft().Advance()
+				require.NoError(t, n.Applied.WaitForMark(context.Background(), 1))
+				n.raftSemanticMu.Lock()
+				require.NoError(t, n.persistSnapshotElection(raftpb.HardState{Term: 5, Vote: 2, Commit: 999}))
+				require.Error(t, n.receiveRaftCheckpoint(context.Background(), staleSnapshot, raftpb.HardState{},
+					func() (*pb.KVS, error) { return nil, staleError }))
+				require.NoError(t, n.restartAfterRaftSnapshotFailure(context.Background()))
+				require.Equal(t, uint64(1), n.Cfg.Applied)
+				require.Equal(t, []uint64{2}, n.ConfState().Voters)
+				before, err := wal.HardState()
+				require.NoError(t, err)
+				require.Equal(t, raftpb.HardState{Term: 5, Vote: 2, Commit: 1}, before)
+				require.NoError(t, n.Raft().Step(context.Background(), raftpb.Message{Type: raftpb.MsgSnap,
+					From: 1, To: 2, Term: 6, Snapshot: snapshot}))
+				rd = <-n.Raft().Ready()
+				require.Equal(t, snapshot.Metadata, rd.Snapshot.Metadata)
+				require.NoError(t, n.persistSnapshotElection(rd.HardState))
+				chunks := []*pb.KVS{{Data: raftSnapshotStreamHeader}}
+				for remaining := freshBytes; len(remaining) > 0; {
+					size := len(remaining)
+					if size > raftSnapshotChunkBytes {
+						size = raftSnapshotChunkBytes
+					}
+					chunks = append(chunks, &pb.KVS{Data: remaining[:size]})
+					remaining = remaining[size:]
+				}
+				chunks = append(chunks, &pb.KVS{Done: true})
+				require.NoError(t, n.receiveRaftCheckpoint(context.Background(), rd.Snapshot, rd.HardState,
+					func() (*pb.KVS, error) { chunk := chunks[0]; chunks = chunks[1:]; return chunk, nil }))
+				n.raftSemanticMu.Unlock()
+				require.NoError(t, wal.Save(&rd.HardState, rd.Entries, &rd.Snapshot))
+				require.NoError(t, wal.Sync())
+				n.Raft().Advance()
+			} else {
+				require.NoError(t, n.recoverRaftCheckpoint())
+			}
+			require.Equal(t, uint64(4), n.Cfg.Applied)
 			require.Equal(t, []uint64{1, 2}, n.ConfState().Voters)
 			require.Contains(t, n.appliedProposals, uint64(1))
-			require.Equal(t, base+1, posting.Oracle().MaxAssigned())
+			require.Equal(t, base+3, posting.Oracle().MaxAssigned())
 			hs, err := wal.HardState()
 			require.NoError(t, err)
-			require.Equal(t, raftpb.HardState{Term: 4, Vote: 2, Commit: 2}, hs)
+			if nativeRetry {
+				require.Equal(t, raftpb.HardState{Term: 6, Commit: 4}, hs)
+			} else {
+				require.Equal(t, raftpb.HardState{Term: 4, Vote: 2, Commit: 4}, hs)
+			}
 			last, err := wal.LastIndex()
 			require.NoError(t, err)
-			require.Equal(t, uint64(2), last)
+			require.Equal(t, uint64(4), last)
 			list, err := posting.GetNoStore(x.DataKey(predicate, 1), math.MaxUint64)
 			require.NoError(t, err)
 			value, err := list.Value(math.MaxUint64)
 			require.NoError(t, err)
-			require.Equal(t, []byte("certified peer value"), value.Value)
+			require.Equal(t, []byte("fresh peer value"), value.Value)
 			require.NoFileExists(t, filepath.Join(Config.WALDir, name))
+			if applyDone != nil {
+				close(n.applyCh)
+				<-applyDone
+			}
 			posting.Cleanup()
 			posting.Oracle().ResetTxns()
 			state.closePostingStore()
 			state = nil
+			if n.Raft() != nil {
+				n.Raft().Stop()
+			}
 			require.NoError(t, wal.Close())
 		})
 	}

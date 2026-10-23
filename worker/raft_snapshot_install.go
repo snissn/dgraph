@@ -20,6 +20,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const raftCheckpointTransferFormat = "dgraph-treedb-checkpoint-v1"
+
 // preflightRaftSnapshotInstall precedes posting-owner Open and its physical
 // restore/cleanup. The complete accepted archive is rooted in the WAL namespace,
 // so opening either the old or new CURRENT cannot remove install authority.

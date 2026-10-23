@@ -148,7 +148,7 @@ func toMVCCCommitMode(mode TreeDBCommitMode) (mvcc.CommitMode, error) {
 }
 
 func (s *TreeDBStore) NewReadTxn(readTs uint64) ReadTxn {
-	tracked := s.external != nil
+	tracked := s.mode == TreeDBCommitExternallyRecoverable
 	if tracked {
 		s.rootGate.RLock()
 	}

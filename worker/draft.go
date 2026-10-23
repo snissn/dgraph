@@ -62,12 +62,14 @@ type node struct {
 	closer  *z.Closer
 
 	raftDebtMu          sync.Mutex
+	raftSemanticMu      sync.Mutex // external apply, expiry and root-install barrier
 	raftReservedBytes   uint64
 	raftReservedEntries uint64
 	raftAppliedBytes    uint64
 	raftCertifiedIndex  uint64
 	raftRecoveryBytes   uint64
 	raftSemanticIndex   uint64
+	raftConfStateDirty  bool
 	raftReplayUntil     uint64
 	appliedProposals    map[uint64]*appliedProposal
 	checkpointTs        uint64 // Timestamp corresponding to checkpoint.
@@ -893,17 +895,33 @@ func (n *node) processApplyCh() {
 
 	// This function must be run serially.
 	handle := func(entries []raftpb.Entry) {
+		if raftCheckpointEnabled() {
+			n.raftSemanticMu.Lock()
+			defer n.raftSemanticMu.Unlock()
+		}
 		glog.V(3).Infof("handling element in applyCh with #entries %v", len(entries))
 		defer glog.V(3).Infof("done handling element in applyCh")
 
 		var totalSize int64
 		for _, entry := range entries {
-			x.AssertTrue(len(entry.Data) > 0)
-
 			// We use the size as a double check to ensure that we're
 			// working with the same proposal as before.
 			psz := entry.Size()
 			totalSize += int64(psz)
+			if raftCheckpointEnabled() && (entry.Type == raftpb.EntryConfChange || len(entry.Data) == 0) {
+				if entry.Type == raftpb.EntryConfChange {
+					n.applyConfChange(entry)
+					n.raftConfStateDirty = true
+				}
+				n.raftAppliedBytes += uint64(len(entry.Data))
+				n.raftSemanticIndex = entry.Index
+				if err := n.checkpointRaftCut(entry.Index, false); err != nil {
+					glog.Fatalf("raft_checkpoint control-entry cut failed: %v", err)
+				}
+				n.Applied.Done(entry.Index)
+				continue
+			}
+			x.AssertTrue(len(entry.Data) >= 8)
 
 			var proposal pb.Proposal
 			key := binary.BigEndian.Uint64(entry.Data[:8])
@@ -973,6 +991,10 @@ func (n *node) processApplyCh() {
 		select {
 		case entries, ok := <-n.applyCh:
 			if !ok {
+				if raftCheckpointEnabled() {
+					n.raftSemanticMu.Lock()
+					defer n.raftSemanticMu.Unlock()
+				}
 				if err := n.checkpointRaftCut(n.raftSemanticIndex, true); err != nil {
 					glog.Errorf("final checkpoint: %v", err)
 				}
@@ -982,17 +1004,23 @@ func (n *node) processApplyCh() {
 		case <-tick:
 			// We use this ticker to clear out previous map.
 			now := time.Now()
-			for key, p := range n.appliedProposals {
-				if !raftCheckpointEnabled() && now.Sub(p.seen) > maxAge {
-					delete(n.appliedProposals, key)
+			if !raftCheckpointEnabled() {
+				for key, p := range n.appliedProposals {
+					if now.Sub(p.seen) > maxAge {
+						delete(n.appliedProposals, key)
+					}
 				}
 			}
 			if raftCheckpointEnabled() {
+				n.raftSemanticMu.Lock()
 				if err := n.expireRaftProposals(now, maxAge); err != nil {
 					glog.Fatalf("raft_checkpoint dedup expiration barrier failed: %v", err)
 				}
+				glog.V(3).Infof("Size of previous map: %d", len(n.appliedProposals))
+				n.raftSemanticMu.Unlock()
+			} else {
+				glog.V(3).Infof("Size of previous map: %d", len(n.appliedProposals))
 			}
-			glog.V(3).Infof("Size of previous map: %d", len(n.appliedProposals))
 		}
 	}
 }
@@ -1351,6 +1379,7 @@ func (n *node) Run() {
 
 	firstRun := true
 	var leader bool
+	var resumeSnapshotHealth bool
 	// See also our configuration of HeartbeatTick and ElectionTick.
 	// Before we used to have 20ms ticks, but they would overload the Raft tick channel, causing
 	// "tick missed to fire" logs. Etcd uses 100ms and they haven't seen those issues.
@@ -1435,9 +1464,10 @@ func (n *node) Run() {
 					// When there is a `raftpb.EntryConfChange` after creating the snapshot,
 					// then the confState included in the snapshot is out of date. so We need
 					// to update the confState before sending a snapshot to a follower.
-					if rd.Messages[i].Type == raftpb.MsgSnap {
+					if rd.Messages[i].Type == raftpb.MsgSnap && !raftCheckpointEnabled() {
 						rd.Messages[i].Snapshot.Metadata.ConfState = *n.ConfState()
 					}
+					x.Check(n.bindRaftSnapshotSource(&rd.Messages[i]))
 
 					// NOTE: We can do some optimizations here to drop messages.
 					n.Send(&rd.Messages[i])
@@ -1463,11 +1493,34 @@ func (n *node) Run() {
 				snap := &pb.Snapshot{}
 				x.Check(proto.Unmarshal(rd.Snapshot.Data, snap))
 				rc := snap.GetContext()
-				if raftCheckpointEnabled() && rc.Id != n.Id {
-					glog.Fatal("raft_checkpoint prototype refuses peer snapshot: certified TreeDB install protocol unavailable")
-				}
 				x.AssertTrue(rc.GetGroup() == n.gid)
-				if rc.Id != n.Id {
+				if raftCheckpointEnabled() && snap.TransferFormat != raftCheckpointTransferFormat {
+					glog.Fatal("external snapshot receiver refuses incompatible transfer format")
+				}
+				if !raftCheckpointEnabled() && snap.TransferFormat != "" {
+					glog.Fatal("legacy snapshot receiver refuses external checkpoint format")
+				}
+				if rc.Id != n.Id && raftCheckpointEnabled() {
+					x.UpdateHealthStatus(false)
+					x.Check(n.Applied.WaitForMark(n.ctx, n.Applied.LastIndex()))
+					n.raftSemanticMu.Lock()
+					x.Check(n.persistSnapshotElection(rd.HardState))
+					if err := n.retrieveRaftCheckpoint(rd.Snapshot, rd.HardState); err != nil {
+						glog.Errorf("Native snapshot preparation failed: %v; recovering prior authority", err)
+						if raftwal.SnapshotInstallPublicationUncertain(err) {
+							glog.Fatalf("Native snapshot intent publication requires reopen: %v", err)
+						}
+						x.Check(n.restartAfterRaftSnapshotFailure(n.ctx))
+						n.raftSemanticMu.Unlock()
+						applied = n.Cfg.Applied
+						leader, lastLead, resumeSnapshotHealth = false, math.MaxUint64, true
+						span.End()
+						continue // abandon this Ready; never Advance an unapplied snapshot
+					}
+					applied = n.Cfg.Applied
+					n.raftSemanticMu.Unlock()
+					resumeSnapshotHealth = true
+				} else if rc.Id != n.Id {
 					// Set node to unhealthy state here while it applies the snapshot.
 					x.UpdateHealthStatus(false)
 
@@ -1554,6 +1607,23 @@ func (n *node) Run() {
 				// Mark{3, false} is emitted. So it's safer to emit watermarks as soon as
 				// possible sequentially
 				n.Applied.Begin(entry.Index)
+				if raftCheckpointEnabled() {
+					// Membership and empty entries belong to the same ordered cut
+					// as mutations. Ready must not install future ConfState while
+					// older semantic entries are still queued for certification.
+					if entry.Index <= applied {
+						n.Applied.Done(entry.Index)
+						continue
+					}
+					if entry.Type != raftpb.EntryConfChange && len(entry.Data) > 0 {
+						key := binary.BigEndian.Uint64(entry.Data[:8])
+						if pctx := n.Proposals.Get(key); pctx != nil {
+							atomic.AddUint32(&pctx.Found, 1)
+						}
+					}
+					entries = append(entries, entry)
+					continue
+				}
 
 				switch {
 				case entry.Type == raftpb.EntryConfChange:
@@ -1605,9 +1675,10 @@ func (n *node) Run() {
 					// When there is a `raftpb.EntryConfChange` after creating the snapshot,
 					// then the confState included in the snapshot is out of date. so We need
 					// to update the confState before sending a snapshot to a follower.
-					if rd.Messages[i].Type == raftpb.MsgSnap {
+					if rd.Messages[i].Type == raftpb.MsgSnap && !raftCheckpointEnabled() {
 						rd.Messages[i].Snapshot.Metadata.ConfState = *n.ConfState()
 					}
+					x.Check(n.bindRaftSnapshotSource(&rd.Messages[i]))
 					// NOTE: We can do some optimizations here to drop messages.
 					n.Send(&rd.Messages[i])
 				}
@@ -1618,6 +1689,11 @@ func (n *node) Run() {
 			timer.Record("proposals")
 
 			n.Raft().Advance()
+			if resumeSnapshotHealth {
+				x.Check(n.Applied.WaitForMark(n.ctx, n.Applied.LastIndex()))
+				x.UpdateHealthStatus(true)
+				resumeSnapshotHealth = false
+			}
 			timer.Record("advance")
 
 			if firstRun && n.canCampaign {

@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -48,6 +49,17 @@ type AcceptedSnapshotInstall struct {
 type snapshotInstallEnvelope struct {
 	Payload json.RawMessage
 	SHA256  string
+}
+
+type snapshotInstallPublicationError struct{ error }
+
+func (e *snapshotInstallPublicationError) Unwrap() error { return e.error }
+
+// SnapshotInstallPublicationUncertain means the archive must be retained and
+// the process must reopen; an intent namespace operation may have succeeded.
+func SnapshotInstallPublicationUncertain(err error) bool {
+	var publication *snapshotInstallPublicationError
+	return errors.As(err, &publication)
 }
 
 func sameInstalledSnapshot(a, b raftpb.Snapshot) bool {
@@ -249,10 +261,10 @@ func (w *DiskStorage) AcceptSnapshotInstall(intent AcceptedSnapshotInstall) erro
 	// The archive and checksummed candidate have both been validated and synced
 	// before this atomic namespace edge can authorize a posting CURRENT switch.
 	if err := os.Rename(name, filepath.Join(w.dir, snapshotInstallFile)); err != nil {
-		return err
+		return &snapshotInstallPublicationError{err}
 	}
 	if err := syncInstallDir(w.dir); err != nil {
-		return err
+		return &snapshotInstallPublicationError{err}
 	}
 	if w.installStageForTest != nil {
 		w.installStageForTest("accepted")
