@@ -29,7 +29,7 @@ func TestStoreScalarIndexRebuildAggregatesChunksAndPreservesHistory(t *testing.T
 		require.NoError(t, err)
 		commitStoreEntry(t, store, 10, Entry{Key: x.DataKey(attr, uid), Value: data, UserMeta: BitDeltaPosting})
 	}
-	rb := &IndexRebuild{Attr: attr, StartTs: 20, OldSchema: old, CurrentSchema: next}
+	rb := &IndexRebuild{Attr: attr, StartTs: 20, OldSchema: old, CurrentSchema: next, Store: store}
 	require.NoError(t, rb.DropIndexes(context.Background()))
 	require.NoError(t, rb.BuildIndexes(context.Background()))
 	tokenizer, ok := tok.GetTokenizer("exact")
@@ -53,12 +53,12 @@ func TestStoreScalarIndexRebuildAggregatesChunksAndPreservesHistory(t *testing.T
 	require.Len(t, read(20), 600)
 	// Logical removal must retain versions needed by existing readers and older cuts.
 	remove := proto.Clone(old).(*pb.SchemaUpdate)
-	rb = &IndexRebuild{Attr: attr, StartTs: 25, OldSchema: next, CurrentSchema: remove}
+	rb = &IndexRebuild{Attr: attr, StartTs: 25, OldSchema: next, CurrentSchema: remove, Store: store}
 	require.NoError(t, rb.DropIndexes(context.Background()))
 	require.Empty(t, read(25))
 	require.Len(t, read(20), 600)
 	// Replay/retry repeats exactly the same build timestamp, never accumulating UIDs.
-	rb = &IndexRebuild{Attr: attr, StartTs: 30, OldSchema: old, CurrentSchema: next}
+	rb = &IndexRebuild{Attr: attr, StartTs: 30, OldSchema: old, CurrentSchema: next, Store: store}
 	require.NoError(t, rb.DropIndexes(context.Background()))
 	require.NoError(t, rb.BuildIndexes(context.Background()))
 	require.NoError(t, rb.DropIndexes(context.Background()))
@@ -81,7 +81,7 @@ func TestStoreIndexRebuildPropagatesCallbackFailure(t *testing.T) {
 	commitStoreEntry(t, store, 10, Entry{Key: x.DataKey(attr, 1), Value: data, UserMeta: BitDeltaPosting})
 	failure := errors.New("injected index callback failure")
 	postingStore, pstore = rebuildFailStore{Store: store, err: failure}, nil
-	rb := &IndexRebuild{Attr: attr, StartTs: 20, OldSchema: old, CurrentSchema: next}
+	rb := &IndexRebuild{Attr: attr, StartTs: 20, OldSchema: old, CurrentSchema: next, Store: postingStore}
 	require.ErrorIs(t, rb.BuildIndexes(context.Background()), failure)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

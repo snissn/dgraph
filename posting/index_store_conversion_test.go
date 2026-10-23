@@ -85,6 +85,9 @@ func TestStoreDataConversionCanonicalizesValuesAndFingerprints(t *testing.T) {
 			}
 			schema.State().Set(attr, next)
 			rb := IndexRebuild{Attr: attr, StartTs: 20, OldSchema: old, CurrentSchema: next}
+			if !shape.badger {
+				rb.Store = store
+			}
 			require.NoError(t, rb.ValidateData(context.Background()))
 			require.NoError(t, rb.BuildData(context.Background()))
 			binaryValue := types.Val{Tid: types.BinaryID}

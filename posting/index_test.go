@@ -603,6 +603,22 @@ func TestNeedsReverseEdgesRebuild(t *testing.T) {
 }
 
 func TestNeedsListTypeRebuild(t *testing.T) {
+	// Inferred string data may later receive an explicit vector schema. This
+	// retains the existing vector conversion path rather than entering the
+	// scalar rebuilder, which cannot build vector indexes.
+	for _, pair := range [][2]pb.Posting_ValType{
+		{pb.Posting_STRING, pb.Posting_VFLOAT},
+		{pb.Posting_VFLOAT, pb.Posting_STRING},
+	} {
+		rb := IndexRebuild{
+			OldSchema:     &pb.SchemaUpdate{ValueType: pair[0]},
+			CurrentSchema: &pb.SchemaUpdate{ValueType: pair[1]},
+		}
+		rebuild, err := rb.needsListTypeRebuild()
+		require.NoError(t, err)
+		require.False(t, rebuild)
+	}
+
 	rb := IndexRebuild{}
 	rb.OldSchema = &pb.SchemaUpdate{ValueType: pb.Posting_UID, List: false}
 	rb.CurrentSchema = &pb.SchemaUpdate{ValueType: pb.Posting_UID, List: true}

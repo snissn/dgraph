@@ -29,6 +29,12 @@ occurs. It changes neither the physical floor nor the certificate/retention fron
 become timestamped empty lists, including split keys, rather than being physically removed by
 `DropPrefix`.
 
+Effectful store-neutral index and data rebuilds require an explicit `IndexRebuild.Store` capability.
+A missing Badger handle does not grant that capability, even at timestamp zero; ordinary callers
+without it retain the Badger operational guard. Pure validation may use the global read store, and
+genuine no-op rebuilds remain no-ops. Ordinary vector schema changes keep their existing vector
+conversion and builder path; scalar conversion rebuilds do not take over vector index lifecycle.
+
 The maintained `rebuilder` callback, posting-list decoder, index mutation code and posting-list
 rollup produce index contents. A store-neutral snapshot scan feeds those algorithms. Chunks of 256
 source lists are aggregated in temporary Badger at unique scratch timestamps, then merged into

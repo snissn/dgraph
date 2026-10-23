@@ -877,7 +877,7 @@ func decodeUint64MatrixUnsafe(data []byte, matrix *[][]uint64) error {
 }
 
 func (r *rebuilder) Run(ctx context.Context) error {
-	if pstore == nil || r.store != nil {
+	if r.store != nil {
 		return r.runForStore(ctx)
 	}
 	if _, err := requireBadgerOperationalStore("index rebuild stream"); err != nil {
@@ -1127,7 +1127,7 @@ type IndexRebuild struct {
 	StartTs       uint64
 	OldSchema     *pb.SchemaUpdate
 	CurrentSchema *pb.SchemaUpdate
-	Store         Store // optional epoch-bound schema capability
+	Store         Store // explicit schema mutation capability; nil requires Badger
 }
 
 type indexOp int
@@ -1186,8 +1186,8 @@ func (rb *IndexRebuild) DropIndexes(ctx context.Context) error {
 	prefixes = append(prefixes, prefixesToDropCountIndex(ctx, rb)...)
 	prefixes = append(prefixes, prefixesToDropVectorIndexEdges(ctx, rb)...)
 	if len(prefixes) > 0 {
-		if pstore == nil || rb.Store != nil {
-			return dropStoreIndexPrefixesForStore(ctx, rb.sourceStore(), rb.StartTs, prefixes)
+		if rb.Store != nil {
+			return dropStoreIndexPrefixesForStore(ctx, rb.Store, rb.StartTs, prefixes)
 		}
 		if _, err := requireBadgerOperationalStore("drop index prefixes"); err != nil {
 			return err
@@ -1215,7 +1215,7 @@ func (rb *IndexRebuild) NeedIndexRebuild() bool {
 
 // BuildIndexes builds indexes.
 func (rb *IndexRebuild) BuildIndexes(ctx context.Context) error {
-	if pstore == nil || rb.Store != nil {
+	if rb.Store != nil {
 		if len(rb.CurrentSchema.IndexSpecs) != 0 ||
 			(rb.OldSchema != nil && len(rb.OldSchema.IndexSpecs) != 0) {
 			return errors.Errorf("store index rebuild does not own vector index lifecycle")
@@ -1847,7 +1847,11 @@ func (rb *IndexRebuild) needsListTypeRebuild() (bool, error) {
 			" without dropping it first.", x.ParseAttr(rb.CurrentSchema.Predicate))
 	}
 	oldType, newType := types.TypeID(rb.OldSchema.ValueType), types.TypeID(rb.CurrentSchema.ValueType)
-	if oldType != newType && oldType.IsScalar() && newType.IsScalar() {
+	// Vector schema changes retain their existing lazy value conversion and
+	// vector-specific builder. IsScalar includes vectors, but the ordinary
+	// scalar stream rebuilder cannot own their index lifecycle.
+	if oldType != newType && oldType.IsScalar() && newType.IsScalar() &&
+		oldType != types.VFloatID && newType != types.VFloatID {
 		return true, nil
 	}
 
@@ -1862,7 +1866,7 @@ func rebuildListType(ctx context.Context, rb *IndexRebuild) error {
 	if needsRebuild, err := rb.needsListTypeRebuild(); !needsRebuild || err != nil {
 		return err
 	}
-	if pstore != nil && rb.Store == nil {
+	if rb.Store == nil {
 		if _, err := requireBadgerOperationalStore("rebuild list data"); err != nil {
 			return err
 		}

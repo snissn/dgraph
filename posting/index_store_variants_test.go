@@ -87,7 +87,7 @@ func TestStoreCountReverseRebuildAggregatesAndPreservesHistory(t *testing.T) {
 		return uids.Uids
 	}
 	for _, ts := range []uint64{20, 30} {
-		rb := &IndexRebuild{Attr: attr, StartTs: ts, OldSchema: old, CurrentSchema: next}
+		rb := &IndexRebuild{Attr: attr, StartTs: ts, OldSchema: old, CurrentSchema: next, Store: store}
 		require.NoError(t, rb.DropIndexes(context.Background()))
 		require.NoError(t, rb.BuildIndexes(schema.GetWriteContext(context.Background())))
 		require.Len(t, read(x.ReverseKey(attr, 9001), ts), 600)
@@ -96,7 +96,7 @@ func TestStoreCountReverseRebuildAggregatesAndPreservesHistory(t *testing.T) {
 		require.Equal(t, []uint64{1}, read(x.CountKey(attr, 2, false), ts))
 		require.Equal(t, []uint64{9001}, read(x.CountKey(attr, 600, true), ts))
 		require.Equal(t, []uint64{700}, read(x.CountKey(attr, 1, true), ts))
-		remove := &IndexRebuild{Attr: attr, StartTs: ts + 5, OldSchema: next, CurrentSchema: old}
+		remove := &IndexRebuild{Attr: attr, StartTs: ts + 5, OldSchema: next, CurrentSchema: old, Store: store}
 		require.NoError(t, remove.DropIndexes(context.Background()))
 		require.NoError(t, remove.BuildIndexes(context.Background()))
 		require.Empty(t, read(x.ReverseKey(attr, 9001), ts+5))
@@ -125,7 +125,7 @@ func TestStoreScalarListConversionPreservesTaggedValuesAndOldReads(t *testing.T)
 	codec.FreePack(pack)
 	require.NoError(t, err)
 	commitStoreEntry(t, store, 10, Entry{Key: key, Value: data, UserMeta: BitCompletePosting})
-	rb := &IndexRebuild{Attr: attr, StartTs: 20, OldSchema: old, CurrentSchema: next}
+	rb := &IndexRebuild{Attr: attr, StartTs: 20, OldSchema: old, CurrentSchema: next, Store: store}
 	require.NoError(t, rb.BuildData(schema.GetWriteContext(context.Background())))
 	read := func(ts uint64) map[uint64]string {
 		list := readStoreVariantList(t, store, key, ts)
