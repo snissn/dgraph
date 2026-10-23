@@ -1039,13 +1039,9 @@ func (g *groupi) processOracleDeltaStream() {
 						return
 					}
 					batch++
-					if delta.GroupChecksums == nil {
-						delta.GroupChecksums = make(map[uint32]uint64)
-					}
-					delta.Txns = append(delta.Txns, more.Txns...)
-					delta.MaxAssigned = x.Max(delta.MaxAssigned, more.MaxAssigned)
-					for gid, checksum := range more.GroupChecksums {
-						delta.GroupChecksums[gid] = checksum
+					if err := mergeOracleDelta(delta, more); err != nil {
+						glog.Errorf("Invalid sequenced Oracle stream: %v", err)
+						return
 					}
 				default:
 					break SLURP

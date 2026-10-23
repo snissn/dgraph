@@ -24,21 +24,22 @@ const (
 var raftPendingPrefix = []byte{0, 'D', 'G', 'R', 'A', 'F', 'T', 'P', 'E', 'N', 'D', 1}
 
 type RaftPendingManifest struct {
-	Version uint32
-	Count   uint64
-	Charge  uint64
-	Binding string
+	Version       uint32
+	Count         uint64
+	Charge        uint64
+	Binding       string
+	TerminalCount uint64
 }
 
 func EmptyRaftPendingManifest() RaftPendingManifest {
-	return RaftPendingManifest{Version: 1, Binding: "same-treedb-root:" + RaftPendingStateFormat}
+	return RaftPendingManifest{Version: 2, Binding: "same-treedb-root:" + RaftPendingStateFormat + "+terminal-v1"}
 }
 
 // ValidateRaftPendingManifest validates the fixed-size application reference.
 // Content integrity comes from the enclosing exact TreeDB root; this is not a
 // second digest protocol and checkpointing never scans the pending records.
 func ValidateRaftPendingManifest(state RaftPendingManifest) error {
-	if state.Version != 1 || state.Binding != EmptyRaftPendingManifest().Binding ||
+	if state.Version != 2 || state.Binding != EmptyRaftPendingManifest().Binding ||
 		state.Count > RaftPendingMaxCount || state.Charge > RaftPendingMaxCharge ||
 		(state.Count == 0 && state.Charge != 0) || state.Charge < state.Count*RaftPendingRowCharge {
 		return fmt.Errorf("invalid persisted pending manifest")
@@ -101,6 +102,11 @@ func (s *TreeDBStore) planRaftPendingReplacement(ts uint64, data []byte) (RaftPe
 	charge, err := RaftPendingTxnCharge(data)
 	if err != nil {
 		return RaftPendingManifest{}, err
+	}
+	if _, resolved, err := s.raftTxnDisposition(ts); err != nil {
+		return RaftPendingManifest{}, err
+	} else if resolved {
+		return RaftPendingManifest{}, ErrRaftTxnResolved
 	}
 	key := raftPendingKey(ts)
 	old, err := s.db.Get(key)
@@ -219,7 +225,7 @@ func (s *TreeDBStore) RestoreRaftPendingOverlay(expected RaftPendingManifest) (e
 	if err := s.loadRaftPendingManifest(); err != nil {
 		return err
 	}
-	if expected.Version == 0 && expected.Count == 0 && expected.Charge == 0 && expected.Binding == "" {
+	if expected.Version == 0 && expected.Count == 0 && expected.Charge == 0 && expected.Binding == "" && expected.TerminalCount == 0 {
 		expected = EmptyRaftPendingManifest()
 	}
 	if expected != s.raftPending {
@@ -234,6 +240,7 @@ func (s *TreeDBStore) RestoreRaftPendingOverlay(expected RaftPendingManifest) (e
 	defer func() { err = errors.Join(err, it.Close()) }()
 	records := make([][]byte, 0, expected.Count)
 	actual := EmptyRaftPendingManifest()
+	actual.TerminalCount = expected.TerminalCount
 	for it.Seek(prefix); it.Valid(); it.Next() {
 		key, data := it.KeyCopy(nil), it.ValueCopy(nil)
 		if len(key) != len(prefix)+8 {
@@ -246,6 +253,12 @@ func (s *TreeDBStore) RestoreRaftPendingOverlay(expected RaftPendingManifest) (e
 		if ts != binary.BigEndian.Uint64(key[len(prefix):]) {
 			return fmt.Errorf("pending record key/start mismatch")
 		}
+		if _, resolved, err := s.raftTxnDisposition(ts); err != nil {
+			return err
+		} else if resolved {
+			return fmt.Errorf("transaction is both pending and terminal")
+		}
+
 		charge, err := RaftPendingTxnCharge(data)
 		if err != nil {
 			return err
@@ -262,6 +275,9 @@ func (s *TreeDBStore) RestoreRaftPendingOverlay(expected RaftPendingManifest) (e
 	}
 	if actual != expected {
 		return fmt.Errorf("pending records do not match certified manifest")
+	}
+	if err := s.validateRaftTerminalRows(expected.TerminalCount); err != nil {
+		return err
 	}
 	return RestoreRaftPendingTxns(records)
 }

@@ -82,8 +82,10 @@ Checkpoint metadata above 1 MiB cannot be certified: an ordinary checkpoint reta
 cut, and a forced checkpoint returns an error. Mutation proposal admission refuses at 4096
 uncertified entries or 64 MiB retained recovery input, including reservations; transaction decisions
 bypass this limit, and watermark-only Deltas are suppressed at the limit. These thresholds do not
-bound all control traffic, log bytes, heap or disk. Timestamp-less control signatures are not
-retired by S.
+bound all control traffic, log bytes, heap or disk. Mutation/admin identities and terminal
+transaction history grow at S=0 and retire through explicit S. Intrinsic State/Delta/native
+Snapshot/floor controls do not retain arbitrary key signatures; timestamped namespace-deletion admin
+requests share the mutation debt reservation. See [RAFT_TERMINAL_STATE.md](RAFT_TERMINAL_STATE.md).
 
 Continued semantic history retirement requires the explicitly authenticated operator request
 `retirePostingHistory(floor: UInt64!)`. It is never chosen from a local clock, local physical floor

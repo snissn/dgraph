@@ -130,6 +130,9 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 	applyCheckpointEntry(t, n, entries[1])
 	if cut == "before_retention" {
 		c := raftCheckpointMetadata{Version: raftCheckpointVersion, PendingOverlay: posting.EmptyRaftPendingManifest(), Group: 1, RaftID: 1, Index: 2, Term: 1, OracleMaxAssigned: posting.Oracle().MaxAssigned(), ConfState: *n.ConfState()}
+		overlay, err := current.TreeDBStore.RaftPendingManifest()
+		require.NoError(t, err)
+		c.PendingOverlay = overlay
 		c.AppliedProposals = make(map[uint64]raftProposalSignature)
 		for key, p := range n.appliedProposals {
 			c.AppliedProposals[key] = raftProposalSignature{Size: p.size, StartTs: p.startTs, Digest: p.digest, SeenUnixNano: p.seen.UnixNano()}

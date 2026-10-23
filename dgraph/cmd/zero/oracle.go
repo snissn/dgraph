@@ -461,7 +461,7 @@ func (s *Server) Oracle(_ *api.Payload, server pb.Zero_OracleServer) error {
 			}
 			// Pass in the latest group checksum as well, so the Alpha can use that to determine
 			// when not to service a read.
-			delta.GroupChecksums = s.groupChecksums()
+			s.attachGroupChecksums(&delta)
 			if err := server.Send(&delta); err != nil {
 				return err
 			}
@@ -517,4 +517,10 @@ func (s *Server) Timestamps(ctx context.Context, num *pb.Num) (*pb.AssignedIds, 
 		glog.Errorf("Got error: %v while leasing timestamps: %+v", err, num)
 	}
 	return reply, err
+}
+
+// attachGroupChecksums samples checksum data and its persisted Zero Raft source
+// sequence under the same membership lock. Assignment watermarks are unrelated.
+func (s *Server) attachGroupChecksums(delta *pb.OracleDelta) {
+	delta.ChecksumSequence, delta.GroupChecksums = s.groupChecksumsWithSequence()
 }

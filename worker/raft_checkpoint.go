@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	raftCheckpointVersion  = "dgraph-normal-delta-v5"
+	raftCheckpointVersion  = "dgraph-normal-delta-v6"
 	raftCheckpointEvery    = 1024
 	raftCheckpointBytes    = 16 << 20
 	raftRecoveryMaxEntries = 4096
@@ -46,6 +46,8 @@ type raftCheckpointMetadata struct {
 	Term                 uint64
 	OracleMaxAssigned    uint64
 	GroupChecksum        uint64
+	ChecksumSequence     uint64
+	ChecksumDigest       string
 	PendingTransactions  uint64
 	ConfState            raftpb.ConfState
 	AppliedProposals     map[uint64]raftProposalSignature
@@ -140,16 +142,30 @@ func (n *node) applyTrackedProposal(p *pb.Proposal, key uint64, size int) error 
 	var digest string
 	if raftCheckpointEnabled() {
 		if p.Delta != nil {
-			for _, decision := range p.Delta.Txns {
-				if decision.CommitTs != 0 && decision.CommitTs <= decision.StartTs {
-					return &raftSemanticRejection{reason: "Oracle commit timestamp must exceed transaction start"}
-				}
+			delta, err := n.prepareRaftDelta(p.Delta)
+			if err != nil {
+				return err
 			}
+			p = proto.Clone(p).(*pb.Proposal)
+			p.Delta = delta
+		}
+		// These controls have intrinsic ordered-state disposition, not an
+		// eternal arbitrary proposal-key identity. They never enter the map.
+		if !raftProposalNeedsIdentity(p) {
+			err := n.applyCommitted(p, key)
+			if err == nil && p.Delta != nil && p.Delta.MaxAssigned > n.raftOrderedAssigned {
+				n.raftOrderedAssigned = p.Delta.MaxAssigned
+			}
+			return err
 		}
 		// Expiry precedes key lookup: even a byte-identical expired retry must not
 		// resurrect a resolved transaction after its disposition was retired.
-		if p.Mutations != nil && p.Mutations.StartTs <= n.raftPostingFloor {
-			return &raftSemanticRejection{reason: fmt.Sprintf("mutation StartTs %d expired at replicated posting floor %d", p.Mutations.StartTs, n.raftPostingFloor)}
+		expiryTs := p.StartTs
+		if p.Mutations != nil {
+			expiryTs = p.Mutations.StartTs
+		}
+		if (p.Mutations != nil || p.DeleteNs != nil) && expiryTs <= n.raftPostingFloor {
+			return &raftSemanticRejection{reason: fmt.Sprintf("mutation StartTs %d expired at replicated posting floor %d", expiryTs, n.raftPostingFloor)}
 		}
 		var err error
 		start, digest, err = raftProposalIdentity(p)
@@ -166,7 +182,27 @@ func (n *node) applyTrackedProposal(p *pb.Proposal, key uint64, size int) error 
 			return old.err
 		}
 	}
-	err := n.applyCommitted(p, key)
+	var rejection error
+	if raftCheckpointEnabled() && p.Mutations != nil && len(p.Mutations.Edges) > 0 {
+		_, resolved, err := State.TreeDBStore.RaftTxnDisposition(p.Mutations.StartTs)
+		if err != nil {
+			return err
+		}
+		if resolved {
+			rejection = &raftSemanticRejection{reason: "transaction has a terminal disposition"}
+		}
+		manifest, err := State.TreeDBStore.RaftPendingManifest()
+		if err != nil {
+			return err
+		}
+		if rejection == nil && (manifest.TerminalCount >= posting.RaftTerminalAdmissionLimit || manifest.Count >= posting.RaftTerminalAdmissionLimit-manifest.TerminalCount) && posting.Oracle().GetTxn(p.Mutations.StartTs) == nil {
+			rejection = &raftSemanticRejection{reason: "terminal history admission limit: retire an explicit posting floor"}
+		}
+	}
+	err := rejection
+	if err == nil {
+		err = n.applyCommitted(p, key)
+	}
 	if raftCheckpointEnabled() && err == nil && p.Delta != nil && p.Delta.MaxAssigned > n.raftOrderedAssigned {
 		n.raftOrderedAssigned = p.Delta.MaxAssigned
 	}
@@ -187,6 +223,14 @@ func raftCheckpointEnabled() bool {
 // persisted CheckpointIndex as evidence. Missing history and identity mismatches
 // are startup errors, before read health can be published.
 func validateRaftApplicationMetadata(c raftCheckpointMetadata) error {
+	if c.ChecksumSequence == 0 {
+		if c.GroupChecksum != 0 || c.ChecksumDigest != "" {
+			return fmt.Errorf("invalid certified checksum authority")
+		}
+	} else if digest, err := hex.DecodeString(c.ChecksumDigest); err != nil || len(digest) != sha256.Size {
+		return fmt.Errorf("invalid certified checksum digest")
+	}
+
 	if c.Version != raftCheckpointVersion || c.PendingTransactions != c.PendingOverlay.Count {
 		return fmt.Errorf("unsupported checkpoint application state")
 	}
@@ -314,6 +358,8 @@ func (n *node) recoverRaftCheckpointState() error {
 	n.raftPostingFloor = c.SemanticFloor
 	n.raftFloorIndex = c.FloorTransitionIndex
 	n.raftOrderedAssigned = c.OracleMaxAssigned
+	n.raftOrderedChecksum, n.raftChecksumSequence = c.GroupChecksum, c.ChecksumSequence
+	n.raftChecksumDigest = c.ChecksumDigest
 	if err := n.Store.AuthorizeCheckpoint(c.Index); err != nil {
 		return err
 	}
@@ -397,7 +443,7 @@ func (n *node) checkpointRaftCut(index uint64, force bool) error {
 	if err != nil {
 		return err
 	}
-	c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: n.gid, RaftID: n.Id, Index: index, Term: term, OracleMaxAssigned: n.raftOrderedAssigned, GroupChecksum: atomic.LoadUint64(&groups().deltaChecksum), ConfState: *n.ConfState()}
+	c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: n.gid, RaftID: n.Id, Index: index, Term: term, OracleMaxAssigned: n.raftOrderedAssigned, GroupChecksum: n.raftOrderedChecksum, ChecksumSequence: n.raftChecksumSequence, ChecksumDigest: n.raftChecksumDigest, ConfState: *n.ConfState()}
 	c.PendingOverlay, err = State.TreeDBStore.RaftPendingManifest()
 	if err != nil {
 		return err

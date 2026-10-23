@@ -23,11 +23,12 @@ replace the pending record plus manifest, then install the staged Oracle transac
 prepublication capacity refusal. Malformed state, failed storage and uncertain publication remain
 apply failures; they cannot be converted to successful terminal no-ops.
 
-A Delta drains normal posting commit callbacks before removing the corresponding pending record.
-Commit/abort decisions bypass pending admission limits. Recovery validates the complete bounded
-namespace and its manifest before atomically installing Oracle pending state, suffix replay or read
-health. A missing, duplicate, malformed or mismatched record fails closed. Raw input edges are never
-reinterpreted under a later schema to recreate a certified pending transaction.
+A Delta validates the whole decision batch, drains normal posting commit callbacks, then replaces
+pending records with exact-root terminal dispositions in bounded owner batches. Commit/abort
+decisions bypass pending admission limits. Recovery validates the complete bounded namespace and its
+manifest before atomically installing Oracle pending state, suffix replay or read health. A missing,
+duplicate, malformed or mismatched record fails closed. Raw input edges are never reinterpreted
+under a later schema to recreate a certified pending transaction.
 
 ## Record format `dgraph-pending-v1`
 
@@ -73,20 +74,15 @@ then pauses at 4096 uncertified entries or 64 MiB recovery input (including in-f
 These are backpressure thresholds, not an equilibrium bound on all log, disk or heap use.
 
 Transaction decisions bypass mutation debt so a full budget cannot prevent resolution; advisory
-watermark-only Deltas are suppressed at the debt limit. Decisions and other permitted control
-traffic can still add retained input and signatures. In particular, timestamp-less control
-signatures have no positive StartTs eligible for the current floor retirement rule. A strict bound
-on that entire lifetime remains an open operational gate, even though pending admission is bounded.
-
-Continued ordinary write and history-reclamation progress requires explicit replicated retirement,
-through authenticated admin `retirePostingHistory(floor: UInt64!)` with a configured admin token, or
-the equivalent existing ordered `RequestPostingHistoryFloor` API. The candidate floor must be below
-the preceding ordered Oracle frontier and every pending start, and must not regress. This is an
-operator-selected semantic expiration: reads and mutations at or below it become stale; it is never
-selected from a wall clock. Only that ordered transition retires eligible signatures. Local active
-reads can delay physical `P` while replicated `S` advances. A full pending/debt threshold, or a
-successful checkpoint after retirement, does not establish continuous-workload resource equilibrium;
-actual retained-log, heap and admission-liveness qualification remains separate.
+watermark-only Deltas are suppressed at the debt limit. State, Delta, native Snapshot and
+posting-floor controls now use intrinsic ordered disposition instead of generic persistent key
+signatures. Terminal StartTs dispositions remain in raw DATA until explicit S retirement. New
+prewrites pause when pending plus terminal count reaches 65536, reserving disposition space for
+existing pending transactions; decisions, including previously unseen global decisions, remain
+admissible beyond that soft limit. This is deliberately not a hard bound on all semantic history.
+Mutation/admin identities and terminal rows at S=0 still require explicit operator retirement for
+sustained progress. See [RAFT_TERMINAL_STATE.md](RAFT_TERMINAL_STATE.md) for exact retry, checksum
+and failure contracts.
 
 ## Schema and local maintenance
 

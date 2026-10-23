@@ -269,13 +269,18 @@ func (s *Server) membershipState() *pb.MembershipState {
 }
 
 func (s *Server) groupChecksums() map[uint32]uint64 {
+	_, checksums := s.groupChecksumsWithSequence()
+	return checksums
+}
+
+func (s *Server) groupChecksumsWithSequence() (uint64, map[uint32]uint64) {
 	s.RLock()
 	defer s.RUnlock()
 	m := make(map[uint32]uint64)
 	for gid, g := range s.state.GetGroups() {
 		m[gid] = g.Checksum
 	}
-	return m
+	return s.state.Counter, m
 }
 
 func (s *Server) storeZero(m *pb.Member) {

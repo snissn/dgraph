@@ -60,24 +60,27 @@ type node struct {
 	gid     uint32
 	closer  *z.Closer
 
-	raftDebtMu          sync.Mutex
-	raftSemanticMu      sync.Mutex // external apply, expiry and root-install barrier
-	raftReservedBytes   uint64
-	raftReservedEntries uint64
-	raftAppliedBytes    uint64
-	raftCertifiedIndex  uint64
-	raftRecoveryBytes   uint64
-	raftSemanticIndex   uint64
-	raftStartupComplete uint32
-	raftConfStateDirty  bool
-	raftFloorDirty      bool
-	raftPostingFloor    uint64
-	raftOrderedAssigned uint64
-	raftFloorIndex      uint64
-	raftReplayUntil     uint64
-	appliedProposals    map[uint64]*appliedProposal
-	checkpointTs        uint64 // Timestamp corresponding to checkpoint.
-	streaming           int32  // Used to avoid calculating snapshot
+	raftDebtMu           sync.Mutex
+	raftSemanticMu       sync.Mutex // external apply, expiry and root-install barrier
+	raftReservedBytes    uint64
+	raftReservedEntries  uint64
+	raftAppliedBytes     uint64
+	raftCertifiedIndex   uint64
+	raftRecoveryBytes    uint64
+	raftSemanticIndex    uint64
+	raftStartupComplete  uint32
+	raftConfStateDirty   bool
+	raftFloorDirty       bool
+	raftPostingFloor     uint64
+	raftOrderedAssigned  uint64
+	raftOrderedChecksum  uint64
+	raftChecksumSequence uint64
+	raftChecksumDigest   string
+	raftFloorIndex       uint64
+	raftReplayUntil      uint64
+	appliedProposals     map[uint64]*appliedProposal
+	checkpointTs         uint64 // Timestamp corresponding to checkpoint.
+	streaming            int32  // Used to avoid calculating snapshot
 
 	// Used to track the ops going on in the system.
 	ops         map[op]operation
@@ -1025,10 +1028,12 @@ func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
 		return errors.Wrapf(err, "while flushing to disk")
 	}
 	if raftCheckpointEnabled() {
+		decisions := make([]posting.RaftTxnDisposition, 0, len(delta.Txns))
 		for _, status := range delta.Txns {
-			if err := State.TreeDBStore.RemoveRaftPendingTxn(status.StartTs); err != nil {
-				return err
-			}
+			decisions = append(decisions, posting.RaftTxnDisposition{StartTs: status.StartTs, CommitTs: status.CommitTs})
+		}
+		if err := State.TreeDBStore.ResolveRaftPendingTxns(decisions); err != nil {
+			return err
 		}
 	}
 
@@ -1039,7 +1044,13 @@ func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
 	}
 
 	g := groups()
-	if delta.GroupChecksums != nil && delta.GroupChecksums[g.groupId()] > 0 {
+	if raftCheckpointEnabled() {
+		if delta.ChecksumSequence > n.raftChecksumSequence {
+			n.raftOrderedChecksum, n.raftChecksumSequence = delta.GroupChecksums[n.gid], delta.ChecksumSequence
+			n.raftChecksumDigest = raftChecksumDigest(delta)
+		}
+		atomic.StoreUint64(&g.deltaChecksum, n.raftOrderedChecksum)
+	} else if delta.GroupChecksums != nil && delta.GroupChecksums[g.groupId()] > 0 {
 		atomic.StoreUint64(&g.deltaChecksum, delta.GroupChecksums[g.groupId()])
 	}
 

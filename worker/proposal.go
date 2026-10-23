@@ -127,7 +127,7 @@ func (n *node) proposeAndWait(ctx context.Context, proposal *pb.Proposal) (perr 
 		if err := checkRaftPrototypeProposal(proposal); err != nil {
 			return err
 		}
-		if proposal.Mutations != nil {
+		if proposal.Mutations != nil || proposal.DeleteNs != nil {
 			release, err := n.reserveRaftRecoveryDebt(uint64(proto.Size(proposal) + 8))
 			if err != nil {
 				return err

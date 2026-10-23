@@ -550,6 +550,8 @@ message OracleDelta {
   repeated TxnStatus txns = 1;
   uint64 max_assigned = 2;
   map<uint32, uint64> group_checksums = 3;
+  // MembershipState.counter sampled atomically with group_checksums by Zero.
+  uint64 checksum_sequence = 4;
   // implement tmax.
 }
 

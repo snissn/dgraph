@@ -26,7 +26,7 @@ apply failure stops progress before certification.
 
 Before a certificate, rejection must be reproduced from the retained proposal and the schema state
 reconstructed by preceding ordered input. A cached error alone is insufficient authority. After a
-certificate, contract `dgraph-normal-delta-v5` binds successful and rejected proposal identity,
+certificate, contract `dgraph-normal-delta-v6` binds successful and rejected proposal identity,
 StartTs, canonical content SHA256, rejection disposition, and observation time into the application
 metadata. A reused retry key with different content is a deterministic rejection. The canonical hash
 excludes the Raft index, so a real retry at a different log position retains its identity. Local
@@ -303,3 +303,9 @@ claim.
 Ordered standard drop, namespace-ban and unavailable-Zero close semantics are documented in
 [RAFT_ADMIN_LIFECYCLE.md](RAFT_ADMIN_LIFECYCLE.md). Sustained lifetime bounds and production-tier
 qualification remain open even after focused semantic and actual-server controls pass.
+
+The v6 consumer binds fixed pending/terminal accounting and sequenced Zero checksum authority to the
+exact root. Intrinsic State/Delta/native Snapshot/floor controls do not consume persistent generic
+retry signatures. This closes arbitrary timestamp-less control-key retention, not S=0 history
+growth; see [RAFT_TERMINAL_STATE.md](RAFT_TERMINAL_STATE.md) for the soft admission limit and
+retirement contract.

@@ -37,6 +37,9 @@ func (n *node) applyPostingFloor(p *pb.Proposal) error {
 	if request.Floor == n.raftPostingFloor {
 		return nil
 	}
+	if err := State.TreeDBStore.RetireRaftTxnDispositions(request.Floor); err != nil {
+		return err
+	}
 	if err := State.TreeDBStore.AdvanceRaftSemanticFloor(request.Floor); err != nil {
 		return err
 	}
