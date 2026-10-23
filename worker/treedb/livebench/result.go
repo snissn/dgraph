@@ -20,12 +20,15 @@ import (
 
 const (
 	legacySchemaVersion = 3
-	SchemaVersion       = 4
+	SchemaVersion       = 5
 
 	pointAppendCoverageMetric = "treedb_command_wal_append_point_calls"
 )
 
 type Config struct {
+	SurvivalMode    string         `json:"survival_mode,omitempty"`
+	TreeDBPolicy    string         `json:"treedb_durable_policy,omitempty"`
+	TreeDBMemtable  string         `json:"required_treedb_memtable,omitempty"`
 	Backend         string         `json:"backend"`
 	DurabilityClass string         `json:"durability_class"`
 	PostingStore    string         `json:"posting_store"`
@@ -57,6 +60,8 @@ type StorageContext struct {
 }
 
 type Context struct {
+	BinarySHA256    string            `json:"binary_sha256,omitempty"`
+	BinaryBuildInfo string            `json:"binary_build_info,omitempty"`
 	DgraphSHA       string            `json:"dgraph_sha"`
 	GomapVersion    string            `json:"gomap_version"`
 	Dirty           bool              `json:"dirty"`
@@ -76,13 +81,14 @@ type Context struct {
 }
 
 type Validation struct {
-	BackendObserved    string `json:"backend_observed"`
-	DurabilityObserved string `json:"durability_observed"`
-	SchemaOK           bool   `json:"schema_ok"`
-	PostingChecksum    string `json:"posting_checksum"`
-	NodeCount          int    `json:"node_count"`
-	RestartOK          bool   `json:"restart_ok"`
-	UnsupportedOK      bool   `json:"unsupported_ok"`
+	Runtime            []RuntimeIdentity `json:"runtime,omitempty"`
+	BackendObserved    string            `json:"backend_observed"`
+	DurabilityObserved string            `json:"durability_observed"`
+	SchemaOK           bool              `json:"schema_ok"`
+	PostingChecksum    string            `json:"posting_checksum"`
+	NodeCount          int               `json:"node_count"`
+	RestartOK          bool              `json:"restart_ok"`
+	UnsupportedOK      bool              `json:"unsupported_ok"`
 }
 
 type Result struct {
@@ -99,6 +105,8 @@ type Result struct {
 	LatencyMS     map[string]float64 `json:"latency_ms"`
 	Metrics       map[string]Metric  `json:"metrics"`
 	Validation    Validation         `json:"validation"`
+
+	runtimeArtifactDir string // Set only by disk verification; never supplied by JSON.
 }
 
 var requiredTreeDBMetrics = []string{
@@ -119,6 +127,7 @@ var requiredMetrics = append([]string{
 func (c Config) Fingerprint() string {
 	copy := c
 	copy.Backend, copy.DurabilityClass, copy.PostingStore, copy.Badger = "", "", "", ""
+	copy.TreeDBPolicy, copy.TreeDBMemtable = "", ""
 	b, _ := json.Marshal(copy)
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
@@ -126,8 +135,11 @@ func (c Config) Fingerprint() string {
 
 func (r Result) Validate() error {
 	var errs []error
-	if r.SchemaVersion != SchemaVersion && r.SchemaVersion != legacySchemaVersion {
-		errs = append(errs, fmt.Errorf("schema_version=%d, want %d or legacy %d", r.SchemaVersion, SchemaVersion, legacySchemaVersion))
+	if r.SchemaVersion != SchemaVersion && r.SchemaVersion != 4 && r.SchemaVersion != legacySchemaVersion {
+		errs = append(errs, fmt.Errorf("unsupported schema_version=%d", r.SchemaVersion))
+	}
+	if r.SchemaVersion == SchemaVersion {
+		errs = append(errs, validateRuntime(r))
 	}
 	if r.RunID == "" || r.Repeat < 1 {
 		errs = append(errs, errors.New("run_id and positive repeat are required"))
@@ -232,7 +244,11 @@ func (r Result) Validate() error {
 	return errors.Join(errs...)
 }
 
-func expectedObserved(c Config) (string, string, error) {
+func expectedObserved(c Config) (string, string, error) { return ExpectedObserved(c) }
+
+// ExpectedObserved resolves the exact posting route required by a run. The
+// driver uses the same contract before timing and the reader verifies it again.
+func ExpectedObserved(c Config) (string, string, error) {
 	if c.DurabilityClass != "relaxed" && c.DurabilityClass != "durable" {
 		return "", "", fmt.Errorf("unknown durability class %q", c.DurabilityClass)
 	}
@@ -250,7 +266,11 @@ func expectedObserved(c Config) (string, string, error) {
 		}
 		return "badger", "syncwrites=" + badgerSync, nil
 	case "treedb":
-		if err := requireExactSelector(c.PostingStore, map[string]string{"backend": "treedb", "tier": "benchmark_minimal", "durability": c.DurabilityClass, "events": "true"}); err != nil {
+		selected := c.DurabilityClass
+		if c.TreeDBPolicy != "" && c.TreeDBPolicy != "store_wal" {
+			return "", "", fmt.Errorf("unsupported TreeDB policy %q", c.TreeDBPolicy)
+		}
+		if err := requireExactSelector(c.PostingStore, map[string]string{"backend": "treedb", "tier": "benchmark_minimal", "durability": selected, "events": "true"}); err != nil {
 			return "", "", fmt.Errorf("posting-store selector: %w", err)
 		}
 		if c.DurabilityClass == "relaxed" {
@@ -326,9 +346,13 @@ func ValidateSet(results []Result, repeats int) error {
 	nodeCount := 0
 	seenRunIDs := make(map[string]struct{}, len(results))
 	seenRepeats := make(map[string]map[int]string, 4)
+	selections := make(map[string][2]string, 4)
 	var contextIdentity *Context
 	for _, r := range results {
 		if err := r.Validate(); err != nil {
+			return fmt.Errorf("%s: %w", r.RunID, err)
+		}
+		if err := r.VerifyRuntimeArtifacts(r.runtimeArtifactDir); err != nil {
 			return fmt.Errorf("%s: %w", r.RunID, err)
 		}
 		if r.Context.Dirty {
@@ -348,6 +372,11 @@ func ValidateSet(results []Result, repeats int) error {
 			return fmt.Errorf("reproduction context mismatch for %s: %w", r.RunID, err)
 		}
 		key := r.Config.Backend + "/" + r.Config.DurabilityClass
+		selection := [2]string{r.Config.TreeDBPolicy, r.Config.TreeDBMemtable}
+		if previous, ok := selections[key]; ok && previous != selection {
+			return fmt.Errorf("posting policy/memtable changed between repeats for %s", key)
+		}
+		selections[key] = selection
 		if r.Repeat < 1 || r.Repeat > repeats {
 			return fmt.Errorf("repeat ordinal %d for %s is outside 1..%d", r.Repeat, key, repeats)
 		}
@@ -395,6 +424,8 @@ func sameReproductionContext(want, got Context) error {
 	}{
 		{"DgraphSHA", want.DgraphSHA, got.DgraphSHA},
 		{"GomapVersion", want.GomapVersion, got.GomapVersion},
+		{"BinarySHA256", want.BinarySHA256, got.BinarySHA256},
+		{"BinaryBuildInfo", want.BinaryBuildInfo, got.BinaryBuildInfo},
 		{"GoVersion", want.GoVersion, got.GoVersion},
 		{"Host", want.Host, got.Host},
 		{"Kernel", want.Kernel, got.Kernel},

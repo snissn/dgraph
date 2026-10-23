@@ -2,22 +2,25 @@
 package livebench
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
 
-func validSet(repeats int) []Result {
+func validSet(t *testing.T, repeats int) []Result {
 	set := make([]Result, 0, repeats*4)
 	for _, class := range []string{"relaxed", "durable"} {
 		for _, backend := range []string{"badger", "treedb"} {
 			for repeat := 1; repeat <= repeats; repeat++ {
-				r := validResult(backend, class)
+				r := validResult(t, backend, class)
 				r.Repeat = repeat
 				r.RunID = fmt.Sprintf("%s-%s-r%d", backend, class, repeat)
 				set = append(set, r)
@@ -27,7 +30,7 @@ func validSet(repeats int) []Result {
 	return set
 }
 
-func validResult(backend, class string) Result {
+func validResult(t *testing.T, backend, class string) Result {
 	now := time.Now()
 	posting := "backend=badger; tier=production; durability=durable; events=false"
 	badger := "syncwrites=false"
@@ -56,15 +59,22 @@ func validResult(backend, class string) Result {
 			metrics[name] = Metric{Unit: "count", Source: "TreeDB test diagnostic", Reason: "TreeDB-only diagnostic"}
 		}
 	}
-	return Result{SchemaVersion: SchemaVersion, RunID: backend + "-" + class, Repeat: 1,
-		Config:       Config{Backend: backend, DurabilityClass: class, PostingStore: posting, Badger: badger, DatasetNodes: 10, Concurrency: 1, WarmupOps: 1, TimedOps: 10, QueryMix: map[string]int{"read": 80, "write": 20}, Topology: "single-zero-single-alpha", Seed: 42},
-		Context:      Context{DgraphSHA: "abc", GomapVersion: "v1", GoVersion: "go1", Host: "host", Kernel: "kernel", CPU: "cpu", TotalRAMBytes: 1024, Storage: StorageContext{Scope: "artifact_and_posting", Source: "/dev/test", Model: "test", SizeBytes: 2048, Filesystem: "ext4", Mountpoint: "/mnt"}, Environment: map[string]string{"GOWORK": "off", "TMPDIR": "/tmp", "GOMAXPROCS": "", "GOFLAGS": ""}, ExactCommand: []string{"bench"}, RawPath: "/raw"},
+	r := Result{SchemaVersion: SchemaVersion, RunID: backend + "-" + class, Repeat: 1,
+		Config:       Config{SurvivalMode: "process", Backend: backend, DurabilityClass: class, PostingStore: posting, Badger: badger, DatasetNodes: 10, Concurrency: 1, WarmupOps: 1, TimedOps: 10, QueryMix: map[string]int{"read": 80, "write": 20}, Topology: "single-zero-single-alpha", Seed: 42},
+		Context:      Context{BinarySHA256: strings.Repeat("a", 64), BinaryBuildInfo: "test build identity", DgraphSHA: "abc", GomapVersion: "v1", GoVersion: "go1", Host: "host", Kernel: "kernel", CPU: "cpu", TotalRAMBytes: 1024, Storage: StorageContext{Scope: "artifact_and_posting", Source: "/dev/test", Model: "test", SizeBytes: 2048, Filesystem: "ext4", Mountpoint: "/mnt"}, Environment: map[string]string{"GOWORK": "off", "TMPDIR": "/tmp", "GOMAXPROCS": "", "GOFLAGS": ""}, ExactCommand: []string{"bench"}, RawPath: "/raw"},
 		SetupStarted: now, SetupFinished: now.Add(time.Second), TimedStarted: now.Add(2 * time.Second), TimedFinished: now.Add(3 * time.Second), Throughput: 10, LatencyMS: map[string]float64{"p50": 1, "p95": 2, "p99": 3}, Metrics: metrics,
 		Validation: Validation{BackendObserved: backend, DurabilityObserved: observed, SchemaOK: true, PostingChecksum: "same", NodeCount: 12, RestartOK: true, UnsupportedOK: true}}
+	if backend == "treedb" {
+		r.Config.TreeDBPolicy = "store_wal"
+	}
+	r.Validation.Runtime = runtimeFixture(r.Config)
+	writeRuntimeFixture(t, &r)
+	return r
+
 }
 
 func TestExpectedObservedUsesCanonicalTreeDBProfileIntegrity(t *testing.T) {
-	config := validResult("treedb", "relaxed").Config
+	config := validResult(t, "treedb", "relaxed").Config
 	backend, durability, err := expectedObserved(config)
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +96,7 @@ func TestResultRejectsWrongBackendDurabilityMissingMetricAndSetupLeakage(t *test
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			r := validResult("treedb", "relaxed")
+			r := validResult(t, "treedb", "relaxed")
 			tc.mutate(&r)
 			if err := r.Validate(); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("got %v, want %q", err, tc.want)
@@ -122,7 +132,7 @@ func TestResultRejectsUnavailableOrMalformedCoreMetrics(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			r := validResult("treedb", "relaxed")
+			r := validResult(t, "treedb", "relaxed")
 			tc.mutate(&r)
 			if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "core metric") {
 				t.Fatalf("got %v, want core metric failure", err)
@@ -132,7 +142,7 @@ func TestResultRejectsUnavailableOrMalformedCoreMetrics(t *testing.T) {
 }
 
 func TestResultFailsClosedOnTreeDBDiagnosticAvailability(t *testing.T) {
-	tree := validResult("treedb", "relaxed")
+	tree := validResult(t, "treedb", "relaxed")
 	metric := tree.Metrics["treedb_group_commit_commits"]
 	metric.Available = false
 	metric.Reason = "debug sample failed"
@@ -141,7 +151,7 @@ func TestResultFailsClosedOnTreeDBDiagnosticAvailability(t *testing.T) {
 		t.Fatalf("TreeDB unavailable diagnostic got %v", err)
 	}
 
-	badger := validResult("badger", "relaxed")
+	badger := validResult(t, "badger", "relaxed")
 	badger.Metrics["treedb_group_commit_commits"] = Metric{Available: true, Value: 1, Unit: "count", Source: "fabricated"}
 	if err := badger.Validate(); err == nil || !strings.Contains(err.Error(), "must be unavailable for Badger") {
 		t.Fatalf("Badger fabricated TreeDB diagnostic got %v", err)
@@ -149,7 +159,7 @@ func TestResultFailsClosedOnTreeDBDiagnosticAvailability(t *testing.T) {
 }
 
 func TestResultRequiresPointAppendCoverageDiagnostic(t *testing.T) {
-	tree := validResult("treedb", "relaxed")
+	tree := validResult(t, "treedb", "relaxed")
 	delete(tree.Metrics, pointAppendCoverageMetric)
 	if err := tree.Validate(); err == nil || !strings.Contains(err.Error(), pointAppendCoverageMetric) {
 		t.Fatalf("missing point-append coverage diagnostic got %v", err)
@@ -157,7 +167,7 @@ func TestResultRequiresPointAppendCoverageDiagnostic(t *testing.T) {
 }
 
 func TestResultAllowsLegacySchemaWithoutPointAppendCoverageDiagnostic(t *testing.T) {
-	tree := validResult("treedb", "relaxed")
+	tree := validResult(t, "treedb", "relaxed")
 	tree.SchemaVersion = legacySchemaVersion
 	delete(tree.Metrics, pointAppendCoverageMetric)
 	if err := tree.Validate(); err != nil {
@@ -171,7 +181,7 @@ func TestResultAllowsLegacySchemaWithoutPointAppendCoverageDiagnostic(t *testing
 }
 
 func TestResultRejectsLogicalBytesWhenPointAppendsArePresent(t *testing.T) {
-	tree := validResult("treedb", "relaxed")
+	tree := validResult(t, "treedb", "relaxed")
 	pointAppends := tree.Metrics[pointAppendCoverageMetric]
 	pointAppends.Value = 1
 	tree.Metrics[pointAppendCoverageMetric] = pointAppends
@@ -200,13 +210,13 @@ func TestMetricSerializesMeasuredZero(t *testing.T) {
 
 func TestResultRejectsSubstringAndContradictorySelectors(t *testing.T) {
 	for _, badger := range []string{"notsyncwrites=false", "syncwrites=false; syncwrites=true"} {
-		r := validResult("badger", "relaxed")
+		r := validResult(t, "badger", "relaxed")
 		r.Config.Badger = badger
 		if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "invalid config") {
 			t.Fatalf("badger=%q got %v, want invalid config", badger, err)
 		}
 	}
-	r := validResult("treedb", "durable")
+	r := validResult(t, "treedb", "durable")
 	r.Config.PostingStore += "; durability=relaxed"
 	if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "invalid config") {
 		t.Fatalf("got %v, want invalid config", err)
@@ -223,7 +233,7 @@ func TestResultRejectsIncompleteRAMStorageAndEnvironmentContext(t *testing.T) {
 		{"environment", func(r *Result) { delete(r.Context.Environment, "TMPDIR") }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := validResult("badger", "relaxed")
+			r := validResult(t, "badger", "relaxed")
 			tc.mutate(&r)
 			if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "reproduction") {
 				t.Fatalf("got %v, want reproduction context failure", err)
@@ -233,10 +243,10 @@ func TestResultRejectsIncompleteRAMStorageAndEnvironmentContext(t *testing.T) {
 }
 
 func TestValidateSetRejectsIncompleteAndLogicalMismatch(t *testing.T) {
-	if err := ValidateSet([]Result{validResult("badger", "relaxed")}, 1); err == nil || !strings.Contains(err.Error(), "incomplete") {
+	if err := ValidateSet([]Result{validResult(t, "badger", "relaxed")}, 1); err == nil || !strings.Contains(err.Error(), "incomplete") {
 		t.Fatalf("got %v", err)
 	}
-	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
+	set := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
 	set[1].Validation.PostingChecksum = "different"
 	if err := ValidateSet(set, 1); err == nil || !strings.Contains(err.Error(), "parity mismatch") {
 		t.Fatalf("got %v", err)
@@ -244,7 +254,7 @@ func TestValidateSetRejectsIncompleteAndLogicalMismatch(t *testing.T) {
 }
 
 func TestValidateSetRejectsCrossDurabilityChecksumAndCountMismatch(t *testing.T) {
-	base := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
+	base := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
 
 	checksum := append([]Result(nil), base...)
 	checksum[2].Validation.PostingChecksum = "durable-only"
@@ -280,7 +290,7 @@ func TestValidateSetRejectsDirtyOrMismatchedReproductionContext(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			set := validSet(1)
+			set := validSet(t, 1)
 			tc.mutate(&set[1])
 			if err := ValidateSet(set, 1); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("got %v, want context failure containing %q", err, tc.want)
@@ -290,7 +300,7 @@ func TestValidateSetRejectsDirtyOrMismatchedReproductionContext(t *testing.T) {
 }
 
 func TestValidateSetAllowsPerRunReproductionDetailsToVary(t *testing.T) {
-	set := validSet(1)
+	set := validSet(t, 1)
 	set[1].Context.ExactCommand = []string{"different", "command"}
 	set[1].Context.RawPath = "/different/result.json"
 	set[1].Context.Profiles = []string{"/different/cpu.pprof"}
@@ -316,7 +326,7 @@ func TestValidateSetRejectsInvalidRepeatCoverageAndDuplicateRunID(t *testing.T) 
 			if tc.name == "repeat above range" {
 				repeats = 1
 			}
-			set := validSet(repeats)
+			set := validSet(t, repeats)
 			tc.mutate(set)
 			if err := ValidateSet(set, repeats); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("got %v, want repeat/run ID failure containing %q", err, tc.want)
@@ -336,7 +346,7 @@ func TestWriteImmutableRefusesOverwrite(t *testing.T) {
 }
 
 func TestValidateSetRejectsEndpointDiagnosticEvenWithOnlyCPUProfile(t *testing.T) {
-	set := validSet(1)
+	set := validSet(t, 1)
 	set[0].Context.Profiles = []string{"cpu.pprof"}
 	if err := ValidateSet(set, 1); err != nil {
 		t.Fatalf("ordinary profile changed matrix acceptance: %v", err)
@@ -349,5 +359,48 @@ func TestValidateSetRejectsEndpointDiagnosticEvenWithOnlyCPUProfile(t *testing.T
 	}
 	if err := ValidateSet(set, 1); err == nil || !strings.Contains(err.Error(), "is excluded: endpoint diagnostic") {
 		t.Fatalf("CPU-only endpoint result admitted to matrix: %v", err)
+	}
+}
+
+func runtimeFixture(c Config) []RuntimeIdentity {
+	var result []RuntimeIdentity
+	for _, phase := range []string{"startup", "after_alpha_restart"} {
+		for _, role := range []string{"zero", "alpha"} {
+			hardSync := c.SurvivalMode == "filesystem"
+			r := RuntimeIdentity{Process: role, Phase: phase, PID: 1, Command: []string{"dgraph", role, "--survive=" + c.SurvivalMode}, SurvivalMode: c.SurvivalMode, HardSync: hardSync, ConfigWitness: "x.WorkerConfig: {HardSync:" + strconv.FormatBool(hardSync) + "}", ConfigLogSHA256: strings.Repeat("a", 64)}
+			if role == "alpha" {
+				r.Backend, r.Durability, _ = expectedObserved(c)
+				if c.Backend == "treedb" {
+					r.Memtable = "cow_ordered"
+				}
+				r.StoreWitnessSHA256 = strings.Repeat("b", 64)
+			}
+			result = append(result, r)
+		}
+	}
+	return result
+}
+
+func writeRuntimeFixture(t *testing.T, r *Result) {
+	t.Helper()
+	dir := t.TempDir()
+	for i := range r.Validation.Runtime {
+		identity := &r.Validation.Runtime[i]
+		prefix := filepath.Join(dir, "runtime-"+identity.Phase+"-"+identity.Process)
+		write := func(suffix, body string) string {
+			t.Helper()
+			if err := os.WriteFile(prefix+suffix, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			sum := sha256.Sum256([]byte(body))
+			return hex.EncodeToString(sum[:])
+		}
+		identity.ConfigLogSHA256 = write(".config.log", identity.ConfigWitness+"\n")
+		if identity.Process == "alpha" {
+			identity.StoreWitnessSHA256 = write(".store.txt", fmt.Sprintf("status=map[backend:%s profile:%s]\nstats=map[treedb.cache.memtable_mode:%s]\n", identity.Backend, identity.Durability, identity.Memtable))
+		}
+	}
+	if err := r.VerifyRuntimeArtifacts(dir); err != nil {
+		t.Fatal(err)
 	}
 }

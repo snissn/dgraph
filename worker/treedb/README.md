@@ -227,3 +227,43 @@ Timed rows include Badger managed write/read/all-version baselines and TreeDB `S
 `Stats` primitives. The posting package separately benchmarks direct gomap MVCC against
 `posting.TreeDBStore`. Skipped rows document later-tier contracts TreeDB cannot yet run: TTL, stream
 export/import, subscriptions, and encryption/key registry support.
+
+### Explicit durability benchmark identity
+
+The canonical `run_durability_ab.sh` still runs Badger/TreeDB × relaxed/durable × three repeats with
+the same gRPC workload and 3% durable throughput gate. New schema-v5 rows explicitly pass
+`--survive` to both Zero and Alpha and retain each process's resolved redacted `HardSync`
+configuration. Alpha posting backend, profile and memtable are checked before setup/timing and after
+restart. The measured executable SHA256 and Go build information are recorded and the binary is
+checked again before result publication. Raw configuration/store witnesses are immutable
+`runtime-<phase>-<process>.*` snapshots; their hashes are in the row. Loading and reporting
+schema-v5 rows reopens every snapshot relative to the result file, verifies its hash and checks that
+the resolved configuration and posting route support the recorded claims. Missing, modified or
+contradictory witnesses are refused, including changes after loading.
+
+`SURVIVE=process` preserves the historical default. Use `SURVIVE=filesystem` for a separate matched
+filesystem-survival matrix. Survival participates in the workload fingerprint, so the report refuses
+pooling the two profiles. Existing schema-v3/v4 rows are readable unchanged: their `durable` labels
+describe posting store sync and the script omitted `--survive`, using process survival. They do not
+establish filesystem or complete RPC power-loss durability. Report rendering adds this erratum
+without editing the old artifacts.
+
+`REQUIRE_TREEDB_MEMTABLE=cow_ordered` refuses a TreeDB arm unless its actual startup and restart
+stats confirm COW. This checks the server binary's selection; it does not change its memtable. This
+harness supports the current store-WAL selectors. The Raft-owned recovery selector must land with
+its corresponding server implementation in #34; unsupported policy overrides fail before any
+measurement or artifact creation. Defaults remain process survival and existing posting-store
+selection.
+
+A schema-v5 row is a source/runtime-bound benchmark result, not a durability certificate. The
+existing restart timer ends at Alpha health after a **clean** Alpha restart; Zero remains running.
+Runtime observers execute outside that timer and the workload timer. Immediate-ACK SIGKILL,
+accepted-install recovery, real peer changes and filesystem power-loss qualification remain separate
+required proofs. CPU/endpoint/operation/storage diagnostics remain excluded from accepted timing
+rows. Microbenchmark stdout/stderr are retained separately; `raw.txt` remains a compatibility
+concatenation.
+
+The executable must contain Go `vcs.revision` metadata matching the checkout that launches the
+harness. If the selected toolchain omits that metadata for linked Git worktrees, build from a normal
+clone of the exact commit instead. Missing revision metadata is an error before server startup;
+passing a source path or naming a binary after a commit does not substitute for that binding.

@@ -13,6 +13,8 @@ import (
 	"strings"
 )
 
+const legacySurvivalErratum = "Legacy schema-v3/v4 durability labels describe posting-store synchronization. The harness omitted --survive and used the process-survival default; these rows do not prove filesystem or full RPC power-loss durability. Original measurements remain unchanged.\n\n"
+
 func LoadResults(paths []string) ([]Result, error) {
 	results := make([]Result, 0, len(paths))
 	for _, path := range paths {
@@ -22,6 +24,9 @@ func LoadResults(paths []string) ([]Result, error) {
 		}
 		var r Result
 		if err := json.Unmarshal(b, &r); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		if err := r.VerifyRuntimeArtifacts(filepath.Dir(path)); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
 		results = append(results, r)
@@ -129,6 +134,11 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 	}
 	var b strings.Builder
 	b.WriteString("# Dgraph Badger vs TreeDB live durability A/B\n\n")
+	if results[0].SchemaVersion < 5 {
+		b.WriteString(legacySurvivalErratum)
+	} else {
+		fmt.Fprintf(&b, "Resolved Zero/Alpha survival profile: **%s**. Startup and Alpha-restart configuration and posting-route witnesses are retained with each row. The recovery timer measures a clean Alpha restart while Zero stays running; this is not abrupt-crash or power-loss certification.\n\n", results[0].Config.SurvivalMode)
+	}
 	fmt.Fprintf(&b, "- Repeats per cell: %d\n- Workload fingerprint: `%s`\n- Logical parity and restart gate: **PASS**\n- Comparisons never mix durability classes.\n\n", repeats, results[0].Config.Fingerprint())
 	context := results[0].Context
 	fmt.Fprintf(&b, "- Host: `%s`; CPU: `%s`; RAM: `%.1f GiB`\n- Artifact/posting storage: `%s` (`%s`, %.1f GB), `%s` mounted at `%s`\n- Environment: `GOWORK=%s TMPDIR=%s GOMAXPROCS=%s GOFLAGS=%s`\n\n",

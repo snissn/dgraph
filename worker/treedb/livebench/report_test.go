@@ -34,7 +34,7 @@ func TestSummarizeAveragesEvenMiddleValues(t *testing.T) {
 }
 
 func TestRenderReportSeparatesDurabilityClassesAndMakesDecision(t *testing.T) {
-	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
+	set := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
 	for i := range set {
 		set[i].Context.RawPath = "/raw/" + set[i].RunID
 		set[i].Throughput = 100
@@ -57,7 +57,7 @@ func TestRenderReportSeparatesDurabilityClassesAndMakesDecision(t *testing.T) {
 }
 
 func TestRenderReportIncludesTreeDBDurabilityAndPointSourceDiagnostics(t *testing.T) {
-	set := validSet(1)
+	set := validSet(t, 1)
 	for i := range set {
 		if set[i].Config.Backend != "treedb" {
 			continue
@@ -79,7 +79,7 @@ func TestRenderReportIncludesTreeDBDurabilityAndPointSourceDiagnostics(t *testin
 }
 
 func TestRenderReportIncludesOnlySuppliedProfileArtifactsWithoutFindings(t *testing.T) {
-	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
+	set := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
 	dir := t.TempDir()
 	for _, name := range []string{"treedb-relaxed.pprof", "treedb-relaxed-top.txt", "treedb-durable.pprof", "treedb-durable-top.txt"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("evidence"), 0o644); err != nil {
@@ -107,7 +107,7 @@ func TestRenderReportIncludesOnlySuppliedProfileArtifactsWithoutFindings(t *test
 }
 
 func TestRenderReportUsesExplicitStopOutcome(t *testing.T) {
-	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
+	set := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
 	for i := range set {
 		set[i].Throughput = 100
 	}
@@ -145,7 +145,12 @@ func TestIssue29LegacyArtifactsRemainReportable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report != string(want) {
-		t.Fatal("schema-v3 JSON and retained profiles did not reproduce the committed report byte for byte")
+	if strings.Count(report, legacySurvivalErratum) != 1 {
+		t.Fatal("legacy survival erratum must appear exactly once")
+	}
+	// Preserve every original measured value, gate and counter-coverage note.
+	// Only the explicit later survival clarification is added by the new reader.
+	if strings.Replace(report, legacySurvivalErratum, "", 1) != string(want) {
+		t.Fatal("schema-v3 report changed beyond the explicit survival erratum")
 	}
 }
