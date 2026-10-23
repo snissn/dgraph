@@ -309,3 +309,22 @@ exact root. Intrinsic State/Delta/native Snapshot/floor controls do not consume 
 retry signatures. This closes arbitrary timestamp-less control-key retention, not S=0 history
 growth; see [RAFT_TERMINAL_STATE.md](RAFT_TERMINAL_STATE.md) for the soft admission limit and
 retirement contract.
+
+## Resource and physical-maintenance diagnostics
+
+`raftproduction/verify_retention_resources.py` uses normal CommitNow, authenticated explicit S, the
+existing maintenance scheduler, pending transactions and orderly Close/reopen. It keeps sampled
+combined Alpha/Zero RSS, allocated posting/Raft/private-temporary file bytes, exact source and
+runtime witnesses, certificates and all failures. `--maintenance-wait-seconds=310` with
+`--require-physical-floor-progress` requires certified P to advance during that observation window.
+This is logical history retirement, not evidence that physical GC ran.
+
+The original `repeat` payload remains the default. `--payload-mode=shake256 --value-bytes=16384`
+uses distinct, deterministic high-entropy ASCII for each overwrite so compression cannot reduce the
+entire fixture to a repeated byte. Per-phase `*-storage-files.json` packets retain posting file
+names, device/inode identities, logical/allocated bytes and their packet hashes. Together with
+retained `/debug/store` snapshots these can distinguish observed file replacement/deletion and space
+reuse across certificate rotations. The walks are non-atomic; they do not authorize deletion, prove
+engine reachability, identify a GC cause, or establish a steady-state bound by themselves. No extra
+GC loop, administrative compact endpoint, background-cadence change or automatic S advance is
+introduced. The driver continues to report `equilibrium_qualified=false`.

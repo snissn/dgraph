@@ -39,6 +39,43 @@ def file_sha256(path):
     return digest.hexdigest()
 
 
+def fixture_value(round_no, operation, size, mode):
+    prefix = f"{round_no:08d}-{operation:08d}-"
+    if mode == "repeat":
+        return prefix.ljust(size, "x")
+    # Reproducible high-entropy ASCII avoids testing only the compressor's
+    # treatment of a repeated byte. Each overwrite has independent content.
+    count = size - len(prefix)
+    seed = prefix.encode("ascii")
+    body = base64.b64encode(hashlib.shake_256(seed).digest((count * 3 + 3) // 4))
+    return prefix + body[:count].decode("ascii")
+
+
+def storage_inventory(root, max_files=100000):
+    """Non-atomic file identities for observing reuse/deletion between phases.
+
+    An absent name does not prove a segment was unreferenced: only the engine
+    authorizes reclamation. Keep device/inode to distinguish a replacement at
+    the same pathname. The observer never opens or edits storage contents.
+    """
+    rows, vanished = [], 0
+    for directory, _, names in os.walk(root):
+        for name in names:
+            path = Path(directory) / name
+            try:
+                item = path.stat(follow_symlinks=False)
+            except FileNotFoundError:
+                vanished += 1
+                continue
+            if len(rows) >= max_files:
+                raise RuntimeError("storage inventory exceeds observer file bound")
+            rows.append({"path": str(path.relative_to(root)), "device": item.st_dev,
+                         "inode": item.st_ino, "logical_bytes": item.st_size,
+                         "allocated_bytes": item.st_blocks * 512})
+    rows.sort(key=lambda row: row["path"])
+    return {"non_atomic": True, "vanished_during_walk": vanished, "files": rows}
+
+
 def disk_usage(path):
     """Allocated/logical file bytes; deduplicate hardlinks within this component.
 
@@ -143,6 +180,8 @@ def main():
     parser.add_argument("--writes-per-round", type=int, default=128)
     parser.add_argument("--keyspace", type=int, default=32)
     parser.add_argument("--value-bytes", type=int, default=256)
+    parser.add_argument("--payload-mode", choices=("repeat", "shake256"), default="repeat",
+                        help="shake256 makes deterministic distinct high-entropy ASCII values; repeat preserves the original fixture")
     parser.add_argument("--round-pause-seconds", type=float, default=0)
     parser.add_argument("--low-traffic-seconds", type=float, default=2)
     parser.add_argument("--sample-seconds", type=float, default=2)
@@ -217,6 +256,7 @@ def main():
                   "The workload updates fixed-key scalar values, not a schema/Unique rebuild or worst-case index/delete fanout resource qualification.",
                   "Private server TMPDIR is sampled separately; artifact/log/certificate-copy bytes are outside the server-and-scratch disk budget.",
                   "Resource sampling and /debug/store walks perturb the run; observer buffers scale with files/metadata. ACK samples are diagnostic, not throughput acceptance.",
+                  "Per-phase file inventories are non-atomic observations of names/device/inode/size, not engine reachability or proof of a GC cause. Between-phase files may be missed.",
                   "Operator selects S from this isolated client's completed transactions; concurrent external clients are unsupported.",
                   "Go buildinfo attests Dgraph revision/modified and the Gomap replacement path, not the compiled local replacement tree. The clean-source manifest is a build-procedure observation, not reproducible-build proof.",
                   "An exact build/source manifest and immutable hashes bind observations; they do not authenticate who built the supplied binaries or prove compiler integrity.",
@@ -297,6 +337,14 @@ def main():
                                                  "command": alpha.args, **observed})
         except OSError as error:
             raise RuntimeError(f"/debug/store unavailable: {error}") from error
+        inventory_path = out / (label + "-storage-files.json")
+        inventory = storage_inventory(out / "p")
+        with inventory_path.open("x") as saved:
+            json.dump(inventory, saved, indent=2)
+            saved.write("\n")
+        row["posting_file_inventory"] = {"file": str(inventory_path),
+            "sha256": file_sha256(inventory_path), "file_count": len(inventory["files"]),
+            "vanished_during_walk": inventory["vanished_during_walk"]}
         result["phases"].append(row)
         return row
 
@@ -425,7 +473,7 @@ def main():
             latencies = []
             for operation in range(args.writes_per_round):
                 key = (round_no * args.writes_per_round + operation) % args.keyspace
-                value = f"{round_no:08d}-{operation:08d}-".ljust(args.value_bytes, "x")
+                value = fixture_value(round_no, operation, args.value_bytes, args.payload_mode)
                 uid = expected[key][0] if key in expected else "_:key"
                 started = time.monotonic()
                 response = call("/mutate?commitNow=true", {"set": [{"uid": uid, "retention_key": key, "retention_value": value}]})
