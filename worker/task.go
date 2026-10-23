@@ -1010,6 +1010,11 @@ const (
 
 // processTask processes the query, accumulates and returns the result.
 func processTask(ctx context.Context, q *pb.Query, gid uint32) (*pb.Result, error) {
+	if raftCheckpointEnabled() {
+		if err := State.TreeDBStore.CheckRaftReadTimestamp(q.ReadTs); err != nil {
+			return nil, err
+		}
+	}
 	safeAttr := x.SafeUTF8(q.Attr)
 	ctx, span := otel.Tracer("").Start(ctx, "processTask."+safeAttr)
 	defer span.End()
@@ -1033,6 +1038,17 @@ func processTask(ctx context.Context, q *pb.Query, gid uint32) (*pb.Result, erro
 		return nil, err
 	}
 	span.AddEvent("Done waiting for checksum match")
+	if raftCheckpointEnabled() {
+		release, err := State.TreeDBStore.PinRaftReadTimestamp(q.ReadTs)
+		if err != nil {
+			return nil, err
+		}
+		// Oracle/checksum waits retain no posting dependencies. Pin only after
+		// those waits so maintenance cannot block the Delta which wakes a task.
+		// ServeTask may return on cancellation while this goroutine unwinds;
+		// retain admission through its actual cache/storage lifetime.
+		defer release()
+	}
 
 	// If a group stops serving tablet and it gets partitioned away from group
 	// zero, then it wouldn't know that this group is no longer serving this

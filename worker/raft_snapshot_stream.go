@@ -176,7 +176,7 @@ func (n *node) receiveRaftCheckpoint(ctx context.Context, snapshot raftpb.Snapsh
 			if err := json.Unmarshal(source.Metadata, &receiver); err != nil {
 				return nil, err
 			}
-			if receiver.Index < n.raftSemanticIndex || receiver.OracleMaxAssigned < posting.Oracle().MaxAssigned() {
+			if receiver.Index < n.raftSemanticIndex || receiver.OracleMaxAssigned < n.raftOrderedAssigned || receiver.SemanticFloor < n.raftPostingFloor {
 				return nil, fmt.Errorf("external snapshot would regress semantic or Oracle progress")
 			}
 			receiver.RaftID = n.Id

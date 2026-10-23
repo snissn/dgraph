@@ -78,18 +78,23 @@ type TreeDBStore struct {
 	mode       TreeDBCommitMode
 	durability string
 
-	lifecycleMu  sync.Mutex
-	rootGate     sync.RWMutex // external snapshot install drains read handles
-	rootEpoch    atomic.Uint64
-	commitWG     sync.WaitGroup
-	workerWG     sync.WaitGroup
-	queueActive  bool
-	commitQueue  chan treeDBCommitRequest
-	commitSlots  chan struct{}
-	mutationPool sync.Pool
-	closeOnce    sync.Once
-	closeErr     error
-	closed       atomic.Bool
+	lifecycleMu       sync.Mutex
+	rootGate          sync.RWMutex // external snapshot install drains read handles
+	rootEpoch         atomic.Uint64
+	raftReadMu        sync.Mutex
+	raftReadPins      uint64
+	raftReadChanged   chan struct{}
+	raftReadDraining  bool
+	raftSemanticFloor uint64
+	commitWG          sync.WaitGroup
+	workerWG          sync.WaitGroup
+	queueActive       bool
+	commitQueue       chan treeDBCommitRequest
+	commitSlots       chan struct{}
+	mutationPool      sync.Pool
+	closeOnce         sync.Once
+	closeErr          error
+	closed            atomic.Bool
 
 	// beforeCommitForTest lets adapter tests hold an admitted commit without
 	// depending on storage timing. Production stores leave it nil.

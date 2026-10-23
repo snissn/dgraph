@@ -72,6 +72,11 @@ type List struct {
 	maxTs       uint64 // max commit timestamp seen for this list.
 
 	cache []byte
+
+	// readStore is set only on uncached lists materialized by an explicitly
+	// supplied store (maintenance or scratch rebuild). Split reads must retain
+	// that authority instead of escaping to the global posting store.
+	readStore Store
 }
 
 // MutableLayer is the structure that will store mutable layer of the posting list. Every posting list has an immutable
@@ -2241,7 +2246,11 @@ func (l *List) readListPart(startUid uint64) (*pb.PostingList, error) {
 			"cannot generate key for list with base key %s and start UID %d",
 			hex.EncodeToString(l.key), startUid)
 	}
-	txn := postingStore.NewReadTxn(l.minTs)
+	store := l.readStore
+	if store == nil {
+		store = postingStore
+	}
+	txn := store.NewReadTxn(l.minTs)
 	defer txn.Discard()
 	item, err := txn.Get(key)
 	if err != nil {

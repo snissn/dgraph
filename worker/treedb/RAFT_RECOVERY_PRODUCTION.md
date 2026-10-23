@@ -26,11 +26,12 @@ apply failure stops progress before certification.
 
 Before a certificate, rejection must be reproduced from the retained proposal and the schema state
 reconstructed by preceding ordered input. A cached error alone is insufficient authority. After a
-certificate, contract `dgraph-normal-delta-v3` binds successful and rejected proposal key/size
-signatures, rejection text, and last-seen times into the application metadata. A retry returns the
-same rejection. Existing clock expiry remains a pending-free, synchronously certified transition
-before further apply; replay cannot independently expire outcomes. Metadata exceeding 1 MiB retains
-the old certificate and history. No new queue, publisher, pool, or storage layer is introduced.
+certificate, contract `dgraph-normal-delta-v4` binds successful and rejected proposal identity,
+StartTs, canonical content SHA256, rejection disposition, and observation time into the application
+metadata. A reused retry key with different content is a deterministic rejection. The canonical hash
+excludes the Raft index, so a real retry at a different log position retains its identity. Local
+wall time never retires external retry outcomes. Metadata exceeding 1 MiB retains the old
+certificate and history. No new queue, publisher, pool, or storage layer is introduced.
 
 Password hashing consumes randomness. Normal admission converts plaintext before persistence; late
 plaintext-password conversion during replay is refused rather than called a pure validation failure.
@@ -59,18 +60,18 @@ is still required for operational liveness.
 
 ## Remaining consumer completion sequence
 
-| Obligation                    | Existing path and required proof                                                                                                                                              | Status                                                    |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Immediate acknowledged suffix | CommitNow response, abrupt Alpha and Zero termination before read/drain, restart and verify all acknowledged transaction decisions                                            | Initial-root server proof green; nonzero cut proof open   |
-| Pending-free progress         | Retained debt admission pauses mutations; ordered commit/abort bypasses debt; old transaction abort restores a cut and credits; unavailable Zero remains visible backpressure | Controlled real apply proof green; live Zero timeout open |
-| Fresh schema/index/type       | Existing serial schema writer and normal indexed posting path; certify, recover old cut, replay, query indexes and duplicates                                                 | Fresh basic schema supported; index replay proof open     |
-| Existing schema rebuild       | Existing asynchronous reindex/temporary Badger path must become a serial certified lifecycle with deterministic failure disposition                                           | Guarded; protocol open                                    |
-| Drop/namespace/restore/import | Each operation needs ordered input closure, pending disposition, schema/cache invalidation and a root cut; external files require digest-bound retained authority             | Guarded; protocol open                                    |
-| Peer snapshot/rejoin          | Export a certified root and dependencies at a Raft snapshot; validate transfer; atomically install with receiver identity and frontiers before retention/read health          | Adapter/WAL/startup crash proofs green; live RPC guarded  |
-| Maintenance                   | Rollup, MVCC pruning, vlog GC/rewrite and compaction must respect current/previous certified roots and active readers through every crash cut                                 | Guarded; root-pinning API integration open                |
-| Operational routing           | Backup/export/admin and shutdown must use capability-aware store paths; no `nil` Badger dereference or bypass of owner lifecycle                                              | Existing fail-closed guards; full production routes open  |
-| Retry identity/bounds         | Proposal key/size compatibility remains inherited; stronger content binding and proven retry expiry behavior at long-load limits need qualification                           | Open                                                      |
-| Allocation and runtime        | Existing bounded mutation arena reused; capture public admission/apply/allocation profile only after correctness and root runtime grant                                       | Open                                                      |
+| Obligation                    | Existing path and required proof                                                                                                                                              | Status                                                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Immediate acknowledged suffix | CommitNow response, abrupt Alpha and Zero termination before read/drain, restart and verify all acknowledged transaction decisions                                            | Initial-root server proof green; nonzero cut proof open                                                      |
+| Pending-free progress         | Retained debt admission pauses mutations; ordered commit/abort bypasses debt; old transaction abort restores a cut and credits; unavailable Zero remains visible backpressure | Controlled real apply proof green; live Zero timeout open                                                    |
+| Fresh schema/index/type       | Existing serial schema writer and normal indexed posting path; certify, recover old cut, replay, query indexes and duplicates                                                 | Fresh basic schema supported; index replay proof open                                                        |
+| Existing schema rebuild       | Scalar tokenizer rebuild uses synchronous existing aggregation with logical tombstones; captured schema/root and old-cut replay agree                                         | Scalar tokenizer proof green; other conversions guarded                                                      |
+| Drop/namespace/restore/import | Each operation needs ordered input closure, pending disposition, schema/cache invalidation and a root cut; external files require digest-bound retained authority             | Guarded; protocol open                                                                                       |
+| Peer snapshot/rejoin          | Export a certified root and dependencies at a Raft snapshot; validate transfer; atomically install with receiver identity and frontiers before retention/read health          | Adapter/WAL/startup + actual native RPC/Raft retry proofs green; multi-process activation guarded            |
+| Maintenance                   | Rollup, MVCC pruning, vlog GC/rewrite and compaction must respect current/previous certified roots and active readers through every crash cut                                 | Physical GC/compaction green; ordered S/local P baseline+prune proof green; automatic scheduling not enabled |
+| Operational routing           | Backup/export/admin and shutdown must use capability-aware store paths; no `nil` Badger dereference or bypass of owner lifecycle                                              | Existing fail-closed guards; full production routes open                                                     |
+| Retry identity/bounds         | Canonical StartTs/content binding; ordered semantic expiry and bounded metadata admission; qualify long-load limits                                                           | Focused replay and rejection proof green                                                                     |
+| Allocation and runtime        | Existing bounded mutation arena reused; capture public admission/apply/allocation profile only after correctness and root runtime grant                                       | Open                                                                                                         |
 
 Peer installation uses the external owner's explicit generation/digest-bound export and authorized
 install APIs. The source certificate has a different Raft ID and WAL-directory owner identity.
@@ -161,3 +162,43 @@ only after matching WAL persistence. It also serializes an actual queued ConfCha
 terminates a subprocess immediately after election-promise sync. Malformed header/chunk/terminal
 controls leave no staging file or accepted intent. These are focused cross-store and transport
 proofs, not a complete production feature or power-loss gate.
+
+## Replicated expiry and local history reclamation
+
+`PostingFloorRequest{version:1,floor:S}` is an explicit ordered transition through the existing
+proposal and acknowledgment path. S must precede both the **preceding ordered** assigned frontier
+and every pending transaction start. Its result is independent of local readers, maintenance and
+wall clocks. A normal mutation at or below S is rejected before retry lookup, including a retry
+whose previous outcome was retired. Only nonzero StartTs outcomes covered by S are retired. The
+certificate binds S and its transition index separately from physical floor P. Malformed Oracle
+commit decisions with a nonzero CommitTs at or below StartTs are pure rejections before effects. A
+dedicated ordered assigned frontier reconstructs from certificate+Delta, avoiding the process
+Oracle's intentionally monotone high-water mark during in-process reopen/retry.
+
+Ordinary task admission checks S before Oracle/cache access, waits without retaining posting pins,
+and then rechecks and acquires a task-lifetime pin before any cache/storage access. The maintenance
+capability excludes new request pins, drains existing requests, then drains raw transaction/iterator
+handles under the root gate. Its private Store avoids recursive reader-gate acquisition and cannot
+escape the capability lifetime. Old unadmitted write handles are epoch fenced. The same
+whole-request drain protects native root replacement.
+
+A complete baseline pass reconstructs every posting main/split anchor at B=P+1, drains every
+callback, clears global and pending transaction cached Lists while preserving pending deltas and
+conflict versions, then advances/prunes physical history. This preserves generic MVCC's strict
+read/commit admission above P, including split anchors. P never exceeds S and can lag because of
+readers or newer pending starts. Partial baseline, prune or ambiguous certification errors seal
+admission until exact-root reopen; they never resume readers through a partially rewritten list.
+
+A completed pass either forces a pending-free certificate before Finish, or uses FinishWorking with
+the identical previous certificate and validated, synced retained replay history. The latter changes
+no certified frontier or retention. Crashing discards the uncertified working P and reconstructs S,
+pending state and application suffix from the previous exact cut plus WAL. Current/previous physical
+roots remain pinned through physical GC/compaction. This permits local maintenance with newer
+pending transactions, but pending-free certification remains a structural recovery-debt limit until
+the separately selected canonical pending-overlay integration is proven.
+
+Focused tests cover two successive split baselines against an unpruned control, B/B+1 views,
+callback/cancellation failures, stale capability handles, task admission before cache/Oracle,
+old-root reopen after uncertified mutation, ordered-floor replay, content collisions, stale retries
+after signature retirement, and normal commit/reopen above a certified physical floor. The
+multi-process join/rejoin and continuous-pending operational gates remain separate.

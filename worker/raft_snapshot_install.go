@@ -53,6 +53,9 @@ func validateInstallMetadata(source td.ExternalRecoveryCheckpoint, intent *raftw
 	if err := json.Unmarshal(source.Metadata, &sender); err != nil {
 		return err
 	}
+	if err := validateRaftApplicationMetadata(sender); err != nil {
+		return err
+	}
 	snapshot := intent.Snapshot.Metadata
 	if source.Generation == 0 || source.Digest == "" || source.Identity == "" ||
 		sender.Version != raftCheckpointVersion || sender.PendingTransactions != 0 ||

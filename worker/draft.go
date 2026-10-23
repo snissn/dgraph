@@ -70,6 +70,9 @@ type node struct {
 	raftRecoveryBytes   uint64
 	raftSemanticIndex   uint64
 	raftConfStateDirty  bool
+	raftPostingFloor    uint64
+	raftOrderedAssigned uint64
+	raftFloorIndex      uint64
 	raftReplayUntil     uint64
 	appliedProposals    map[uint64]*appliedProposal
 	checkpointTs        uint64 // Timestamp corresponding to checkpoint.
@@ -638,6 +641,9 @@ func (n *node) applyCommitted(proposal *pb.Proposal, key uint64) error {
 		if err := checkRaftPrototypeProposal(proposal); err != nil {
 			return err
 		}
+		if proposal.PostingFloor != nil {
+			return n.applyPostingFloor(proposal)
+		}
 		if proposal.Snapshot != nil {
 			return nil
 		} // Local pruning is certificate-owned.
@@ -1012,12 +1018,15 @@ func (n *node) processApplyCh() {
 				}
 			}
 			if raftCheckpointEnabled() {
-				n.raftSemanticMu.Lock()
-				if err := n.expireRaftProposals(now, maxAge); err != nil {
-					glog.Fatalf("raft_checkpoint dedup expiration barrier failed: %v", err)
+				// Existing housekeeping schedules only LOCAL reclamation. Semantic S
+				// advances exclusively through ordered PostingFloorRequest input.
+				if _, err := n.pruneRaftPostingHistory(n.ctx, math.MaxUint64, 256); err != nil {
+					if State.TreeDBStore.IsClosed() {
+						glog.Fatalf("Raft posting maintenance sealed owner: %v", err)
+					}
+					glog.Warningf("Raft posting maintenance deferred: %v", err)
 				}
-				glog.V(3).Infof("Size of previous map: %d", len(n.appliedProposals))
-				n.raftSemanticMu.Unlock()
+
 			} else {
 				glog.V(3).Infof("Size of previous map: %d", len(n.appliedProposals))
 			}

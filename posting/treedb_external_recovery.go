@@ -75,6 +75,11 @@ func (s *TreeDBStore) InstallRaftCheckpoint(ctx context.Context, src io.Reader,
 	if s == nil {
 		return td.ExternalRecoveryCheckpoint{}, fmt.Errorf("external posting store unavailable")
 	}
+	release, err := s.drainRaftRequests(ctx)
+	if err != nil {
+		return td.ExternalRecoveryCheckpoint{}, err
+	}
+	defer release()
 	s.rootGate.Lock()
 	defer s.rootGate.Unlock()
 	s.lifecycleMu.Lock()

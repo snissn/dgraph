@@ -68,51 +68,61 @@ These are focused correctness/race controls. They do not establish real-server s
 behavior, power-loss certification, rebuild throughput, large-predicate resource budgets or full
 operational capability acceptance.
 
-## Required logical maintenance protocol
+## Logical maintenance integration
 
-Generic MVCC pruning retains one anchor per key. A posting delta is not a full anchor: it can
-require many older deltas and a complete baseline. Pruning must therefore follow a posting-aware
-baseline pass, not just a Raft snapshot hint. The selected design separates a replicated semantic
-expiration floor `S` from a local physical pruning floor `P <= S`. Local maintenance timing or
-active readers must never determine committed-mutation rejection: replicas can reach different local
-maintenance states while applying the same retained input.
+Generic MVCC pruning retains one anchor per key. A posting delta can require many older deltas and
+an older complete list, so pruning follows a complete posting-aware baseline pass. The versioned
+ordered floor proposal advances replicated semantic expiration `S` from the preceding ordered Oracle
+frontier and pending starts. Only `S` authorizes stale-mutation rejection before retry lookup; local
+physical floor `P <= S` never affects replicated outcomes. No wall clock selects `S`.
 
-1. Introduce an explicit versioned ordered floor proposal, not a reinterpretation of the existing
-   snapshot `ReadTs` hint. Every replica computes the same new `S` from that input and preceding
-   ordered Oracle/pending state. Cap it below the assigned frontier and every pending transaction
-   start timestamp. A conditional request which cannot advance is a deterministic no-op.
-   Certificates bind `S` and its ordered transition. Only `S` can authorize semantic rejection of a
-   later stale mutation before inference or transaction registration. Local pruning state never
-   participates in this decision.
-2. New request-scope read admissions at or below `S` return a defined too-old error before
-   consulting posting caches. Requests already admitted retain their timestamps until completion.
-   Adapter/internal read handles also pin timestamps. A timestamp issued by Zero is not an
-   indefinite historical-read lease; later requests can explicitly expire.
-3. Serialize local maintenance with ordered apply, install and callback writers. Under read
-   admission synchronization choose `P <= S` strictly below every active request/read pin. Readers
-   can delay physical reclamation without changing `S` or replicated outcomes. Fence cold rollups
-   and stale writers.
-4. Materialize complete or empty posting baselines at `P` for every main list and split dependency,
-   preserving all newer deltas. Rebase cold-list output explicitly: ordinary `maxCommitTs+1` can be
-   below an earlier physical floor. A maintenance-only read capability accesses those baselines
-   without reopening general reads expired by `S`. Drain writes and invalidate caches before
-   declaring the pass complete.
-5. Persist `P` only after the entire baseline pass succeeds, then run maintained MVCC pruning. Keep
-   complete anchors, all newer versions, and both physical certificate root pins. A local
-   certificate binds `S`, `P` and the exact root; its persisted MVCC floor must match `P` and never
-   exceed `S`.
-6. Ambiguous maintenance certification keeps local maintenance/admission sealed until owner
-   Close/Open selects and verifies a certificate. Partial unlogged physical maintenance cannot
-   supersede an older certificate. Restore its exact root and `S/P`, discard working progress, then
-   replay retained floor/mutation proposals. Replicas may reclaim at different `P` values while
-   their replicated `S` and outcomes agree.
+Task entry checks expiration before Oracle waits or cache access. A second check acquires a lifetime
+pin after Oracle/checksum waits and before any cache/storage use. An Oracle waiter holds no posting
+dependency and cannot prevent the Delta which wakes it from applying. The inner task retains its pin
+until it actually exits, even if `ServeTask` has already returned on client cancellation. Requests
+already using data can delay local maintenance while `S` advances independently.
 
-The adapter currently holds root lifetime pins, but its timestamp-only read transaction can issue
-later point reads against a newer MVCC cut. It has no active readTs registry, so rootGate alone does
-not prove this logical protocol. Replicated floor proposals, request admission, the active readTs
-registry and posting-baseline protocol are not implemented. Logical history is preserved; the
-bounded logical-history lifetime gate remains open. This design is distinct from the implemented
-physical maintenance paths above.
+The local runner takes the semantic apply/install barrier, checks health and completed recovery, and
+verifies the old exact certificate plus the complete retained, synced WAL suffix. Its private
+epoch-bound adapter capability pauses new request admissions and drains all existing requests, raw
+readers, writers and callbacks. Draining all readers matters even above `P`: cached lists may retain
+old split anchors, and independently written main/split records must not be observed midway through
+the baseline pass.
+
+Every main list is reconstructed at `B=P+1` through maintained posting decoding and rollup. Every
+complete/empty main and split result is explicitly written at exactly `B`, including cold lists.
+This boundary is required because Gomap rejects reads and writes at or below `P`; a split read uses
+its main list's baseline timestamp. Newer original deltas remain unchanged. Private list reads
+retain their supplied Store for split dependencies and do not enqueue asynchronous rollups. All
+callbacks drain before the pass completes. Pending transaction list caches are converted through
+`Txn.Update`, preserving serialized deltas and conflict versions; their materialized lists and the
+global memory cache are then discarded. Only after the complete pass succeeds can the persisted
+floor advance and generic pruning run.
+
+With no pending transactions, the runner forces an exact certificate binding `S`, `P` and root
+before admission resumes. With newer pending transactions, it chooses `B` strictly below every
+pending StartTs and can finish as working progress: the old exact certificate and all required WAL
+remain authoritative, and no certified frontier or retention authority advances. A later valid Delta
+has CommitTs strictly above StartTs, so it cannot overwrite the baseline. Crash/reopen restores the
+old certified `S/P` and replays the retained pending input. A partial/canceled/ambiguous started
+pass seals admission until reopen; it cannot silently resume on a mixed main/split working state.
+Private read handles are invalidated and stale write epochs fenced before the capability releases.
+
+Focused controls cover two stores with different local pruning schedules, exact `B`/`B+1` reads,
+long delta chains, cold/empty/split lists, preserved newer delta bytes, callback
+failure/cancellation, request draining, stale private handles, the future-Oracle waiter deadlock,
+old-certificate restore, replayed pending deltas/conflict keys and later commit/abort decisions.
+They are in `posting/raft_posting_*_test.go` and
+`worker/raft_{posting_maintenance,task_admission}_test.go`. These are in-process correctness/race
+controls, not power-loss or actual-server lifetime acceptance.
+
+The existing apply housekeeping tick invokes the runner outside the semantic mutex; it never selects
+a semantic floor from the clock or adds another Raft queue. Resource-budget and actual-server
+qualification remain separate gates. Working progress with pending transactions does not bound Raft
+recovery debt. The selected next integration persists an incremental canonical pending overlay under
+the same exact DATA root, allowing certificates with pending transactions without embedding all
+pending payload in JSON. Until that integration and its bounds are proven, continuous-workload
+checkpoint/debt and full bounded-lifetime acceptance remain open.
 
 ## Other operations and inherited boundaries
 
@@ -126,7 +136,7 @@ physical maintenance paths above.
 | Vector                            | Factory/cache and graph side effects need exact root closure and deterministic rebuild authority; already outside ordinary TreeDB adapter capabilities                               |
 | Drop/predicate/namespace deletion | Ordered pending disposition, versioned tombstones, schema/cache reset and namespace admission epoch must complete before a cut; physical Badger prefix deletion is not a replacement |
 | Restore/import                    | External files must be immutable, digest-bound retained input; whole-root transfer must use authorized install, while selective graft needs an ordered namespace transition          |
-| Rollup/prune                      | Posting-complete baseline and admission protocol above; currently disabled for this policy                                                                                           |
+| Rollup/prune                      | Guarded posting-complete baseline/admission runner on existing housekeeping tick; bounded pending checkpoint/debt and actual-server qualification remain open                        |
 | Backup/export                     | Existing paths require Badger streams/format; export can use a pinned readTs generic scan, backup needs a matching restore format and retained incremental history contract          |
 | CDC/ACL                           | Existing configuration refusal remains; subscriptions, retained event frontier and ACL cache reconstruction need store-neutral ownership                                             |
 | Move/split                        | Source/receiver ordered authority, root/dependency transfer, pending decisions and membership ownership must be bound together; no silent KV import                                  |

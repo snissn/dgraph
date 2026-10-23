@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: © 2026 Istari Digital, Inc.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package worker
 
 import (
@@ -117,7 +122,7 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 		c := raftCheckpointMetadata{Version: raftCheckpointVersion, Group: 1, RaftID: 1, Index: 2, Term: 1, OracleMaxAssigned: posting.Oracle().MaxAssigned(), ConfState: *n.ConfState()}
 		c.AppliedProposals = make(map[uint64]raftProposalSignature)
 		for key, p := range n.appliedProposals {
-			c.AppliedProposals[key] = raftProposalSignature{Size: p.size, SeenUnixNano: p.seen.UnixNano()}
+			c.AppliedProposals[key] = raftProposalSignature{Size: p.size, StartTs: p.startTs, Digest: p.digest, SeenUnixNano: p.seen.UnixNano()}
 		}
 		data, err := json.Marshal(c)
 		require.NoError(t, err)
@@ -232,21 +237,17 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 	require.Zero(t, posting.Oracle().NumPendingTxns())
 	require.Equal(t, uint64(7), atomic.LoadUint64(&n.raftCertifiedIndex))
 	require.Equal(t, "suffix", readValue())
-	// Expiration can refresh metadata at the same semantic index, and it must
-	// be durable before any later application can observe the absent signatures.
+	// Wall clocks cannot retire replicated outcomes, even after a pending-free cut.
+	count := len(n.appliedProposals)
 	require.NoError(t, n.expireRaftProposals(time.Now().Add(time.Hour), 10*time.Minute))
-	require.Empty(t, n.appliedProposals)
+	require.Len(t, n.appliedProposals, count)
 	posting.Cleanup()
 	posting.Oracle().ResetTxns()
 	current.closePostingStore()
 	n = open()
 	require.Equal(t, uint64(7), n.Cfg.Applied)
-	require.Empty(t, n.appliedProposals, "same-index expiration must be certified")
+	require.Len(t, n.appliedProposals, count, "clock time must not change replicated dispositions")
 	require.Equal(t, "suffix", readValue())
-	n.appliedProposals[99] = &appliedProposal{size: 123, seen: time.Now().Add(-time.Hour)}
-	current.closePostingStore()
-	require.Error(t, n.expireRaftProposals(time.Now(), 10*time.Minute))
-	require.Contains(t, n.appliedProposals, uint64(99), "failed expiration barrier restores original dedup state")
 }
 
 func TestRaftCheckpointValidationAndDebtFailClosed(t *testing.T) {

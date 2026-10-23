@@ -325,6 +325,13 @@ message Proposal {
   // Skipping 15 as it is used for uint64 key in master and might be needed later here.
   uint64 start_ts = 16;
  api.UpdateExtSnapshotStreamingStateRequest ext_snapshot_state = 17;
+ PostingFloorRequest posting_floor = 18;
+}
+
+// Explicit ordered semantic expiration. Physical reclamation remains local.
+message PostingFloorRequest {
+ uint32 version = 1;
+ uint64 floor = 2;
 }
 
 message CDCState {
