@@ -228,8 +228,6 @@ func TestRaftSchemaSupportedBoundary(t *testing.T) {
 	require.NoError(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{index}}}))
 	for _, change := range []func(*pb.SchemaUpdate){
 		func(s *pb.SchemaUpdate) { s.Lang = true },
-		func(s *pb.SchemaUpdate) { s.Unique = true },
-		func(s *pb.SchemaUpdate) { s.Upsert = true },
 		func(s *pb.SchemaUpdate) { s.Directive = pb.SchemaUpdate_REVERSE },
 		func(s *pb.SchemaUpdate) { s.Directive = pb.SchemaUpdate_DELETE },
 	} {
@@ -239,13 +237,23 @@ func TestRaftSchemaSupportedBoundary(t *testing.T) {
 	}
 	for _, change := range []func(*pb.SchemaUpdate){
 		func(s *pb.SchemaUpdate) { s.List = true },
-		func(s *pb.SchemaUpdate) { s.ValueType = pb.Posting_INT },
+		func(s *pb.SchemaUpdate) { s.ValueType, s.Tokenizer = pb.Posting_INT, []string{"int"} },
 		func(s *pb.SchemaUpdate) { s.Count = true },
+		func(s *pb.SchemaUpdate) { s.Upsert = true },
+		func(s *pb.SchemaUpdate) { s.Unique, s.Upsert = true, true },
 	} {
 		update := proto.Clone(index).(*pb.SchemaUpdate)
 		change(update)
 		require.NoError(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{update}}}))
 	}
+	for _, tokenizers := range [][]string{{"unknown-tokenizer"}, {"exact", "exact"}, {"int"}} {
+		update := proto.Clone(index).(*pb.SchemaUpdate)
+		update.Tokenizer = tokenizers
+		require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{update}}}))
+	}
+	noConflict := proto.Clone(index).(*pb.SchemaUpdate)
+	noConflict.NoConflict, noConflict.Upsert = true, true
+	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{noConflict}}}))
 	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{Schema: []*pb.SchemaUpdate{nil}}}))
 	require.Error(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{DropOp: pb.Mutations_ALL}}))
 	require.NoError(t, checkRaftSupportedProposal(&pb.Proposal{Mutations: &pb.Mutations{StartTs: 10, DropOp: pb.Mutations_TYPE, DropValue: "0-Type"}}))

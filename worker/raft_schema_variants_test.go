@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/dgraph-io/dgo/v250/protos/api"
 	"github.com/dgraph-io/dgraph/v25/posting"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/dgraph-io/dgraph/v25/raftwal"
@@ -162,4 +163,63 @@ func TestRaftSchemaVariantsCertifiedPendingAndRejection(t *testing.T) {
 	current, _ = schema.State().Get(context.Background(), names)
 	require.True(t, current.List)
 	certify(8)
+
+	// Metadata changes use the same ordered barrier. Uniqueness is checked
+	// against complete existing values before any token or schema publication.
+	duplicate := scalar(bad, "not-an-int")
+	duplicate.Entity = 2
+	require.NoError(t, apply(9, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 17, Edges: []*pb.DirectedEdge{duplicate}}}))
+	require.NoError(t, apply(10, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 18, Txns: []*pb.TxnStatus{{StartTs: base + 17, CommitTs: base + 18}}}}))
+	unique := &pb.SchemaUpdate{Predicate: bad, ValueType: pb.Posting_STRING, Unique: true, Upsert: true, Directive: pb.SchemaUpdate_INDEX, Tokenizer: []string{"exact"}}
+	err = apply(11, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 19, Schema: []*pb.SchemaUpdate{unique}}})
+	require.ErrorAs(t, err, &rejected)
+	current, _ = schema.State().Get(context.Background(), bad)
+	require.False(t, current.Unique)
+	require.Empty(t, current.Tokenizer)
+	require.Empty(t, read(tokenKey(bad, "exact", "not-an-int"), math.MaxUint64))
+	certify(11)
+	duplicate.Value = []byte("distinct")
+	require.NoError(t, apply(12, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 20, Edges: []*pb.DirectedEdge{duplicate}}}))
+	require.NoError(t, apply(13, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 22, Txns: []*pb.TxnStatus{{StartTs: base + 20, CommitTs: base + 21}}}}))
+	require.NoError(t, apply(14, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 23, Schema: []*pb.SchemaUpdate{unique}}}))
+	certify(14)
+	current, _ = schema.State().Get(context.Background(), bad)
+	require.True(t, current.Unique && current.Upsert)
+	require.Equal(t, []uint64{1}, read(tokenKey(bad, "exact", "not-an-int"), math.MaxUint64))
+	require.Equal(t, []uint64{2}, read(tokenKey(bad, "exact", "distinct"), math.MaxUint64))
+	for i := uint64(0); i < 2; i++ {
+		edge := scalar(bad, "reserved")
+		edge.Entity = 3 + i
+		require.NoError(t, apply(15+i, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 24 + i, Edges: []*pb.DirectedEdge{edge}}}))
+	}
+	contexts := func() []api.TxnContext {
+		out := make([]api.TxnContext, 2)
+		for i := range out {
+			posting.Oracle().GetTxn(base+24+uint64(i)).FillContext(&out[i], 1, false)
+		}
+		return out
+	}
+	before := contexts()
+	shared := false
+	for _, a := range before[0].Keys {
+		for _, b := range before[1].Keys {
+			shared = shared || a == b
+		}
+	}
+	require.True(t, shared, "same indexed upsert value on different subjects must supply a shared Zero conflict key")
+	changed := proto.Clone(unique).(*pb.SchemaUpdate)
+	changed.Upsert, changed.Unique = false, false
+	err = apply(17, &pb.Proposal{Mutations: &pb.Mutations{StartTs: base + 26, Schema: []*pb.SchemaUpdate{changed}}})
+	require.ErrorAs(t, err, &rejected, "pending canonical conflicts cannot cross a schema metadata transition")
+	certify(17)
+	after := contexts()
+	for i := range before {
+		require.ElementsMatch(t, before[i].Keys, after[i].Keys)
+	}
+	// Ordered decisions resolve the two contenders. This proves preservation of
+	// canonical Zero inputs, not an actual running Zero conflict arbitration.
+	require.NoError(t, apply(18, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 28, Txns: []*pb.TxnStatus{{StartTs: base + 24, CommitTs: base + 27}, {StartTs: base + 25}}}}))
+	require.Equal(t, []uint64{3}, read(tokenKey(bad, "exact", "reserved"), math.MaxUint64))
+	certify(18)
+	require.Equal(t, []uint64{3}, read(tokenKey(bad, "exact", "reserved"), math.MaxUint64))
 }

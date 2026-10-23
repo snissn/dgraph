@@ -31,8 +31,12 @@ func (rb *IndexRebuild) ValidateData(ctx context.Context) error {
 	oldType, newType := types.TypeID(old.ValueType), types.TypeID(next.ValueType)
 	forbiddenWithData := (old.List && !next.List) || oldType.IsScalar() != newType.IsScalar()
 	convert := oldType != newType && oldType.IsScalar() && newType.IsScalar()
-	if !forbiddenWithData && !convert {
+	unique := next.Unique && (!old.Unique || convert)
+	if !forbiddenWithData && !convert && !unique {
 		return nil
+	}
+	if unique {
+		return rb.validateUniqueData(ctx, forbiddenWithData)
 	}
 	pk := x.ParsedKey{Attr: rb.Attr}
 	return walkStoreLists(ctx, rb.sourceStore(), rb.StartTs, pk.DataPrefix(), func(_ []byte, list *List) error {

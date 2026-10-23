@@ -136,25 +136,11 @@ func (r *rebuilder) runForStore(ctx context.Context) (retErr error) {
 	if store == nil {
 		store = postingStore
 	}
-	dir, err := os.MkdirTemp(x.WorkerConfig.TmpDir, "dgraph_store_index_")
+	tmp, cleanup, err := openStoreRebuildScratch()
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(dir)
-	opts := badger.DefaultOptions(dir).WithSyncWrites(false).
-		WithNumVersionsToKeep(math.MaxInt32).WithCompression(options.None).
-		WithLogger(&x.ToGlog{}).WithLoggingLevel(badger.WARNING).
-		WithMetricsEnabled(false).WithDetectConflicts(false).
-		WithMemTableSize(16 << 20).WithBaseTableSize(2 << 20).WithBaseLevelSize(8 << 20)
-	if len(x.WorkerConfig.EncryptionKey) > 0 {
-		opts.EncryptionKey = x.WorkerConfig.EncryptionKey
-		opts.BlockCacheSize = 16 << 20
-	}
-	tmp, err := badger.OpenManaged(opts)
-	if err != nil {
-		return err
-	}
-	defer func() { retErr = errors.Join(retErr, tmp.Close()) }()
+	defer func() { retErr = errors.Join(retErr, cleanup()) }()
 	batch := tmp.NewManagedWriteBatch()
 	defer batch.Cancel()
 	newTxn := func() *Txn {
@@ -235,4 +221,28 @@ func (r *rebuilder) runForStore(ctx context.Context) (retErr error) {
 		}
 		return nil
 	})
+}
+
+// openStoreRebuildScratch bounds in-memory aggregation while allowing a predicate-sized
+// disposable working image. It is never referenced by a recovery certificate.
+func openStoreRebuildScratch() (*badger.DB, func() error, error) {
+	dir, err := os.MkdirTemp(x.WorkerConfig.TmpDir, "dgraph_store_index_")
+	if err != nil {
+		return nil, nil, err
+	}
+	opts := badger.DefaultOptions(dir).WithSyncWrites(false).
+		WithNumVersionsToKeep(math.MaxInt32).WithCompression(options.None).
+		WithLogger(&x.ToGlog{}).WithLoggingLevel(badger.WARNING).
+		WithMetricsEnabled(false).WithDetectConflicts(false).
+		WithMemTableSize(16 << 20).WithBaseTableSize(2 << 20).WithBaseLevelSize(8 << 20)
+	if len(x.WorkerConfig.EncryptionKey) > 0 {
+		opts.EncryptionKey = x.WorkerConfig.EncryptionKey
+		opts.BlockCacheSize = 16 << 20
+	}
+	tmp, err := badger.OpenManaged(opts)
+	if err != nil {
+		_ = os.RemoveAll(dir)
+		return nil, nil, err
+	}
+	return tmp, func() error { return errors.Join(tmp.Close(), os.RemoveAll(dir)) }, nil
 }

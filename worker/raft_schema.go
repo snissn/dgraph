@@ -138,6 +138,12 @@ func validateRaftSchemaUpdate(update *pb.SchemaUpdate) error {
 	if update.Directive == pb.SchemaUpdate_DELETE || len(update.IndexSpecs) > 0 || update.ValueType == pb.Posting_VFLOAT {
 		return fmt.Errorf("raft_checkpoint does not own predicate deletion or vector lifecycle")
 	}
+	if update.NoConflict && (update.Upsert || update.Unique) {
+		return &raftSemanticRejection{reason: "upsert/unique schema requires canonical conflict tracking"}
+	}
+	if err := schema.ValidateTokenizers([]*pb.SchemaUpdate{update}); err != nil {
+		return &raftSemanticRejection{reason: err.Error()}
+	}
 	if err := checkSchemaWithDataCheck(proto.Clone(update).(*pb.SchemaUpdate), func(string) bool { return false }); err != nil {
 		return &raftSemanticRejection{reason: err.Error()}
 	}
@@ -146,13 +152,16 @@ func validateRaftSchemaUpdate(update *pb.SchemaUpdate) error {
 		return nil
 	}
 	// Data/type/list and derived indexes use maintained synchronous builders.
-	// Remaining metadata changes require their separate conflict/uniqueness proofs.
+	// Upsert reuses canonical conflict keys; unique additionally validates all
+	// existing logical values before any schema or index effects.
 	before, after := proto.Clone(&old).(*pb.SchemaUpdate), proto.Clone(update).(*pb.SchemaUpdate)
 	before.Tokenizer, after.Tokenizer = nil, nil
 	before.Directive, after.Directive = pb.SchemaUpdate_NONE, pb.SchemaUpdate_NONE
 	before.ValueType, after.ValueType = 0, 0
 	before.List, after.List = false, false
 	before.Count, after.Count = false, false
+	before.Upsert, after.Upsert = false, false
+	before.Unique, after.Unique = false, false
 	if !proto.Equal(before, after) {
 		return fmt.Errorf("raft_checkpoint schema metadata change needs conflict/uniqueness validation for %s", update.Predicate)
 	}
