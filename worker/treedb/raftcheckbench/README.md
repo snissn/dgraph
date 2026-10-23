@@ -1,5 +1,19 @@
 # Real-server Raft/checkpoint prototype diagnostic
 
+`verify_recovery.py` is a separate correctness driver for the production integration. It submits a
+mixed UID/scalar mutation on a fresh predicate and then valid CommitNow writes through a fresh exact
+index. After each response it sends SIGKILL to Alpha and Zero before any read, drain, checkpoint
+polling, or artifact write. Every restart checks acknowledged values, exact-index queries, and the
+recorded pre-health replay frontier. It reports response-to-signal time but does not collect
+throughput or power-loss evidence. Its small initial-root run has certificate index zero; the
+semantic tests separately exercise a nonzero exact certified cut.
+
+```sh
+python3 worker/treedb/raftcheckbench/verify_recovery.py \
+  --dgraph-bin /mnt/fast4tb/raft-production/bin/dgraph \
+  --out /mnt/fast4tb/raft-production/immediate-ack-01 --ack-cuts 3
+```
+
 `run.py` launches one Zero and one Alpha, both with explicit filesystem survival, on new isolated
 data directories. It exercises HTTP CommitNow, UID point reads and one-hop reads in a fixed 20/60/20
 mix. It validates every acknowledged value and fixture edge, kills **both** servers with SIGKILL,

@@ -156,7 +156,45 @@ func TestRaftSemanticRejectionAndOrderedAbortReplay(t *testing.T) {
 	n = reopen()
 	require.Equal(t, uint64(7), n.Cfg.Applied)
 	duplicate.Index = 8
+	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: 8}, []raftpb.Entry{duplicate}, &raftpb.Snapshot{}))
+	require.NoError(t, wal.Sync())
+	atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(duplicate.Data)))
 	require.EqualError(t, apply(duplicate), rejection, "certified duplicate preserves rejection, never succeeds")
+
+	// A long pending transaction must pause new mutation admission without
+	// consuming the decision lane. Its ordered abort then permits a cut and
+	// returns admission credits. Use actual retained entry debt, not a mocked
+	// byte counter, and the production proposal caller for both admission paths.
+	pending := checkpointEntry(t, 9, mutation(base+6, edge(pred, "pending")))
+	debt := []raftpb.Entry{pending}
+	for index := uint64(10); index <= 7+raftRecoveryMaxEntries; index++ {
+		debt = append(debt, checkpointEntry(t, index, &pb.Proposal{Delta: &pb.OracleDelta{}}))
+	}
+	last := debt[len(debt)-1].Index
+	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: last}, debt, &raftpb.Snapshot{}))
+	require.NoError(t, wal.Sync())
+	for _, e := range debt {
+		atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(e.Data)))
+		require.NoError(t, apply(e))
+	}
+	require.Equal(t, 1, posting.Oracle().NumPendingTxns())
+	require.NoError(t, n.checkpointRaftCut(last, true))
+	require.Equal(t, uint64(7), atomic.LoadUint64(&n.raftCertifiedIndex))
+	require.ErrorContains(t, n.proposeAndWait(context.Background(), mutation(base+7, edge(pred, "blocked"))), "recovery debt limit")
+	abortProposal := &pb.Proposal{Delta: &pb.OracleDelta{Txns: []*pb.TxnStatus{{StartTs: base + 6}}}}
+	require.ErrorContains(t, n.proposeAndWait(context.Background(), abortProposal), "Raft isn't initialized",
+		"decision passes debt admission and reaches the deliberately absent transport")
+	abort := checkpointEntry(t, last+1, abortProposal)
+	require.NoError(t, wal.Save(&raftpb.HardState{Term: 1, Commit: last + 1}, []raftpb.Entry{abort}, &raftpb.Snapshot{}))
+	require.NoError(t, wal.Sync())
+	atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(abort.Data)))
+	require.NoError(t, apply(abort))
+	require.Zero(t, posting.Oracle().NumPendingTxns())
+	require.NoError(t, n.checkpointRaftCut(last+1, true))
+	require.Equal(t, last+1, atomic.LoadUint64(&n.raftCertifiedIndex))
+	release, err := n.reserveRaftRecoveryDebt(1)
+	require.NoError(t, err, "certified abort restores mutation capacity")
+	release()
 	// A runtime conflict or a joined storage failure is not proof of a pure rejection.
 	require.False(t, isRaftSemanticRejection(x.ErrConflict))
 	require.False(t, isRaftSemanticRejection(errors.Join(&raftSemanticRejection{"invalid"}, errors.New("I/O failure"))))

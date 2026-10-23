@@ -43,6 +43,20 @@ certificate and recomputation without a restored error, and retry after certific
 also verifies that runtime conflicts and joined uncertain errors do not qualify. This is a semantic
 replay proof; it does not by itself prove RPC-to-immediate-crash acknowledgement.
 
+The separate `verify_recovery.py` actual-server diagnostic then reproduces that committed rejection,
+crashes both servers immediately after its response, and repeats CommitNow plus immediate crashes
+three times. Fresh exact-index queries and UID reads verify all acknowledged values after each
+restart. No network/read/checkpoint drain occurs between ACK and the adjacent SIGKILL syscalls. The
+initial-root diagnostic replays from certificate index zero; it must not be described as a
+nonzero-certificate suffix test or a power-loss test. Failed HTTP-envelope/parser attempts are
+retained alongside the successful runs.
+
+The semantic test also fills the actual retained-entry budget while one transaction stays pending.
+The production proposal caller refuses another mutation, but a Delta decision passes debt admission.
+After applying the ordered abort, a new certificate restores mutation capacity. This proves the
+admission/decision/certificate mechanism; a live unavailable-Zero/old-transaction timeout campaign
+is still required for operational liveness.
+
 ## Remaining consumer completion sequence
 
 | Obligation                    | Existing path and required proof                                                                                                                                              | Status                                                   |
@@ -65,6 +79,31 @@ application metadata, atomically install the recovered root and Raft snapshot, a
 intermediate crash state before read health. The current `DB/Apply/Checkpoint/RecoveredCheckpoint`
 surface provides no such transfer operation. This is a named cross-owner obligation, not a reason to
 disable certificate checks.
+
+The selected peer-install state machine preserves both the posting and Raft authorities:
+
+1. Receive the complete checkpoint archive into a private WAL-directory staging file. Sync its
+   contents and directory; record bounded size and digest. Old CURRENT and replay history remain.
+2. After owner archive validation, the mandatory authorization callback checks source group,
+   application version, snapshot index/term/captured ConfState and frontiers. Persist and sync an
+   accepted install intent containing that exact snapshot, receiver identity and rewritten metadata,
+   current term/vote, and the stable archive reference/digest. No CURRENT switch precedes this
+   intent.
+3. The owner publishes the receiver-identity certificate and installed root atomically. Reader
+   admission/drain, posting callback drain and stale-write epoch rejection protect the DB pointer
+   replacement. Schema and posting caches are reloaded before read health.
+4. Complete the certificate-authorized local Raft snapshot install and sync its dependencies. Commit
+   initially reaches only the snapshot index; later Ready suffix entries must be durable before a
+   higher HardState commit can be published. Covered old history can now be removed.
+5. Restore semantic/dedup/Oracle frontiers from the receiver certificate, then remove the intent and
+   archive durably. Every startup with an intent completes steps 3–5 idempotently before normal
+   certificate validation and health. It recognizes an already installed matching root/metadata.
+
+An outgoing snapshot must retain its captured certificate ConfState; replacing it with live
+membership breaks that binding. A stale requested generation/digest must fail export explicitly.
+Crashes after archive sync, accepted intent, CURRENT publication, Raft snapshot sync, and intent
+cleanup are required red test cuts before this protocol can enable peer snapshot/rejoin. The intent,
+live reader/epoch barrier and consumer install path are not implemented by this plan text.
 
 The sibling Gomap implementation is replacing whole-image checkpoint copies with pinned retained
 roots. The prototype document's image-copy byte accounting and maintenance limits describe its
