@@ -40,3 +40,11 @@ proof do not replace the existing gRPC livebench promotion matrix, physical powe
 complete semantic replay, sustained resource equilibrium, or statistical qualification. Do not pool
 its numbers with older process-survival or differently shaped workloads. A failure remains a failure
 even when a later attempt passes.
+
+The committed [prototype report](PROTOTYPE_REPORT.md) and
+[normalized results](PROTOTYPE_RESULTS.json) record the complete comparison and failed attempts. The
+measured driver was `9036af092`; its retained samples close the certificate check-to-kill
+observation gap by independently matching the pre-kill certificate with actual recovery logs. The
+current driver additionally reads CURRENT after both processes have stopped and rejects a changed
+pointer. This assertion is after the timing window; the final report does not relabel the measured
+driver source.

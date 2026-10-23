@@ -30,6 +30,18 @@ membership changes are rejected. Background rollup is disabled; external-mode GC
 compaction, discard-floor advancement and MVCC pruning are rejected. Existing backend-specific
 operational routes remain fail closed.
 
+The validated server path is successful fresh inserts and reads. External mode currently terminates
+on every semantic apply error, including an ordinary transaction conflict. Replaying a persisted
+rejection may therefore repeat that failure. This is safe refusal rather than normal mutation error
+availability, and general conflict/rejection recovery is an explicit production blocker. The final
+protocol must distinguish deterministic semantic rejection from an uncertain partial storage
+failure: represent rejection/abort as an ordered replayable outcome, carry the needed transaction
+and retry disposition in certified application state, and continue visibility only after the
+abort/no-op is complete. Ambiguous partial writes still require handle poisoning and recovery. It
+must not simply ignore errors or advance the certified index. Validate conflicts, rejected
+multi-edge mutations, abort races, duplicate proposals and restart at each disposition boundary
+before broadening support.
+
 Both normal TreeDB selectors and this prototype explicitly select `cow_ordered`.
 `PostingStoreRuntimeStatus` identifies the prototype as `raft_checkpoint`, with
 `durable_commits=false`: a TreeDB command-WAL fsync is not its acknowledgement boundary. The

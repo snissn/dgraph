@@ -225,6 +225,13 @@ def main():
         zero.kill()
         zero.wait(timeout=10)
         result["kill_signal"] = "SIGKILL Alpha and Zero"
+        if args.mode == "raft_checkpoint":
+            # Check after the writer has stopped: a checkpoint could otherwise
+            # advance between the last validation query and SIGKILL.
+            result["certificate_after_kill"] = certificate()
+            if result["certificate_after_kill"]["pointer"] != result["certificate_before_kill"]["pointer"]:
+                result["acknowledged_suffix_outside_certificate"] = False
+                raise RuntimeError("certificate advanced before SIGKILL; suffix proof unavailable")
         restart_began = time.monotonic()
         zero = start("zero-restart", zero_args)
         healthy(zero, f"http://localhost:{6080 + args.zero_offset}")

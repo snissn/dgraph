@@ -1,0 +1,543 @@
+{
+  "status": "VALIDATED_SUPPORTED_PATH_PROTOTYPE_NOT_PRODUCTION_QUALIFICATION",
+  "manifest": {
+    "gomap": {
+      "head": "2cb705090aa77da14bb0cf4afc8e9b185115e8f8",
+      "status": "",
+      "branch": "codex/5204-raft-checkpoint-prototype"
+    },
+    "dgraph": {
+      "head": "c3b057cd7d26da79c36007504734c45ac7ff690e",
+      "status": "",
+      "branch": "codex/34-raft-checkpoint-prototype"
+    },
+    "env": {
+      "GOROOT": "/mnt/fast4tb/gomap-5139-resume-20261017/toolchain-download/golang.org/toolchain@v0.0.1-go1.26.9.linux-amd64",
+      "GOTOOLCHAIN": "local",
+      "GOWORK": "off",
+      "CGO_ENABLED": "1",
+      "GOMAXPROCS": "2",
+      "GOFLAGS": "-p=2",
+      "TMPDIR": "/mnt/fast4tb/gomap-raft-checkpoint-prototype-20261023/tmp",
+      "GOCACHE": "/mnt/fast4tb/gomap-orderedmem-native-20261021/cache/go-build",
+      "GOMODCACHE": "/mnt/fast4tb/go/pkg/mod"
+    },
+    "toolchain": "go version go1.26.9 linux/amd64",
+    "matrix": {
+      "diagnostic_only": true,
+      "order": ["durable", "raft_checkpoint", "badger", "badger", "raft_checkpoint", "durable"],
+      "ops": 5000,
+      "dataset": 500,
+      "concurrency": 4,
+      "mix": {
+        "point_read": 60,
+        "one_hop_read": 20,
+        "write_insert": 20
+      },
+      "survival": "both Zero and Alpha filesystem",
+      "recovery": "SIGKILL both then verify acknowledged values and fixture edges",
+      "fresh_ports": "zero offset 20000+100*i; alpha offset 21000+100*i, i=1..6"
+    },
+    "recorded_utc": "2026-10-23T07:21:00.286852+00:00",
+    "binary_source_dgraph": "c3b057cd7d26da79c36007504734c45ac7ff690e",
+    "driver_source_dgraph": "9036af092b60548b048a95ba51373bcce2b2a936",
+    "driver_status": "",
+    "driver_changes_from_binary": "Only Python port probe SO_REUSEADDR; server product source unchanged",
+    "binary_sha256": "f5b4802a1d2aba02e4292baeaa57294befc199de3da31019d81a443e558c01b7",
+    "driver_sha256": "94a73363ac6a034d704aee61f3867e50c70c3c4cc72c5316ac68f7169a6b538f",
+    "prior_campaign": "matched-execution.json: first durable success; five port-preflight failures; retained, not pooled"
+  },
+  "rows": [
+    {
+      "success": true,
+      "ops_per_second": 230.20004404171684,
+      "seconds": 21.720239111222327,
+      "recovery_seconds": 10.209000945091248,
+      "validated_nodes": 1520,
+      "error": null,
+      "attempt": "matched-v2-01-durable",
+      "mode": "durable",
+      "binary_sha256": "f5b4802a1d2aba02e4292baeaa57294befc199de3da31019d81a443e558c01b7",
+      "latency_ms": {
+        "one_hop_read": {
+          "count": 1000,
+          "p50": 14.414092525839806,
+          "p95": 27.412804774940014,
+          "p99": 33.90365559607744
+        },
+        "point_read": {
+          "count": 3000,
+          "p50": 12.892315164208412,
+          "p95": 26.1253509670496,
+          "p99": 32.319399528205395
+        },
+        "write": {
+          "count": 1000,
+          "p50": 26.00266318768263,
+          "p95": 40.05051217973232,
+          "p99": 48.14897384494543
+        }
+      },
+      "memstats_interval_per_op": {
+        "TotalAlloc": 130855.976,
+        "Mallocs": 916.4822,
+        "HeapAlloc_after": 1498646312,
+        "NumGC_delta": 0
+      },
+      "treedb_counter_interval": {
+        "treedb.command_wal.file_sync.calls_total": 2428,
+        "treedb.command_wal.file_sync.ns_total": 14884943608,
+        "treedb.command_wal.sync.count_total": 2420,
+        "treedb.public.batch.write_sync.calls_total": 2446,
+        "treedb.public.checkpoint.calls_total": 0,
+        "treedb.public.checkpoint.ns_total": 0
+      },
+      "checksums_match": true
+    },
+    {
+      "success": true,
+      "ops_per_second": 420.7629648234716,
+      "seconds": 11.883175131864846,
+      "recovery_seconds": 5.844920376315713,
+      "validated_nodes": 1521,
+      "error": null,
+      "attempt": "matched-v2-02-raft_checkpoint",
+      "mode": "raft_checkpoint",
+      "binary_sha256": "f5b4802a1d2aba02e4292baeaa57294befc199de3da31019d81a443e558c01b7",
+      "latency_ms": {
+        "one_hop_read": {
+          "count": 1000,
+          "p50": 7.193741388618946,
+          "p95": 12.219441123306751,
+          "p99": 15.83572756499052
+        },
+        "point_read": {
+          "count": 3000,
+          "p50": 6.844508461654186,
+          "p95": 12.042619287967682,
+          "p99": 14.393861405551434
+        },
+        "write": {
+          "count": 1000,
+          "p50": 15.60814119875431,
+          "p95": 20.567767322063446,
+          "p99": 24.524026550352573
+        }
+      },
+      "memstats_interval_per_op": {
+        "TotalAlloc": 116851.584,
+        "Mallocs": 840.597,
+        "HeapAlloc_after": 1208979040,
+        "NumGC_delta": 1
+      },
+      "treedb_counter_interval": {
+        "treedb.command_wal.file_sync.calls_total": 0,
+        "treedb.command_wal.file_sync.ns_total": 0,
+        "treedb.command_wal.sync.count_total": 0,
+        "treedb.public.batch.write_sync.calls_total": 0,
+        "treedb.public.checkpoint.calls_total": 3,
+        "treedb.public.checkpoint.ns_total": 96504929
+      },
+      "checksums_match": true,
+      "suffix_audit": {
+        "passed": true,
+        "certified_index": 3082,
+        "oracle": 4883,
+        "recovered_cuts": [["3082", "4883"]],
+        "replay_through": 3873,
+        "image_bytes": 274970,
+        "note": "Actual restart log agrees with prekill certificate; replay precedes health. Kill follows validation, not immediately client ACK."
+      }
+    },
+    {
+      "success": true,
+      "ops_per_second": 315.8392897790344,
+      "seconds": 15.830836003646255,
+      "recovery_seconds": 5.742816078476608,
+      "validated_nodes": 1520,
+      "error": null,
+      "attempt": "matched-v2-03-badger",
+      "mode": "badger",
+      "binary_sha256": "f5b4802a1d2aba02e4292baeaa57294befc199de3da31019d81a443e558c01b7",
+      "latency_ms": {
+        "one_hop_read": {
+          "count": 1000,
+          "p50": 10.96830703318119,
+          "p95": 17.14110467582941,
+          "p99": 21.533794701099396
+        },
+        "point_read": {
+          "count": 3000,
+          "p50": 10.745469480752945,
+          "p95": 17.496279440820217,
+          "p99": 20.73236834257841
+        },
+        "write": {
+          "count": 1000,
+          "p50": 18.810784444212914,
+          "p95": 27.17134077101946,
+          "p99": 32.06892032176256
+        }
+      },
+      "memstats_interval_per_op": {
+        "TotalAlloc": 87776.2144,
+        "Mallocs": 861.8922,
+        "HeapAlloc_after": 1279980880,
+        "NumGC_delta": 1
+      },
+      "treedb_counter_interval": {
+        "treedb.command_wal.file_sync.calls_total": 0,
+        "treedb.command_wal.file_sync.ns_total": 0,
+        "treedb.command_wal.sync.count_total": 0,
+        "treedb.public.batch.write_sync.calls_total": 0,
+        "treedb.public.checkpoint.calls_total": 0,
+        "treedb.public.checkpoint.ns_total": 0
+      },
+      "checksums_match": true
+    },
+    {
+      "success": true,
+      "ops_per_second": 315.776351119478,
+      "seconds": 15.833991311490536,
+      "recovery_seconds": 5.743061760440469,
+      "validated_nodes": 1520,
+      "error": null,
+      "attempt": "matched-v2-04-badger",
+      "mode": "badger",
+      "binary_sha256": "f5b4802a1d2aba02e4292baeaa57294befc199de3da31019d81a443e558c01b7",
+      "latency_ms": {
+        "one_hop_read": {
+          "count": 1000,
+          "p50": 11.035471223294735,
+          "p95": 18.299774266779423,
+          "p99": 22.765963338315487
+        },
+        "point_read": {
+          "count": 3000,
+          "p50": 10.4203587397933,
+          "p95": 17.37875957041979,
+          "p99": 21.80885337293148
+        },
+        "write": {
+          "count": 1000,
+          "p50": 18.797368742525578,
+          "p95": 26.643400080502033,
+          "p99": 31.82933386415243
+        }
+      },
+      "memstats_interval_per_op": {
+        "TotalAlloc": 88013.3888,
+        "Mallocs": 865.1764,
+        "HeapAlloc_after": 1281888712,
+        "NumGC_delta": 1
+      },
+      "treedb_counter_interval": {
+        "treedb.command_wal.file_sync.calls_total": 0,
+        "treedb.command_wal.file_sync.ns_total": 0,
+        "treedb.command_wal.sync.count_total": 0,
+        "treedb.public.batch.write_sync.calls_total": 0,
+        "treedb.public.checkpoint.calls_total": 0,
+        "treedb.public.checkpoint.ns_total": 0
+      },
+      "checksums_match": true
+    },
+    {
+      "success": true,
+      "ops_per_second": 421.89931411245533,
+      "seconds": 11.851168828085065,
+      "recovery_seconds": 5.84383799135685,
+      "validated_nodes": 1521,
+      "error": null,
+      "attempt": "matched-v2-05-raft_checkpoint",
+      "mode": "raft_checkpoint",
+      "binary_sha256": "f5b4802a1d2aba02e4292baeaa57294befc199de3da31019d81a443e558c01b7",
+      "latency_ms": {
+        "one_hop_read": {
+          "count": 1000,
+          "p50": 6.867662072181702,
+          "p95": 12.40893267095089,
+          "p99": 16.40545390546322
+        },
+        "point_read": {
+          "count": 3000,
+          "p50": 6.587697193026543,
+          "p95": 11.924445629119873,
+          "p99": 15.426134690642357
+        },
+        "write": {
+          "count": 1000,
+          "p50": 15.616587363183498,
+          "p95": 20.59486322104931,
+          "p99": 51.93180777132511
+        }
+      },
+      "memstats_interval_per_op": {
+        "TotalAlloc": 116952.7856,
+        "Mallocs": 840.7486,
+        "HeapAlloc_after": 1438714208,
+        "NumGC_delta": 0
+      },
+      "treedb_counter_interval": {
+        "treedb.command_wal.file_sync.calls_total": 0,
+        "treedb.command_wal.file_sync.ns_total": 0,
+        "treedb.command_wal.sync.count_total": 0,
+        "treedb.public.batch.write_sync.calls_total": 0,
+        "treedb.public.checkpoint.calls_total": 3,
+        "treedb.public.checkpoint.ns_total": 104691539
+      },
+      "checksums_match": true,
+      "suffix_audit": {
+        "passed": true,
+        "certified_index": 3078,
+        "oracle": 4865,
+        "recovered_cuts": [["3078", "4865"]],
+        "replay_through": 3881,
+        "image_bytes": 273356,
+        "note": "Actual restart log agrees with prekill certificate; replay precedes health. Kill follows validation, not immediately client ACK."
+      }
+    },
+    {
+      "success": true,
+      "ops_per_second": 238.00307691293264,
+      "seconds": 21.008131763897836,
+      "recovery_seconds": 9.68582493532449,
+      "validated_nodes": 1520,
+      "error": null,
+      "attempt": "matched-v2-06-durable",
+      "mode": "durable",
+      "binary_sha256": "f5b4802a1d2aba02e4292baeaa57294befc199de3da31019d81a443e558c01b7",
+      "latency_ms": {
+        "one_hop_read": {
+          "count": 1000,
+          "p50": 13.877209275960922,
+          "p95": 25.77904798090458,
+          "p99": 29.96123395860195
+        },
+        "point_read": {
+          "count": 3000,
+          "p50": 12.706272304058075,
+          "p95": 24.835526011884212,
+          "p99": 29.127925634384155
+        },
+        "write": {
+          "count": 1000,
+          "p50": 25.568392127752304,
+          "p95": 37.84067463129759,
+          "p99": 43.545180931687355
+        }
+      },
+      "memstats_interval_per_op": {
+        "TotalAlloc": 125817.5344,
+        "Mallocs": 914.2776,
+        "HeapAlloc_after": 1473250160,
+        "NumGC_delta": 0
+      },
+      "treedb_counter_interval": {
+        "treedb.command_wal.file_sync.calls_total": 2418,
+        "treedb.command_wal.file_sync.ns_total": 14498002661,
+        "treedb.command_wal.sync.count_total": 2413,
+        "treedb.public.batch.write_sync.calls_total": 2450,
+        "treedb.public.checkpoint.calls_total": 0,
+        "treedb.public.checkpoint.ns_total": 0
+      },
+      "checksums_match": true
+    }
+  ],
+  "all_attempts": [
+    {
+      "success": true,
+      "ops_per_second": 238.77329421610264,
+      "seconds": 20.940365280024707,
+      "recovery_seconds": 9.59199086856097,
+      "validated_nodes": 1520,
+      "error": null,
+      "attempt": "matched-01-durable",
+      "mode": "durable"
+    },
+    {
+      "success": false,
+      "ops_per_second": null,
+      "seconds": null,
+      "recovery_seconds": null,
+      "validated_nodes": null,
+      "error": "OSError(98, 'Address already in use')",
+      "attempt": "matched-02-raft_checkpoint",
+      "mode": "raft_checkpoint"
+    },
+    {
+      "success": false,
+      "ops_per_second": null,
+      "seconds": null,
+      "recovery_seconds": null,
+      "validated_nodes": null,
+      "error": "OSError(98, 'Address already in use')",
+      "attempt": "matched-03-badger",
+      "mode": "badger"
+    },
+    {
+      "success": false,
+      "ops_per_second": null,
+      "seconds": null,
+      "recovery_seconds": null,
+      "validated_nodes": null,
+      "error": "OSError(98, 'Address already in use')",
+      "attempt": "matched-04-badger",
+      "mode": "badger"
+    },
+    {
+      "success": false,
+      "ops_per_second": null,
+      "seconds": null,
+      "recovery_seconds": null,
+      "validated_nodes": null,
+      "error": "OSError(98, 'Address already in use')",
+      "attempt": "matched-05-raft_checkpoint",
+      "mode": "raft_checkpoint"
+    },
+    {
+      "success": false,
+      "ops_per_second": null,
+      "seconds": null,
+      "recovery_seconds": null,
+      "validated_nodes": null,
+      "error": "OSError(98, 'Address already in use')",
+      "attempt": "matched-06-durable",
+      "mode": "durable"
+    },
+    {
+      "success": true,
+      "ops_per_second": 230.20004404171684,
+      "seconds": 21.720239111222327,
+      "recovery_seconds": 10.209000945091248,
+      "validated_nodes": 1520,
+      "error": null,
+      "attempt": "matched-v2-01-durable",
+      "mode": "durable"
+    },
+    {
+      "success": true,
+      "ops_per_second": 420.7629648234716,
+      "seconds": 11.883175131864846,
+      "recovery_seconds": 5.844920376315713,
+      "validated_nodes": 1521,
+      "error": null,
+      "attempt": "matched-v2-02-raft_checkpoint",
+      "mode": "raft_checkpoint"
+    },
+    {
+      "success": true,
+      "ops_per_second": 315.8392897790344,
+      "seconds": 15.830836003646255,
+      "recovery_seconds": 5.742816078476608,
+      "validated_nodes": 1520,
+      "error": null,
+      "attempt": "matched-v2-03-badger",
+      "mode": "badger"
+    },
+    {
+      "success": true,
+      "ops_per_second": 315.776351119478,
+      "seconds": 15.833991311490536,
+      "recovery_seconds": 5.743061760440469,
+      "validated_nodes": 1520,
+      "error": null,
+      "attempt": "matched-v2-04-badger",
+      "mode": "badger"
+    },
+    {
+      "success": true,
+      "ops_per_second": 421.89931411245533,
+      "seconds": 11.851168828085065,
+      "recovery_seconds": 5.84383799135685,
+      "validated_nodes": 1521,
+      "error": null,
+      "attempt": "matched-v2-05-raft_checkpoint",
+      "mode": "raft_checkpoint"
+    },
+    {
+      "success": true,
+      "ops_per_second": 238.00307691293264,
+      "seconds": 21.008131763897836,
+      "recovery_seconds": 9.68582493532449,
+      "validated_nodes": 1520,
+      "error": null,
+      "attempt": "matched-v2-06-durable",
+      "mode": "durable"
+    },
+    {
+      "success": true,
+      "ops_per_second": 311.4908528615565,
+      "seconds": 16.051835725083947,
+      "recovery_seconds": 3.731035413220525,
+      "validated_nodes": 1520,
+      "error": null,
+      "attempt": "server-control-badger-01",
+      "mode": "badger"
+    },
+    {
+      "success": false,
+      "ops_per_second": null,
+      "seconds": null,
+      "recovery_seconds": null,
+      "validated_nodes": null,
+      "error": "RuntimeError(\"/mutate?commitNow=true: [{'message': 'Uid: [65536] cannot be greater than lease: [0]', 'extensions': {'code': 'ErrorInvalidRequest'}}]\")",
+      "attempt": "server-control-cow-01",
+      "mode": "durable"
+    },
+    {
+      "success": false,
+      "ops_per_second": 234.45300143236173,
+      "seconds": 21.326235831715167,
+      "recovery_seconds": null,
+      "validated_nodes": null,
+      "error": "RuntimeError(\"one-hop posting mismatch: {'uid': '0x1', 'bench_value': 'base-60', 'bench_next': {'uid': '0x41', 'bench_value': 'base-61'}}\")",
+      "attempt": "server-control-cow-02",
+      "mode": "durable"
+    },
+    {
+      "success": true,
+      "ops_per_second": 234.99152360003418,
+      "seconds": 21.27736321464181,
+      "recovery_seconds": 9.835363041609526,
+      "validated_nodes": 1520,
+      "error": null,
+      "attempt": "server-control-cow-03",
+      "mode": "durable"
+    },
+    {
+      "attempt": "server-smoke-01",
+      "success": false,
+      "ops_per_second": null,
+      "error": "No result.json; bootstrap/setup failed. See attempt logs and report."
+    },
+    {
+      "success": false,
+      "ops_per_second": null,
+      "seconds": null,
+      "recovery_seconds": null,
+      "validated_nodes": null,
+      "error": "RuntimeError('server exited 1; inspect server logs')",
+      "attempt": "server-smoke-02",
+      "mode": "raft_checkpoint"
+    },
+    {
+      "success": true,
+      "ops_per_second": 418.0153293146698,
+      "seconds": 11.961283831857145,
+      "recovery_seconds": 5.94227962102741,
+      "validated_nodes": 1521,
+      "error": null,
+      "attempt": "server-smoke-03",
+      "mode": "raft_checkpoint"
+    }
+  ],
+  "descriptive_mean_ops_per_second": {
+    "durable": 234.10156047732474,
+    "raft_checkpoint": 421.33113946796345,
+    "badger": 315.8078204492562
+  },
+  "ratios_of_means": {
+    "candidate_vs_cow": 1.79977928642972,
+    "candidate_vs_badger": 1.3341377641269103
+  }
+}
