@@ -99,6 +99,9 @@ def main():
         result["binary_sha256"] = file_hash(binary)
         for port in [5080 + args.zero_offset, 6080 + args.zero_offset, 7080 + args.alpha_offset, 8080 + args.alpha_offset, 9080 + args.alpha_offset]:
             with socket.socket() as check:
+                # Match the Go listener's reuse policy: recently stopped servers
+                # can leave TIME_WAIT connections without an active listener.
+                check.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 check.bind(("127.0.0.1", port))
         def start(name, command):
             log = (out / (name + ".log")).open("xb")
