@@ -118,6 +118,7 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 		return "", err
 	}
 	legacyPointCoverageGap := hasLegacyPointAppendCoverageGap(results)
+	alignedRecovery := results[0].Config.RecoveryProbe == RecoveryReadCommitRead
 	results = normalizeLegacyPointAppendCoverage(results)
 	sort.SliceStable(results, func(i, j int) bool {
 		left, right := results[i], results[j]
@@ -140,6 +141,9 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 		fmt.Fprintf(&b, "Resolved Zero/Alpha survival profile: **%s**. Startup and Alpha-restart configuration and posting-route witnesses are retained with each row. The recovery timer measures a clean Alpha restart while Zero stays running; this is not abrupt-crash or power-loss certification.\n\n", results[0].Config.SurvivalMode)
 	}
 	fmt.Fprintf(&b, "- Repeats per cell: %d\n- Workload fingerprint: `%s`\n- Logical parity and restart gate: **PASS**\n- Comparisons never mix durability classes.\n\n", repeats, results[0].Config.Fingerprint())
+	if alignedRecovery {
+		b.WriteString("The restart column retains `recovery_seconds`, the legacy HTTP-health boundary, which is not equivalent across backends. The additive read-ready and read/write-ready columns report `recovery_read_seconds` and `recovery_read_write_seconds`: elapsed time from the same Alpha exec boundary through full posting validation, then a new CommitNow ACK and verified fresh read. These are clean Alpha restart measurements with Zero alive, not abrupt-crash or power-loss certification.\n\n")
+	}
 	context := results[0].Context
 	fmt.Fprintf(&b, "- Host: `%s`; CPU: `%s`; RAM: `%.1f GiB`\n- Artifact/posting storage: `%s` (`%s`, %.1f GB), `%s` mounted at `%s`\n- Environment: `GOWORK=%s TMPDIR=%s GOMAXPROCS=%s GOFLAGS=%s`\n\n",
 		context.Host, context.CPU, float64(context.TotalRAMBytes)/(1024*1024*1024), context.Storage.Source,
@@ -151,14 +155,26 @@ func renderReport(results []Result, repeats int, profiles *ProfileArtifacts) (st
 		title := class[:1]
 		title = strings.ToUpper(title) + class[1:]
 		fmt.Fprintf(&b, "## %s durability\n\n", title)
-		b.WriteString("| Backend | Throughput median (ops/s) | min-max | CV | p50 median (ms) | p95 median (ms) | p99 median (ms) | restart median (s) |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
+		b.WriteString("| Backend | Throughput median (ops/s) | min-max | CV | p50 median (ms) | p95 median (ms) | p99 median (ms) | restart median (s) |")
+		if alignedRecovery {
+			b.WriteString(" read-ready median (s) | read/write-ready median (s) |")
+		}
+		b.WriteString("\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+		if alignedRecovery {
+			b.WriteString(" ---: | ---: |")
+		}
+		b.WriteString("\n")
 		med := map[string]float64{}
 		for _, backend := range []string{"badger", "treedb"} {
 			rs := by[backend+"/"+class]
 			through, p50, p95, p99, recovery := vectors(rs)
 			d := summarize(through)
 			med[backend] = d.median
-			fmt.Fprintf(&b, "| %s | %.2f | %.2f-%.2f | %.2f%% | %.3f | %.3f | %.3f | %.3f |\n", backend, d.median, d.min, d.max, d.cv, summarize(p50).median, summarize(p95).median, summarize(p99).median, summarize(recovery).median)
+			fmt.Fprintf(&b, "| %s | %.2f | %.2f-%.2f | %.2f%% | %.3f | %.3f | %.3f | %.3f |", backend, d.median, d.min, d.max, d.cv, summarize(p50).median, summarize(p95).median, summarize(p99).median, summarize(recovery).median)
+			if alignedRecovery {
+				fmt.Fprintf(&b, " %s | %s |", metricSummary(rs, "recovery_read_seconds", 3), metricSummary(rs, "recovery_read_write_seconds", 3))
+			}
+			b.WriteString("\n")
 		}
 		b.WriteString("\n| Backend | Alpha CPU median (s) | RSS/HWM median (MiB) | disk logical median (MiB) | disk allocated median (MiB) | logical write median (KiB) | write amp | GC cycles | flushes | checkpoints |\n| --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |\n")
 		for _, backend := range []string{"badger", "treedb"} {

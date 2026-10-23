@@ -2,11 +2,73 @@
 package livebench
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestRenderReportAddsAlignedRecoveryWithoutChangingLegacyColumn(t *testing.T) {
+	set := validSet(t, 2)
+	for i := range set {
+		r := &set[i]
+		r.Config.RecoveryProbe = RecoveryReadCommitRead
+		r.Metrics["recovery_read_seconds"] = Metric{Available: true, Value: float64(r.Repeat * 2), Unit: "seconds", Source: "full posting validation"}
+		r.Metrics["recovery_read_write_seconds"] = Metric{Available: true, Value: float64(r.Repeat * 4), Unit: "seconds", Source: "CommitNow ACK then fresh read"}
+	}
+	report, err := RenderReport(set, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"restart median (s) | read-ready median (s) | read/write-ready median (s)",
+		"1.000 | 3.000 (2/2) | 6.000 (2/2) |", "legacy HTTP-health boundary", "not equivalent across backends",
+		"`recovery_read_seconds`", "`recovery_read_write_seconds`", "not abrupt-crash or power-loss certification"} {
+		if !strings.Contains(report, want) {
+			t.Fatalf("aligned recovery report missing %q:\n%s", want, report)
+		}
+	}
+	legacy, err := RenderReport(validSet(t, 1), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, absent := range []string{"read-ready median", "read/write-ready median", "0.000 (0/1)"} {
+		if strings.Contains(legacy, absent) {
+			t.Fatalf("health-only results manufactured aligned readiness: %q", absent)
+		}
+	}
+}
+
+func TestRenderReportRejectsMixedOrInvalidAlignedRecovery(t *testing.T) {
+	for _, bad := range []string{"mixed probe", "missing read", "missing write", "nonfinite", "excluded"} {
+		t.Run(bad, func(t *testing.T) {
+			set := validSet(t, 1)
+			for i := range set {
+				set[i].Config.RecoveryProbe = RecoveryReadCommitRead
+				set[i].Metrics["recovery_read_seconds"] = Metric{Available: true, Value: 2, Unit: "seconds", Source: "validated read"}
+				set[i].Metrics["recovery_read_write_seconds"] = Metric{Available: true, Value: 3, Unit: "seconds", Source: "committed write then read"}
+			}
+			switch bad {
+			case "mixed probe":
+				set[0].Config.RecoveryProbe = ""
+			case "missing read":
+				delete(set[0].Metrics, "recovery_read_seconds")
+			case "missing write":
+				delete(set[0].Metrics, "recovery_read_write_seconds")
+			case "nonfinite":
+				m := set[0].Metrics["recovery_read_seconds"]
+				m.Value = math.NaN()
+				set[0].Metrics["recovery_read_seconds"] = m
+			case "excluded":
+				set[0].Context.Excluded = true
+				set[0].Context.ExclusionReason = "diagnostic only"
+			}
+			if _, err := RenderReport(set, 1); err == nil {
+				t.Fatalf("invalid recovery matrix %q rendered", bad)
+			}
+		})
+	}
+}
 
 func TestDiscoverProfileArtifactsRequiresCompleteNonEmptyFiles(t *testing.T) {
 	dir := t.TempDir()

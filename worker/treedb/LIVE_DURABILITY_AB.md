@@ -43,6 +43,15 @@ them. The `recovery_probe=read-commit-read-v1` configuration is fingerprinted so
 cannot silently pool with older health-only runs. This is a clean Alpha restart with Zero alive, not
 a crash or power-loss recovery measurement.
 
+Reports retain the original `restart median (s)` column for `recovery_seconds`. For a matrix with
+the aligned probe, they add `read-ready median (s)` and `read/write-ready median (s)` columns for
+the two readiness metrics, including available/total repeat counts. Compare these additive columns
+for the declared equivalent end-to-end boundaries; the legacy HTTP-health column is not a matched
+readiness comparison. Health-only matrices retain their original table and do not manufacture
+aligned times or zeros. Mixed probe fingerprints, missing/invalid aligned metrics and excluded
+diagnostic rows are rejected before reporting. Each column is an independent per-metric median, not
+a sequence of measurements from one representative repeat.
+
 Aggregation fails on an incomplete matrix, wrong backend or durability, workload mismatch, missing
 metric contract, setup/timed overlap, dirty or excluded run, cross-run
 revision/host/storage/environment mismatch, duplicate run ID, missing or duplicate per-cell repeat
