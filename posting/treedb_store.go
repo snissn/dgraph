@@ -738,18 +738,22 @@ func (s *TreeDBStore) commitSync(commitTs uint64, batch *treeDBMutationBatch, ro
 		}
 		return <-done
 	}
+	// Every admission path reserves capacity before lifecycleMu. Callback
+	// callers can already own every slot while waiting for this mutex.
+	s.acquireTreeDBCommitSlot()
 	s.lifecycleMu.Lock()
 	if s.closed.Load() || s.db == nil {
 		s.lifecycleMu.Unlock()
+		s.releaseTreeDBCommitSlot()
 		s.releaseMutationBatch(batch)
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
 	}
 	if rootEpoch != s.rootEpoch.Load() {
 		s.lifecycleMu.Unlock()
+		s.releaseTreeDBCommitSlot()
 		s.releaseMutationBatch(batch)
 		return fmt.Errorf("commit across posting root install: %w", ErrTreeDBTxnClosed)
 	}
-	s.acquireTreeDBCommitSlot()
 	if !s.queueActive {
 		s.commitWG.Add(1)
 		s.lifecycleMu.Unlock()
