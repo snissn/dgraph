@@ -468,7 +468,11 @@ func waitHTTP(ctx context.Context, url string, timeout time.Duration) error {
 	}
 }
 func client(addr string) (*dgo.Dgraph, error) {
-	return dgo.NewClient(addr, dgo.WithGrpcOption(grpc.WithTransportCredentials(insecure.NewCredentials())))
+	// Full posting verification returns the entire dataset before and after
+	// restart. Keep it intact instead of truncating at gRPC's 4 MiB default.
+	return dgo.NewClient(addr,
+		dgo.WithGrpcOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
+		dgo.WithGrpcOption(grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(256<<20))))
 }
 
 const dgraphRPCTimeout = 30 * time.Second

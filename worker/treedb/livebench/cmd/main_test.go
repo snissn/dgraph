@@ -476,6 +476,56 @@ type operationTestServer struct {
 	query func(context.Context, *api.Request) (*api.Response, error)
 }
 
+func TestClientValidatesLargePostingResponseAfterReconnect(t *testing.T) {
+	const count = 80000
+	value := strings.Repeat("v", 256)
+	nodes := make([]queryNode, count)
+	expected := make(map[string]expectedNode, count)
+	for i := range nodes {
+		uid := fmt.Sprintf("0x%x", i+1)
+		nodes[i] = queryNode{UID: uid, Value: value}
+		expected[uid] = expectedNode{Value: value}
+	}
+	raw, err := json.Marshal(struct {
+		Q []queryNode `json:"q"`
+	}{Q: nodes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) <= 21763109 {
+		t.Fatalf("response %d bytes does not cover the observed qualification failure", len(raw))
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := grpc.NewServer()
+	api.RegisterDgraphServer(server, &operationTestServer{query: func(_ context.Context, req *api.Request) (*api.Response, error) {
+		if req.Query != postingValidationQuery(count) {
+			return nil, status.Error(codes.InvalidArgument, "full posting validation query required")
+		}
+		return &api.Response{Json: raw}, nil
+	}})
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
+	var firstChecksum string
+	for attempt := 0; attempt < 2; attempt++ {
+		dg, err := client(listener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		checksum, gotCount, validationErr := validatePosting(context.Background(), dg, expected)
+		dg.Close()
+		if validationErr != nil {
+			t.Fatalf("client attempt %d: %v", attempt, validationErr)
+		}
+		if gotCount != count || checksum == "" || (attempt > 0 && checksum != firstChecksum) {
+			t.Fatalf("client attempt %d: count=%d checksum=%q first=%q", attempt, gotCount, checksum, firstChecksum)
+		}
+		firstChecksum = checksum
+	}
+}
+
 func (s *operationTestServer) CheckVersion(context.Context, *api.Check) (*api.Version, error) {
 	return &api.Version{}, nil
 }
