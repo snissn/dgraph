@@ -168,7 +168,7 @@ func TestValidatePostingRowsRejectsUnexpectedDuplicateAndOmittedNodes(t *testing
 }
 
 func TestBadgerFlushMetricIsUnavailable(t *testing.T) {
-	m := metrics("badger", 1, 2, 3, 4,
+	m := metrics("badger", "", 1, 2, 3, 4,
 		map[string]float64{"badger_write_num_vlog": 1},
 		map[string]float64{"badger_write_num_vlog": 10}, nil, nil)["flushes"]
 	if m.Available || !strings.Contains(m.Reason, "not a semantic flush counter") {
@@ -187,7 +187,7 @@ func TestTreeDBDiagnosticMetricsPreserveDeltasAndHighWaterGauges(t *testing.T) {
 		"treedb.command_wal.group_commit.group_size_max": 4,
 		"treedb.cache.point_successor.calls_total":       25,
 	}
-	got := metrics("treedb", 1, 2, 3, 4, nil, nil, before, after)
+	got := metrics("treedb", "store_wal", 1, 2, 3, 4, nil, nil, before, after)
 	if metric := got["treedb_group_commit_commits"]; !metric.Available || metric.Value != 7 || !strings.Contains(metric.Source, "timed-phase delta") {
 		t.Fatalf("group commits = %+v", metric)
 	}
@@ -211,7 +211,7 @@ func TestTreeDBLogicalWriteBytesFailClosedWhenDirectPointRouteIsActive(t *testin
 		"treedb.command_wal.public_batch.set.bytes_total": 20,
 		"treedb.command_wal.append.point.count_total":     6,
 	}
-	got := metrics("treedb", 1, 2, 3, 4, nil, nil, before, after)
+	got := metrics("treedb", "store_wal", 1, 2, 3, 4, nil, nil, before, after)
 	if metric := got["write_bytes"]; metric.Available || !strings.Contains(metric.Reason, "direct-point") {
 		t.Fatalf("logical write bytes = %+v", metric)
 	}
@@ -221,7 +221,7 @@ func TestTreeDBLogicalWriteBytesFailClosedWhenDirectPointRouteIsActive(t *testin
 }
 
 func TestBadgerTreeDBDiagnosticsAreExplicitlyUnavailable(t *testing.T) {
-	got := metrics("badger", 1, 2, 3, 4, nil, nil, nil, nil)
+	got := metrics("badger", "", 1, 2, 3, 4, nil, nil, nil, nil)
 	for _, diagnostic := range treeDBDiagnostics {
 		metric := got[diagnostic.metric]
 		if metric.Available || metric.Reason != "TreeDB-only diagnostic" {
@@ -501,6 +501,48 @@ func operationClient(t *testing.T, query func(context.Context, *api.Request) (*a
 	return dg
 }
 
+func TestRecoveryProbeRequiresCommittedWriteAndFreshVerifiedRead(t *testing.T) {
+	for _, outcome := range []string{"ok", "uncommitted", "missing uid", "old read", "wrong value", "write error"} {
+		t.Run(outcome, func(t *testing.T) {
+			calls := 0
+			dg := operationClient(t, func(_ context.Context, req *api.Request) (*api.Response, error) {
+				calls++
+				if len(req.Mutations) != 0 {
+					if !req.CommitNow || len(req.Mutations) != 1 || !strings.Contains(string(req.Mutations[0].SetNquads), "_:recovery") {
+						t.Errorf("probe is not a new CommitNow mutation: %+v", req)
+					}
+					if outcome == "write error" {
+						return nil, status.Error(codes.Unavailable, "not writable")
+					}
+					resp := &api.Response{Txn: &api.TxnContext{StartTs: 11, CommitTs: 12}, Uids: map[string]string{"recovery": "0x42"}}
+					if outcome == "uncommitted" {
+						resp.Txn.CommitTs = 0
+					}
+					if outcome == "missing uid" {
+						resp.Uids = nil
+					}
+					return resp, nil
+				}
+				if calls != 2 || !req.ReadOnly || req.Vars["$id"] != "0x42" {
+					t.Errorf("expected fresh read after committed probe: %+v", req)
+				}
+				resp := &api.Response{Txn: &api.TxnContext{StartTs: 13}, Json: []byte(`{"q":[{"uid":"0x42","bench.value":"recovery-probe-v1"}]}`)}
+				if outcome == "old read" {
+					resp.Txn.StartTs = 11
+				}
+				if outcome == "wrong value" {
+					resp.Json = []byte(`{"q":[{"uid":"0x42","bench.value":"wrong"}]}`)
+				}
+				return resp, nil
+			})
+			err := validateRecoveryWrite(context.Background(), dg)
+			if (err == nil) != (outcome == "ok") {
+				t.Fatalf("outcome=%s err=%v", outcome, err)
+			}
+		})
+	}
+}
+
 func TestOperationDiagnosticRecordsIdentityPhasesAndFullWall(t *testing.T) {
 	var writes atomic.Int64
 	dg := operationClient(t, func(ctx context.Context, req *api.Request) (*api.Response, error) {
@@ -757,7 +799,7 @@ func TestStorageDiagnosticSameWalkAndDefaultOff(t *testing.T) {
 	}
 	r := storageTestResult(root)
 	r.TimedFinished = d.TimedFinished
-	r.Metrics = metrics("treedb", 0, 0, logical, allocated, nil, nil, nil, nil)
+	r.Metrics = metrics("treedb", "store_wal", 0, 0, logical, allocated, nil, nil, nil, nil)
 	sidecar := filepath.Join(filepath.Dir(filepath.Dir(root)), "storage.json")
 	if err := writeStorageDiagnostic(sidecar, d, r); err != nil {
 		t.Fatal(err)
@@ -802,7 +844,7 @@ func TestStorageDiagnosticRejectsInvalidAndRetainsPartial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.Metrics = metrics("treedb", 0, 0, l, a, nil, nil, nil, nil)
+	r.Metrics = metrics("treedb", "store_wal", 0, 0, l, a, nil, nil, nil, nil)
 	d.WriteStartedAt = time.Now().UTC()
 	raw, _ := json.Marshal(d)
 	for name, mutate := range map[string]func(*storageDiagnostic){
@@ -844,7 +886,7 @@ func TestStorageDiagnosticRejectsInvalidAndRetainsPartial(t *testing.T) {
 		t.Fatal("acceptance result accepted")
 	}
 	wrong = r
-	wrong.Metrics = metrics("treedb", 0, 0, l+1, a, nil, nil, nil, nil)
+	wrong.Metrics = metrics("treedb", "store_wal", 0, 0, l+1, a, nil, nil, nil, nil)
 	if err := validateStorageDiagnostic(d, wrong); err == nil {
 		t.Fatal("native total mismatch accepted")
 	}
@@ -1083,7 +1125,7 @@ func TestDiagnosticResolvedWritesAndFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.Metrics = metrics("treedb", 0, 0, logical, allocated, nil, nil, nil, nil)
+	r.Metrics = metrics("treedb", "store_wal", 0, 0, logical, allocated, nil, nil, nil, nil)
 	path := filepath.Join(alias, "storage.json")
 	if err := writeStorageDiagnostic(path, d, r); err != nil {
 		t.Fatal(err)
@@ -1259,5 +1301,26 @@ func TestDiagnosticExclusionCoversEndpointWithoutOperations(t *testing.T) {
 	markDiagnostics(&r, options{cpuProfile: "cpu.pprof", endpointDiagnostic: "endpoints.json"})
 	if !r.Context.Excluded || len(r.Context.Contaminants) != 2 || !strings.HasPrefix(r.Context.ExclusionReason, "existing contamination; ") {
 		t.Fatalf("lost existing contamination: %+v", r.Context)
+	}
+}
+
+func TestTreeDBMissingLogicalCounterHasUnavailableReason(t *testing.T) {
+	stats := map[string]float64{"treedb.command_wal.append.point.count_total": 0}
+	m := metrics("treedb", "store_wal", 1, 2, 3, 4, nil, nil, stats, stats)["write_bytes"]
+	if m.Available || m.Reason == "" {
+		t.Fatalf("absent logical byte counter must remain explicitly unavailable: %+v", m)
+	}
+}
+
+func TestRaftCheckpointReportsAbsentPostingWALGroups(t *testing.T) {
+	got := metrics("treedb", "raft_checkpoint", 1, 2, 3, 4, nil, nil, nil, nil)
+	for _, name := range []string{"treedb_group_commit_groups", "treedb_group_commit_commits", "treedb_group_commit_participants", "treedb_group_commit_syncs", "treedb_group_commit_group_size_max"} {
+		m := got[name]
+		if m.Available || m.Reason != livebench.RaftCheckpointNoCommandWAL || m.Source == "" || m.Unit != "count" {
+			t.Fatalf("%s must be explicitly absent for posting-WAL-disabled policy: %+v", name, m)
+		}
+	}
+	if got["treedb_value_log_file_syncs"].Reason == livebench.RaftCheckpointNoCommandWAL {
+		t.Fatal("persistent value-log syncs were incorrectly classified as posting WAL")
 	}
 }

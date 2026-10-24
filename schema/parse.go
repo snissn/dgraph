@@ -410,6 +410,18 @@ func HasTokenizerOrVectorIndexSpec(update *pb.SchemaUpdate) bool {
 	return len(update.Tokenizer) > 0 || len(update.IndexSpecs) > 0
 }
 
+// ValidateTokenizers verifies tokenizer definitions for structured schema input.
+// Callers accepting schema protobufs directly must apply the same checks as the
+// textual parser before invoking index builders.
+func ValidateTokenizers(updates []*pb.SchemaUpdate) error {
+	for _, update := range updates {
+		if update == nil {
+			return errors.Errorf("Nil schema update")
+		}
+	}
+	return resolveTokenizers(updates)
+}
+
 // resolveTokenizers resolves default tokenizers and verifies tokenizers definitions.
 func resolveTokenizers(updates []*pb.SchemaUpdate) error {
 	for _, schema := range updates {

@@ -28,6 +28,9 @@ const (
 	// TreeDBCommitRelaxed acknowledges after atomic publication without an
 	// fsync boundary.
 	TreeDBCommitRelaxed
+	// TreeDBCommitExternallyRecoverable requires an explicit external recovery
+	// owner; completion means installed materialization, backed by retained Raft.
+	TreeDBCommitExternallyRecoverable
 )
 
 var (
@@ -68,22 +71,31 @@ const (
 // TreeDBStore owns exactly one TreeDB handle and exactly one external-MVCC
 // owner. Close is idempotent and closes that handle at most once.
 type TreeDBStore struct {
+	external   *treedb.ExternalRecovery
 	db         *treedb.DB
 	mvcc       *mvcc.Store
 	commitMode mvcc.CommitMode
 	mode       TreeDBCommitMode
 	durability string
 
-	lifecycleMu  sync.Mutex
-	commitWG     sync.WaitGroup
-	workerWG     sync.WaitGroup
-	queueActive  bool
-	commitQueue  chan treeDBCommitRequest
-	commitSlots  chan struct{}
-	mutationPool sync.Pool
-	closeOnce    sync.Once
-	closeErr     error
-	closed       atomic.Bool
+	lifecycleMu       sync.Mutex
+	rootGate          sync.RWMutex // external snapshot install drains read handles
+	rootEpoch         atomic.Uint64
+	raftReadMu        sync.Mutex
+	raftReadPins      uint64
+	raftReadChanged   chan struct{}
+	raftReadDraining  bool
+	raftSemanticFloor uint64
+	raftPending       RaftPendingManifest
+	commitWG          sync.WaitGroup
+	workerWG          sync.WaitGroup
+	queueActive       bool
+	commitQueue       chan treeDBCommitRequest
+	commitSlots       chan struct{}
+	mutationPool      sync.Pool
+	closeOnce         sync.Once
+	closeErr          error
+	closed            atomic.Bool
 
 	// beforeCommitForTest lets adapter tests hold an admitted commit without
 	// depending on storage timing. Production stores leave it nil.
@@ -102,6 +114,9 @@ type TreeDBStore struct {
 // canonical production profiles all support an explicit WriteSync opt-up even
 // when their ordinary acknowledgement policy is relaxed.
 func OpenTreeDBStore(opts treedb.Options, mode TreeDBCommitMode) (*TreeDBStore, error) {
+	if mode == TreeDBCommitExternallyRecoverable {
+		return nil, fmt.Errorf("external recovery mode requires OpenRaftTreeDBStore")
+	}
 	commitMode, err := toMVCCCommitMode(mode)
 	if err != nil {
 		return nil, err
@@ -116,13 +131,15 @@ func OpenTreeDBStore(opts treedb.Options, mode TreeDBCommitMode) (*TreeDBStore, 
 		commitQueue: make(chan treeDBCommitRequest, treeDBCommitQueueCapacity),
 		commitSlots: make(chan struct{}, treeDBCommitOwnershipLimit),
 	}
-	store.mutationPool.New = func() any {
-		return &treeDBMutationBatch{
-			mutations: make([]mvcc.Mutation, 0, 16),
-			arena:     make([]byte, 0, 4<<10),
-		}
-	}
+	store.mutationPool.New = newTreeDBMutationBatch
 	return store, nil
+}
+
+func newTreeDBMutationBatch() any {
+	return &treeDBMutationBatch{
+		mutations: make([]mvcc.Mutation, 0, 16),
+		arena:     make([]byte, 0, 4<<10),
+	}
 }
 
 func toMVCCCommitMode(mode TreeDBCommitMode) (mvcc.CommitMode, error) {
@@ -137,12 +154,17 @@ func toMVCCCommitMode(mode TreeDBCommitMode) (mvcc.CommitMode, error) {
 }
 
 func (s *TreeDBStore) NewReadTxn(readTs uint64) ReadTxn {
-	return &treeDBReadTxn{store: s, readTs: readTs, iterators: make(map[*treeDBIterator]struct{})}
+	tracked := s.mode == TreeDBCommitExternallyRecoverable
+	if tracked {
+		s.rootGate.RLock()
+	}
+	return &treeDBReadTxn{store: s, readTs: readTs, rootReadHeld: tracked,
+		iterators: make(map[*treeDBIterator]struct{})}
 }
 
 func (s *TreeDBStore) NewWriteTxn() WriteTxn {
 	batch := s.mutationPool.Get().(*treeDBMutationBatch)
-	return &treeDBWriteTxn{store: s, batch: batch}
+	return &treeDBWriteTxn{store: s, batch: batch, rootEpoch: s.rootEpoch.Load()}
 }
 
 func (s *TreeDBStore) IsClosed() bool {
@@ -165,11 +187,19 @@ func (s *TreeDBStore) Close() error {
 		s.commitWG.Wait()
 		close(s.commitQueue)
 		s.workerWG.Wait()
+		if s.external != nil {
+			s.rootGate.Lock()
+			defer s.rootGate.Unlock()
+		}
 
 		s.lifecycleMu.Lock()
 		defer s.lifecycleMu.Unlock()
 		if s.db != nil {
-			s.closeErr = s.db.Close()
+			if s.external != nil {
+				s.closeErr = s.external.Close()
+			} else {
+				s.closeErr = s.db.Close()
+			}
 		}
 	})
 	return s.closeErr
@@ -232,6 +262,22 @@ func (s *TreeDBStore) ValueLogGC(ctx context.Context, opts treedb.ValueLogGCOpti
 	if s.IsClosed() || s.db == nil {
 		return treedb.ValueLogGCStats{}, fmt.Errorf("value-log GC posting TreeDB: %w", treedb.ErrClosed)
 	}
+	if s.external != nil {
+		// GC changes physical reachability, not the semantic MVCC floor. The
+		// owner's current/previous retained roots participate in the maintained
+		// recoverable-root scan. Keep the DB pointer and owner lifecycle pinned
+		// for the whole pass, including any metadata publication.
+		var stats treedb.ValueLogGCStats
+		err := s.external.Apply(func() error {
+			var err error
+			stats, err = s.db.ValueLogGC(ctx, opts)
+			return err
+		})
+		if err != nil {
+			return stats, fmt.Errorf("value-log GC posting TreeDB: %w", err)
+		}
+		return stats, nil
+	}
 	stats, err := s.db.ValueLogGC(ctx, opts)
 	if err != nil {
 		return stats, fmt.Errorf("value-log GC posting TreeDB: %w", err)
@@ -248,6 +294,23 @@ func (s *TreeDBStore) CompactStorage(ctx context.Context, opts treedb.CompactSto
 	defer s.lifecycleMu.Unlock()
 	if s.IsClosed() || s.db == nil {
 		return treedb.CompactStorageStats{}, fmt.Errorf("compact posting TreeDB storage: %w", treedb.ErrClosed)
+	}
+	if s.external != nil {
+		if opts.UnsafeValueLogReclaimFencedUnreferenced {
+			return treedb.CompactStorageStats{}, fmt.Errorf("external recovery: unsafe fenced reclaim is unsupported")
+		}
+		// This API only reorganizes physical storage. Its maintained retained-root
+		// closure protects both certificates; no logical MVCC floor is advanced.
+		var stats treedb.CompactStorageStats
+		err := s.external.Apply(func() error {
+			var err error
+			stats, err = s.db.CompactStorage(ctx, opts)
+			return err
+		})
+		if err != nil {
+			return stats, fmt.Errorf("compact posting TreeDB storage: %w", err)
+		}
+		return stats, nil
 	}
 	stats, err := s.db.CompactStorage(ctx, opts)
 	if err != nil {
@@ -283,6 +346,9 @@ func (s *TreeDBStore) AdvanceDiscardFloor(timestamp uint64) error {
 	if s.IsClosed() || s.db == nil {
 		return fmt.Errorf("advance discard floor posting TreeDB: %w", treedb.ErrClosed)
 	}
+	if s.external != nil {
+		return fmt.Errorf("external recovery prototype: discard-floor advancement is unsupported")
+	}
 	return s.mvcc.AdvanceDiscardFloor(timestamp, s.commitMode)
 }
 
@@ -296,6 +362,9 @@ func (s *TreeDBStore) PruneVersions(batchSize int) (mvcc.PruneStats, error) {
 	if s.IsClosed() || s.db == nil {
 		return mvcc.PruneStats{}, fmt.Errorf("prune posting TreeDB versions: %w", treedb.ErrClosed)
 	}
+	if s.external != nil {
+		return mvcc.PruneStats{}, fmt.Errorf("external recovery prototype: version pruning is unsupported")
+	}
 	return s.mvcc.PruneVersions(mvcc.PruneOptions{BatchSize: batchSize, Mode: s.commitMode})
 }
 
@@ -305,6 +374,7 @@ type treeDBWriteTxn struct {
 	batch     *treeDBMutationBatch
 	stickyErr error
 	closed    bool
+	rootEpoch uint64
 }
 
 type treeDBMutationBatch struct {
@@ -317,11 +387,12 @@ type treeDBMutationBatch struct {
 }
 
 type treeDBCommitRequest struct {
-	sequence uint64
-	commitTs uint64
-	batch    *treeDBMutationBatch
-	callback func(error)
-	done     chan error
+	sequence  uint64
+	commitTs  uint64
+	batch     *treeDBMutationBatch
+	callback  func(error)
+	done      chan error
+	rootEpoch uint64
 }
 
 type treeDBCommitCompletion struct {
@@ -402,14 +473,14 @@ func (t *treeDBWriteTxn) CommitAt(commitTs uint64, cb func(error)) error {
 			t.store.releaseMutationBatch(batch)
 			return err
 		}
-		return t.store.commitSync(commitTs, batch)
+		return t.store.commitSync(commitTs, batch, t.rootEpoch)
 	}
 	if err != nil {
 		t.store.releaseMutationBatch(batch)
 		go cb(err)
 		return nil
 	}
-	request := treeDBCommitRequest{commitTs: commitTs, batch: batch, callback: cb}
+	request := treeDBCommitRequest{commitTs: commitTs, batch: batch, callback: cb, rootEpoch: t.rootEpoch}
 	if err := t.store.enqueueCommit(request); err != nil {
 		t.store.releaseMutationBatch(batch)
 		go cb(err)
@@ -466,6 +537,9 @@ func (s *TreeDBStore) enqueueCommit(request treeDBCommitRequest) error {
 	defer s.lifecycleMu.Unlock()
 	if s.closed.Load() || s.db == nil {
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
+	}
+	if request.rootEpoch != s.rootEpoch.Load() {
+		return fmt.Errorf("commit across posting root install: %w", ErrTreeDBTxnClosed)
 	}
 	// Retain the previous one-active-plus-64-queued ownership bound even though
 	// the scheduler may move queued requests into its own pending set. Holding
@@ -658,7 +732,7 @@ func (s *TreeDBStore) deliverTreeDBCommit(completion treeDBCommitCompletion) {
 	s.releaseTreeDBCommitSlot()
 }
 
-func (s *TreeDBStore) commitSync(commitTs uint64, batch *treeDBMutationBatch) error {
+func (s *TreeDBStore) commitSync(commitTs uint64, batch *treeDBMutationBatch, rootEpoch uint64) error {
 	if s == nil {
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
 	}
@@ -667,6 +741,11 @@ func (s *TreeDBStore) commitSync(commitTs uint64, batch *treeDBMutationBatch) er
 		s.lifecycleMu.Unlock()
 		s.releaseMutationBatch(batch)
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
+	}
+	if rootEpoch != s.rootEpoch.Load() {
+		s.lifecycleMu.Unlock()
+		s.releaseMutationBatch(batch)
+		return fmt.Errorf("commit across posting root install: %w", ErrTreeDBTxnClosed)
 	}
 	s.acquireTreeDBCommitSlot()
 	if !s.queueActive {
@@ -700,7 +779,12 @@ func (s *TreeDBStore) commitAtAdmitted(commitTs uint64, mutations []mvcc.Mutatio
 	if s.commitStartedForTest != nil {
 		s.commitStartedForTest(commitTs, mutations)
 	}
-	err := s.mvcc.CommitAt(commitTs, mutations, s.commitMode)
+	var err error
+	if s.external != nil {
+		err = s.external.Apply(func() error { return s.mvcc.CommitAt(commitTs, mutations, s.commitMode) })
+	} else {
+		err = s.mvcc.CommitAt(commitTs, mutations, s.commitMode)
+	}
 	if s.commitFinishedForTest != nil {
 		s.commitFinishedForTest(commitTs, err)
 	}
@@ -754,11 +838,12 @@ func decodeTreeDBEnvelope(encoded []byte) (value []byte, userMeta byte, discard 
 }
 
 type treeDBReadTxn struct {
-	mu        sync.Mutex
-	store     *TreeDBStore
-	readTs    uint64
-	discarded bool
-	iterators map[*treeDBIterator]struct{}
+	mu           sync.Mutex
+	store        *TreeDBStore
+	readTs       uint64
+	discarded    bool
+	rootReadHeld bool
+	iterators    map[*treeDBIterator]struct{}
 }
 
 func (t *treeDBReadTxn) Get(key []byte) (Item, error) {
@@ -833,6 +918,9 @@ func (t *treeDBReadTxn) Discard() {
 	t.mu.Unlock()
 	for _, it := range iterators {
 		it.close(false)
+	}
+	if t.rootReadHeld {
+		t.store.rootGate.RUnlock()
 	}
 }
 

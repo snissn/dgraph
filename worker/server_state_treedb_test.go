@@ -65,6 +65,44 @@ func TestServerStateTreeDBLifecycle(t *testing.T) {
 	require.Equal(t, []byte("value"), value)
 }
 
+func TestServerStateTreeDBRaftCheckpointCDCConfiguration(t *testing.T) {
+	oldConfig, oldHardSync, oldACL := Config, x.WorkerConfig.HardSync, x.WorkerConfig.AclEnabled
+	t.Cleanup(func() {
+		Config, x.WorkerConfig.HardSync, x.WorkerConfig.AclEnabled = oldConfig, oldHardSync, oldACL
+	})
+	x.WorkerConfig.HardSync, x.WorkerConfig.AclEnabled = true, false
+	for _, tc := range []struct {
+		name, conf string
+		enabled    bool
+	}{
+		{"empty", "", false},
+		{"alpha_defaults", CDCDefaults, false},
+		{"disabled_destinations", "kafka=; file=;", false},
+		{"file_destination", "file=/tmp/raft-checkpoint-test-cdc;", true},
+		{"kafka_destination", "kafka=localhost:9092;", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			Config = Options{
+				PostingDir: dir + "/p", WALDir: dir + "/w", PostingStoreBackend: PostingStoreBackendTreeDB,
+				PostingStoreTier: PostingStoreTierBenchmarkMinimal, PostingStoreDurability: PostingStoreDurabilityRaftCheckpoint,
+				PostingStoreEvents: true, ChangeDataConf: tc.conf,
+			}
+			state := &ServerState{}
+			err := state.openPostingStore()
+			if tc.enabled {
+				require.ErrorContains(t, err, "does not support ACL or CDC")
+				require.Nil(t, state.TreeDBStore)
+				return
+			}
+			require.NoError(t, err)
+			defer state.closePostingStore()
+			require.Nil(t, newCDC(), "disabled destinations must not construct a sink")
+			require.NotContains(t, GetFeaturesList(), "cdc")
+		})
+	}
+}
+
 func TestServerStateTreeDBRejectsDisabledCommitEvents(t *testing.T) {
 	oldConfig := Config
 	t.Cleanup(func() { Config = oldConfig })

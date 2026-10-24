@@ -151,11 +151,31 @@ func StartRaftNodes(walStore *raftwal.DiskStorage, bindall bool) {
 
 	gr.informZeroAboutTablets()
 	glog.Infof("Informed Zero about tablets I have: OK")
-	gr.applyInitialSchema()
-	gr.applyInitialTypes()
+	if !raftCheckpointEnabled() {
+		gr.applyInitialSchema()
+		gr.applyInitialTypes()
+	}
 	glog.Infof("Upserted Schema and Types: OK")
 
-	x.UpdateHealthStatus(true)
+	if raftCheckpointEnabled() {
+		// A fresh peer has local Commit=0 even when the leader already has
+		// application data. An ordered barrier catches up its complete prefix
+		// (including native snapshot installation) before any read health.
+		barrierCtx, cancel := context.WithTimeout(gr.Ctx(), 2*time.Minute)
+		err := gr.Node.proposeAndWait(barrierCtx, &pb.Proposal{Delta: &pb.OracleDelta{}})
+		cancel()
+		x.Checkf(err, "external recovery startup barrier failed")
+		hs, err := walStore.HardState()
+		x.Check(err)
+		x.Check(gr.Node.Applied.WaitForMark(gr.Ctx(), hs.Commit))
+		glog.Infof("TreeDB raft_checkpoint committed replay completed through %d before health", hs.Commit)
+		gr.Node.raftSemanticMu.Lock()
+		atomic.StoreUint32(&gr.Node.raftStartupComplete, 1)
+		x.UpdateHealthStatus(true)
+		gr.Node.raftSemanticMu.Unlock()
+	} else {
+		x.UpdateHealthStatus(true)
+	}
 	glog.Infof("Server is ready: OK")
 }
 
@@ -1019,13 +1039,9 @@ func (g *groupi) processOracleDeltaStream() {
 						return
 					}
 					batch++
-					if delta.GroupChecksums == nil {
-						delta.GroupChecksums = make(map[uint32]uint64)
-					}
-					delta.Txns = append(delta.Txns, more.Txns...)
-					delta.MaxAssigned = x.Max(delta.MaxAssigned, more.MaxAssigned)
-					for gid, checksum := range more.GroupChecksums {
-						delta.GroupChecksums[gid] = checksum
+					if err := mergeOracleDelta(delta, more); err != nil {
+						glog.Errorf("Invalid sequenced Oracle stream: %v", err)
+						return
 					}
 				default:
 					break SLURP
@@ -1043,6 +1059,14 @@ func (g *groupi) processOracleDeltaStream() {
 				return
 			}
 
+			// A stalled pending transaction must not cause unbounded retention of
+			// watermark-only Deltas. Keep consuming Zero's stream so a later decision
+			// can resolve it. Every transaction decision must remain: an abort can
+			// race the application of its prewrite. Losing advisory watermarks can delay
+			// reads, but never permits visibility ahead of a materialized decision.
+			if raftCheckpointEnabled() && len(delta.Txns) == 0 && g.Node.raftRecoveryAtLimit() {
+				continue
+			}
 			// We should always sort the txns before applying. Otherwise, we might lose some of
 			// these updates, because we never write over a new version.
 			sort.Slice(delta.Txns, func(i, j int) bool {
@@ -1109,7 +1133,7 @@ func GetFeaturesList() []string {
 	if x.WorkerConfig.Audit {
 		ee = append(ee, "audit")
 	}
-	if Config.ChangeDataConf != "" {
+	if cdcEnabled(Config.ChangeDataConf) {
 		ee = append(ee, "cdc")
 	}
 	return ee

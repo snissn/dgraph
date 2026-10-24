@@ -2267,6 +2267,10 @@ func TestMinSchema(t *testing.T) {
 		`{"data": {"me":[{"name":"Michonne","gender":"female","alive":true,"friend":[{"survival_rate":1},{"survival_rate":1},{"survival_rate":1},{"survival_rate":1}],"min(val(x))":1}]}}`,
 		js)
 	setSchema(`survival_rate: float .`)
+	js = processQueryNoErr(t, query)
+	require.JSONEq(t,
+		`{"data": {"me":[{"name":"Michonne","gender":"female","alive":true,"friend":[{"survival_rate":1.6},{"survival_rate":1.6},{"survival_rate":1.6},{"survival_rate":1.6}],"min(val(x))":1.6}]}}`,
+		js)
 }
 
 func TestAvg(t *testing.T) {

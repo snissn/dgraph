@@ -24,7 +24,17 @@ func (w *grpcWorker) DeleteNamespace(ctx context.Context, req *pb.DeleteNsReques
 		return &emptyRes, errors.Errorf("The server doesn't serve group id: %v", req.GroupId)
 	}
 
-	if err := groups().Node.proposeAndWait(ctx, &pb.Proposal{DeleteNs: req}); err != nil {
+	proposal := &pb.Proposal{DeleteNs: req}
+	if raftCheckpointEnabled() {
+		// The timestamp is retained ordered input, including for retry disposition
+		// retirement. It is never reconstructed from a later local Oracle hint.
+		assigned, err := State.GetTimestampContext(ctx, false)
+		if err != nil {
+			return &emptyRes, err
+		}
+		proposal.StartTs = assigned
+	}
+	if err := groups().Node.proposeAndWait(ctx, proposal); err != nil {
 		return &emptyRes, errors.Wrapf(err, "Delete namespace failed for namespace %d on group %d",
 			req.Namespace, req.GroupId)
 	}

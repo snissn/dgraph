@@ -570,6 +570,14 @@ func TestNeedsCountIndexRebuild(t *testing.T) {
 	rb.OldSchema = &pb.SchemaUpdate{ValueType: pb.Posting_UID, Count: true}
 	rb.CurrentSchema = &pb.SchemaUpdate{ValueType: pb.Posting_UID, Count: false}
 	require.Equal(t, indexOp(indexDelete), rb.needsCountIndexRebuild())
+	rb.OldSchema.Count, rb.CurrentSchema.Count = true, true
+	rb.CurrentSchema.Directive = pb.SchemaUpdate_REVERSE
+	require.Equal(t, indexOp(indexRebuild), rb.needsCountIndexRebuild())
+	rb.OldSchema.Directive = pb.SchemaUpdate_REVERSE
+	rb.CurrentSchema.Directive = pb.SchemaUpdate_NONE
+	require.Equal(t, indexOp(indexRebuild), rb.needsCountIndexRebuild())
+	rb.CurrentSchema.Count, rb.OldSchema.Count = false, false
+	require.Equal(t, indexNoop, rb.needsCountIndexRebuild())
 }
 
 func TestNeedsReverseEdgesRebuild(t *testing.T) {
@@ -595,6 +603,42 @@ func TestNeedsReverseEdgesRebuild(t *testing.T) {
 }
 
 func TestNeedsListTypeRebuild(t *testing.T) {
+	// Inferred string data may later receive an explicit vector schema. This
+	// retains the existing vector conversion path rather than entering the
+	// scalar rebuilder, which cannot build vector indexes.
+	for _, tc := range []struct {
+		name          string
+		old, current  pb.Posting_ValType
+		list, rebuild bool
+	}{
+		{"scalar-string-vector", pb.Posting_STRING, pb.Posting_VFLOAT, false, false},
+		{"scalar-vector-string", pb.Posting_VFLOAT, pb.Posting_STRING, false, false},
+		{"scalar-float-int", pb.Posting_FLOAT, pb.Posting_INT, false, false},
+		{"scalar-int-float", pb.Posting_INT, pb.Posting_FLOAT, false, false},
+		{"scalar-string-int", pb.Posting_STRING, pb.Posting_INT, false, false},
+		{"list-string-int", pb.Posting_STRING, pb.Posting_INT, true, true},
+		{"list-int-string", pb.Posting_INT, pb.Posting_STRING, true, true},
+		{"list-float-int", pb.Posting_FLOAT, pb.Posting_INT, true, true},
+		{"list-same-type", pb.Posting_STRING, pb.Posting_STRING, true, false},
+		{"list-string-vector", pb.Posting_STRING, pb.Posting_VFLOAT, true, false},
+		{"list-vector-string", pb.Posting_VFLOAT, pb.Posting_STRING, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rb := IndexRebuild{
+				OldSchema:     &pb.SchemaUpdate{ValueType: tc.old, List: tc.list, Count: true},
+				CurrentSchema: &pb.SchemaUpdate{ValueType: tc.current, List: tc.list, Count: true},
+			}
+			rebuild, err := rb.needsListTypeRebuild()
+			require.NoError(t, err)
+			require.Equal(t, tc.rebuild, rebuild)
+			countOp := indexNoop
+			if tc.rebuild {
+				countOp = indexRebuild
+			}
+			require.Equal(t, countOp, rb.needsCountIndexRebuild(), "count follows actual list conversion")
+		})
+	}
+
 	rb := IndexRebuild{}
 	rb.OldSchema = &pb.SchemaUpdate{ValueType: pb.Posting_UID, List: false}
 	rb.CurrentSchema = &pb.SchemaUpdate{ValueType: pb.Posting_UID, List: true}

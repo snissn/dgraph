@@ -643,6 +643,12 @@ func unmarshalStoreItem(plist *pb.PostingList, item Item) error {
 // Use forward iterator with allversions enabled in iter options.
 // key would now be owned by the posting list. So, ensure that it isn't reused elsewhere.
 func readPostingList(key []byte, it Iterator) (*List, error) {
+	return readPostingListForStore(key, it, nil)
+}
+
+// readPostingListForStore keeps private historical/scratch reads out of the
+// global cache and asynchronous rollup queue, including their split parts.
+func readPostingListForStore(key []byte, it Iterator, store Store) (*List, error) {
 	// Previously, ReadPostingList was not checking that a multi-part list could only
 	// be read via the main key. This lead to issues during rollup because multi-part
 	// lists ended up being rolled-up multiple times. This issue was caught by the
@@ -674,6 +680,7 @@ func readPostingList(key []byte, it Iterator) (*List, error) {
 	}
 
 	l := new(List)
+	l.readStore = store
 	l.key = key
 	l.plist = new(pb.PostingList)
 	l.mutationMap = newMutableLayer()
@@ -682,7 +689,7 @@ func readPostingList(key []byte, it Iterator) (*List, error) {
 	// We use the following block of code to trigger incremental rollup on this key.
 	deltaCount := 0
 	defer func() {
-		if deltaCount > 0 {
+		if deltaCount > 0 && store == nil {
 			// If deltaCount is high, send it to high priority channel instead.
 			if deltaCount > 500 {
 				IncrRollup.addKeyToBatch(key, 0)
@@ -706,6 +713,10 @@ func readPostingList(key []byte, it Iterator) (*List, error) {
 
 		switch item.UserMeta() {
 		case BitEmptyPosting:
+			// An empty complete image has the same historical boundary as a
+			// nonempty complete list. Otherwise a warmed empty cache entry can
+			// incorrectly satisfy reads preceding its tombstone timestamp.
+			l.minTs = item.Version()
 			return l, nil
 		case BitCompletePosting:
 			if err := unmarshalStoreItem(l.plist, item); err != nil {

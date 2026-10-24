@@ -40,9 +40,25 @@ var (
 type contextKey int
 
 const (
-	IsWrite           contextKey = iota
-	IsUniqueDgraphXid            = true
+	IsWrite contextKey = iota
+	stagedWriteSchema
+	IsUniqueDgraphXid = true
 )
+
+// WithStagedWriteSchema supplies private inferred schemas to a staged mutation.
+// The map and schema fields belong to the caller and are immutable for the
+// context lifetime. No query/global schema is published until the staged mutation
+// is accepted. Nil entries are treated as absent.
+func WithStagedWriteSchema(ctx context.Context, overrides map[string]*pb.SchemaUpdate) context.Context {
+	return context.WithValue(ctx, stagedWriteSchema, overrides)
+}
+
+// StagedWriteSchema reads only the private override, without consulting globals.
+func StagedWriteSchema(ctx context.Context, pred string) (*pb.SchemaUpdate, bool) {
+	overrides, _ := ctx.Value(stagedWriteSchema).(map[string]*pb.SchemaUpdate)
+	value := overrides[pred]
+	return value, value != nil
+}
 
 // GetWriteContext returns a context that sets the schema context for writing.
 func GetWriteContext(ctx context.Context) context.Context {
@@ -243,18 +259,23 @@ func (s *state) SetType(typeName string, typ *pb.TypeUpdate) {
 // Get gets the schema for the given predicate.
 func (s *state) Get(ctx context.Context, pred string) (pb.SchemaUpdate, bool) {
 	isWrite, _ := ctx.Value(IsWrite).(bool)
-	s.RLock()
-	defer s.RUnlock()
-	// If this is write context, mutSchema will have the updated schema.
-	// If mutSchema doesn't have the predicate key, we use the schema from s.predicate.
+	var schema *pb.SchemaUpdate
 	if isWrite {
-		if schema, ok := s.mutSchema[pred]; ok {
-			return *schema, true
+		schema, _ = StagedWriteSchema(ctx, pred)
+	}
+	if schema == nil {
+		s.RLock()
+		defer s.RUnlock()
+		// If this is write context, mutSchema will have the updated schema.
+		// Otherwise, or if mutSchema lacks the predicate, use s.predicate.
+		if isWrite {
+			schema = s.mutSchema[pred]
+		}
+		if schema == nil {
+			schema = s.predicate[pred]
 		}
 	}
-
-	schema, ok := s.predicate[pred]
-	if !ok {
+	if schema == nil {
 		return pb.SchemaUpdate{}, false
 	}
 	return *schema, true

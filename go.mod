@@ -40,7 +40,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/snissn/gomap v0.6.2-0.20260721120929-84e3f6652651
+	github.com/snissn/gomap v0.6.2-0.20261023204715-29a2fdf153ce
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cast v1.10.0
 	github.com/spf13/cobra v1.10.2
@@ -155,7 +155,7 @@ require (
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
-	github.com/snissn/compress v1.18.2-snissn.0.0.20260506201017-87fb149e4721 // indirect
+	github.com/snissn/compress v1.18.2-snissn.0.0.20261014112447-88a027b09341 // indirect
 	github.com/snissn/go-crc32-asm v0.0.0-20260522204125-08945951423a // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect

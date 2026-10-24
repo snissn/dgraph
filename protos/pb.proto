@@ -267,6 +267,9 @@ message Snapshot {
   bool done = 4;
   // since_ts stores the ts of the last snapshot to support diff snap updates.
   uint64 since_ts = 5;
+  // Explicit opt-in for non-Badger physical checkpoint streams. Empty preserves
+  // the legacy logical stream. Receivers must reject incompatible formats.
+  string transfer_format = 6;
 }
 
 message ZeroSnapshot {
@@ -322,6 +325,13 @@ message Proposal {
   // Skipping 15 as it is used for uint64 key in master and might be needed later here.
   uint64 start_ts = 16;
  api.UpdateExtSnapshotStreamingStateRequest ext_snapshot_state = 17;
+ PostingFloorRequest posting_floor = 18;
+}
+
+// Explicit ordered semantic expiration. Physical reclamation remains local.
+message PostingFloorRequest {
+ uint32 version = 1;
+ uint64 floor = 2;
 }
 
 message CDCState {
@@ -540,6 +550,8 @@ message OracleDelta {
   repeated TxnStatus txns = 1;
   uint64 max_assigned = 2;
   map<uint32, uint64> group_checksums = 3;
+  // MembershipState.counter sampled atomically with group_checksums by Zero.
+  uint64 checksum_sequence = 4;
   // implement tmax.
 }
 

@@ -165,18 +165,22 @@ func TestBadgerOperationalPathsFailClosedWithoutBadger(t *testing.T) {
 		},
 		CurrentSchema: &pb.SchemaUpdate{},
 	}
-	err = drop.DropIndexes(t.Context())
-	require.ErrorIs(t, err, ErrBadgerOperationalPath)
-	require.Contains(t, err.Error(), "drop index prefixes")
-
 	listRebuild := &IndexRebuild{
 		Attr:          x.AttrInRootNamespace("store-list-rebuild"),
 		OldSchema:     &pb.SchemaUpdate{List: false},
 		CurrentSchema: &pb.SchemaUpdate{List: true},
 	}
-	err = listRebuild.BuildData(t.Context())
-	require.ErrorIs(t, err, ErrBadgerOperationalPath)
-	require.Contains(t, err.Error(), "rebuild list data")
+	// An initialized global Store does not grant the explicit schema capability.
+	// Refuse missing Badger before either zero-timestamp shortcuts or real work.
+	for _, ts := range []uint64{0, 10} {
+		drop.StartTs, listRebuild.StartTs = ts, ts
+		err = drop.DropIndexes(t.Context())
+		require.ErrorIs(t, err, ErrBadgerOperationalPath, "timestamp %d", ts)
+		require.Contains(t, err.Error(), "drop index prefixes")
+		err = listRebuild.BuildData(t.Context())
+		require.ErrorIs(t, err, ErrBadgerOperationalPath, "timestamp %d", ts)
+		require.Contains(t, err.Error(), "rebuild list data")
+	}
 }
 
 func TestTxnWriterForStorePreservesBadgerWriteBehavior(t *testing.T) {

@@ -510,7 +510,7 @@ func (txn *Txn) addMutationHelper(ctx context.Context, l *List, doUpdateIndex bo
 		if t.ValueType == pb.Posting_UID {
 			return t.ValueId
 		}
-		return fingerprintEdge(t)
+		return fingerprintEdgeForContext(ctx, t)
 	}
 
 	// For countIndex we need to check if some posting already exists for uid and length of posting
@@ -522,7 +522,7 @@ func (txn *Txn) addMutationHelper(ctx context.Context, l *List, doUpdateIndex bo
 	var found bool
 	var err error
 
-	isScalarPredicate := !schema.State().IsList(t.Attr)
+	isScalarPredicate := !isListForContext(ctx, t.Attr)
 	delNonListPredicate := isScalarPredicate &&
 		t.Op == pb.DirectedEdge_DEL && string(t.Value) != x.Star
 
@@ -533,7 +533,7 @@ func (txn *Txn) addMutationHelper(ctx context.Context, l *List, doUpdateIndex bo
 			return val, false, emptyCountParams, errors.Wrapf(ErrTsTooOld, "Add mutation count index")
 		}
 	case doUpdateIndex || delNonListPredicate:
-		found, currPost, err = l.findPosting(txn.StartTs, fingerprintEdge(t))
+		found, currPost, err = l.findPosting(txn.StartTs, fingerprintEdgeForContext(ctx, t))
 		if err != nil {
 			return val, found, emptyCountParams, err
 		}
@@ -674,6 +674,7 @@ type rebuilder struct {
 	attr    string
 	prefix  []byte
 	startTs uint64
+	store   Store // optional private schema source/writer; never global publication
 
 	// The posting list passed here is the on disk version. It is not coming
 	// from the LRU cache.
@@ -876,6 +877,9 @@ func decodeUint64MatrixUnsafe(data []byte, matrix *[][]uint64) error {
 }
 
 func (r *rebuilder) Run(ctx context.Context) error {
+	if r.store != nil {
+		return r.runForStore(ctx)
+	}
 	if _, err := requireBadgerOperationalStore("index rebuild stream"); err != nil {
 		return err
 	}
@@ -1123,6 +1127,7 @@ type IndexRebuild struct {
 	StartTs       uint64
 	OldSchema     *pb.SchemaUpdate
 	CurrentSchema *pb.SchemaUpdate
+	Store         Store // explicit schema mutation capability; nil requires Badger
 }
 
 type indexOp int
@@ -1181,6 +1186,9 @@ func (rb *IndexRebuild) DropIndexes(ctx context.Context) error {
 	prefixes = append(prefixes, prefixesToDropCountIndex(ctx, rb)...)
 	prefixes = append(prefixes, prefixesToDropVectorIndexEdges(ctx, rb)...)
 	if len(prefixes) > 0 {
+		if rb.Store != nil {
+			return dropStoreIndexPrefixesForStore(ctx, rb.Store, rb.StartTs, prefixes)
+		}
 		if _, err := requireBadgerOperationalStore("drop index prefixes"); err != nil {
 			return err
 		}
@@ -1207,8 +1215,11 @@ func (rb *IndexRebuild) NeedIndexRebuild() bool {
 
 // BuildIndexes builds indexes.
 func (rb *IndexRebuild) BuildIndexes(ctx context.Context) error {
-	if _, err := requireBadgerOperationalStore("rebuild indexes"); err != nil {
-		return err
+	if rb.Store != nil {
+		if len(rb.CurrentSchema.IndexSpecs) != 0 ||
+			(rb.OldSchema != nil && len(rb.OldSchema.IndexSpecs) != 0) {
+			return errors.Errorf("store index rebuild does not own vector index lifecycle")
+		}
 	}
 	if err := rebuildTokIndex(ctx, rb); err != nil {
 		return err
@@ -1457,7 +1468,7 @@ func rebuildTokIndex(ctx context.Context, rb *IndexRebuild) error {
 	runForVectors := (len(factorySpecs) != 0)
 
 	pk := x.ParsedKey{Attr: rb.Attr}
-	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs}
+	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs, store: rb.Store}
 	builder.fn = func(uid uint64, pl *List, txn *Txn) ([]*pb.DirectedEdge, error) {
 		edge := pb.DirectedEdge{Attr: rb.Attr, Entity: uid}
 		edges := []*pb.DirectedEdge{}
@@ -1562,10 +1573,17 @@ func (rb *IndexRebuild) needsCountIndexRebuild() indexOp {
 		old = &pb.SchemaUpdate{}
 	}
 
-	// Do nothing if the schema directive did not change.
+	// Reverse-count buckets depend on reverse membership even when Count
+	// remains enabled. Rebuild both count prefixes through the same maintained
+	// path, clearing old reverse buckets before a removal or re-addition.
 	if rb.CurrentSchema.Count == old.Count {
+		// Converting list values can merge previously distinct fingerprints,
+		// changing cardinality even when the Count directive stays enabled.
+		convertsValues := needsListValueTypeConversion(old, rb.CurrentSchema)
+		if rb.CurrentSchema.Count && (rb.needsReverseEdgesRebuild() != indexNoop || convertsValues) {
+			return indexRebuild
+		}
 		return indexNoop
-
 	}
 
 	// If the new schema does not require an index, delete the current index.
@@ -1618,12 +1636,21 @@ func rebuildCountIndex(ctx context.Context, rb *IndexRebuild) error {
 			Attr:    rb.Attr,
 			Op:      pb.DirectedEdge_SET,
 		}
-		sz := pl.Length(rb.StartTs, 0)
-		if sz == -1 {
-			return []*pb.DirectedEdge{}, nil
+		// Length's legacy -1 sentinel discards split-read errors. A schema
+		// rebuild must retain the cause and stop before certification.
+		var sz uint32
+		err := pl.Iterate(rb.StartTs, 0, func(*pb.Posting) error {
+			if sz == math.MaxUint32 {
+				return errors.Errorf("count index cardinality overflow for %s", rb.Attr)
+			}
+			sz++
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
 		for {
-			err := txn.addCountMutation(ctx, t, uint32(sz), reverse)
+			err := txn.addCountMutation(ctx, t, sz, reverse)
 			switch err {
 			case ErrRetry:
 				time.Sleep(10 * time.Millisecond)
@@ -1635,18 +1662,19 @@ func rebuildCountIndex(ctx context.Context, rb *IndexRebuild) error {
 
 	// Create the forward index.
 	pk := x.ParsedKey{Attr: rb.Attr}
-	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs}
+	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs, store: rb.Store}
 	builder.fn = fn
 	if err := builder.Run(ctx); err != nil {
 		return err
 	}
 
-	// Create the reverse index. The count reverse index is created if this
-	// predicate has both a count and reverse directive in the schema. It's safe
-	// to call builder.Run even if that's not the case as the reverse prefix
-	// will be empty.
+	// Logical prefix deletion retains empty historical reverse anchors. They
+	// are not current reverse subjects when the directive has been removed.
+	if rb.CurrentSchema.Directive != pb.SchemaUpdate_REVERSE {
+		return nil
+	}
 	reverse = true
-	builder = rebuilder{attr: rb.Attr, prefix: pk.ReversePrefix(), startTs: rb.StartTs}
+	builder = rebuilder{attr: rb.Attr, prefix: pk.ReversePrefix(), startTs: rb.StartTs, store: rb.Store}
 	builder.fn = fn
 	return builder.Run(ctx)
 }
@@ -1776,7 +1804,7 @@ func rebuildReverseEdges(ctx context.Context, rb *IndexRebuild) error {
 
 	glog.Infof("Rebuilding reverse index for %s", rb.Attr)
 	pk := x.ParsedKey{Attr: rb.Attr}
-	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs}
+	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs, store: rb.Store}
 	builder.fn = func(uid uint64, pl *List, txn *Txn) ([]*pb.DirectedEdge, error) {
 		edge := pb.DirectedEdge{Attr: rb.Attr, Entity: uid}
 		return []*pb.DirectedEdge{}, pl.Iterate(txn.StartTs, 0, func(pp *pb.Posting) error {
@@ -1802,8 +1830,20 @@ func rebuildReverseEdges(ctx context.Context, rb *IndexRebuild) error {
 	return builder.Run(ctx)
 }
 
-// needsListTypeRebuild returns true if the schema changed from a scalar to a
-// list. It returns true if the index can be left as is.
+// needsListValueTypeConversion identifies changes that can merge distinct list
+// fingerprints. Scalar values retain their encoding and convert lazily on reads;
+// vectors use their separate conversion and index lifecycle.
+func needsListValueTypeConversion(old, current *pb.SchemaUpdate) bool {
+	if old == nil || current == nil || !old.List || !current.List {
+		return false
+	}
+	oldType, newType := types.TypeID(old.ValueType), types.TypeID(current.ValueType)
+	return oldType != newType && oldType.IsScalar() && newType.IsScalar() &&
+		oldType != types.VFloatID && newType != types.VFloatID
+}
+
+// needsListTypeRebuild also covers list value-type changes: list fingerprints
+// must be derived from the converted binary value, never its old encoding.
 func (rb *IndexRebuild) needsListTypeRebuild() (bool, error) {
 	x.AssertTruef(rb.CurrentSchema != nil, "Current schema cannot be nil.")
 
@@ -1817,60 +1857,79 @@ func (rb *IndexRebuild) needsListTypeRebuild() (bool, error) {
 		return false, errors.Errorf("Type can't be changed from list to scalar for attr: [%s]"+
 			" without dropping it first.", x.ParseAttr(rb.CurrentSchema.Predicate))
 	}
-
-	return false, nil
+	return needsListValueTypeConversion(rb.OldSchema, rb.CurrentSchema), nil
 }
 
-// rebuildListType rebuilds the index when the schema is changed from scalar to list type.
-// We need to fingerprint the values to get the new ValueId.
+// rebuildListType rewrites the complete logical data image at the schema
+// timestamp. Target conversion precedes fingerprinting. Replacing every old
+// fingerprint also merges values that become equal after conversion, while
+// versions below the schema timestamp retain their original representation.
 func rebuildListType(ctx context.Context, rb *IndexRebuild) error {
 	if needsRebuild, err := rb.needsListTypeRebuild(); !needsRebuild || err != nil {
 		return err
 	}
-	if _, err := requireBadgerOperationalStore("rebuild list data"); err != nil {
-		return err
+	if rb.Store == nil {
+		if _, err := requireBadgerOperationalStore("rebuild list data"); err != nil {
+			return err
+		}
 	}
 
 	pk := x.ParsedKey{Attr: rb.Attr}
-	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs}
+	builder := rebuilder{attr: rb.Attr, prefix: pk.DataPrefix(), startTs: rb.StartTs, store: rb.Store}
 	builder.fn = func(uid uint64, pl *List, txn *Txn) ([]*pb.DirectedEdge, error) {
-		var mpost *pb.Posting
+		// Iterate includes cold split parts and presents a deterministic source
+		// UID order. For equivalent converted values the last source wins its
+		// facets, exactly as ordinary repeated SETs do. Physical commit versions
+		// and local pruning schedules do not select that precedence.
+		var postings []*pb.Posting
 		err := pl.Iterate(txn.StartTs, 0, func(p *pb.Posting) error {
-			// We only want to modify the untagged value. There could be other values with a
-			// lang tag.
-			if p.Uid == math.MaxUint64 {
-				mpost = p
+			edge := &pb.DirectedEdge{Attr: rb.Attr, Entity: uid, Op: pb.DirectedEdge_SET,
+				Lang: string(p.LangTag), Facets: p.Facets}
+			if p.PostingType == pb.Posting_REF {
+				edge.ValueId, edge.ValueType = p.Uid, pb.Posting_UID
+			} else {
+				converted, err := types.Convert(types.Val{Tid: types.TypeID(p.ValType), Value: p.Value}, types.TypeID(rb.CurrentSchema.ValueType))
+				if err != nil {
+					return err
+				}
+				encoded := types.Val{Tid: types.BinaryID}
+				if err := types.Marshal(converted, &encoded); err != nil {
+					return err
+				}
+				edge.Value, edge.ValueType = encoded.Value.([]byte), rb.CurrentSchema.ValueType
 			}
+			converted := NewPosting(edge)
+			converted.StartTs = txn.StartTs
+			if len(p.LangTag) > 0 {
+				// Language identity is independent of the scalar value encoding.
+				// Keep its existing UID when only the value/list type changes.
+				converted.Uid = p.Uid
+			} else if converted.PostingType != pb.Posting_REF {
+				converted.Uid = fingerprintEdgeWithList(edge, rb.CurrentSchema.List)
+			}
+			postings = append(postings, converted)
 			return nil
 		})
 		if err != nil {
-			return []*pb.DirectedEdge{}, err
+			return nil, err
 		}
-		if mpost == nil {
-			return []*pb.DirectedEdge{}, nil
+		// A fresh scratch list carries only the complete replacement delta.
+		// Its delete-all marker prevents a seeded immutable image (the ordinary
+		// Badger builder may retain one for @count) from reviving old values.
+		replacement := txn.cache.SetIfAbsent(string(pl.key), NewList(pl.key, &pb.PostingList{}, 0))
+		replacement.Lock()
+		defer replacement.Unlock()
+		marker := createDeleteAllPosting()
+		marker.StartTs = txn.StartTs
+		if err := replacement.updateMutationLayer(marker, false, false); err != nil {
+			return nil, err
 		}
-		// Delete the old edge corresponding to ValueId math.MaxUint64
-		t := &pb.DirectedEdge{
-			ValueId: mpost.Uid,
-			Attr:    rb.Attr,
-			Op:      pb.DirectedEdge_DEL,
+		for _, posting := range postings {
+			if err := replacement.updateMutationLayer(posting, false, false); err != nil {
+				return nil, err
+			}
 		}
-
-		// Ensure that list is in the cache run by txn. Otherwise, nothing would
-		// get updated.
-		pl = txn.cache.SetIfAbsent(string(pl.key), pl)
-		if err := pl.addMutation(ctx, txn, t); err != nil {
-			return []*pb.DirectedEdge{}, err
-		}
-		// Add the new edge with the fingerprinted value id.
-		newEdge := &pb.DirectedEdge{
-			Attr:      rb.Attr,
-			Value:     mpost.Value,
-			ValueType: mpost.ValType,
-			Op:        pb.DirectedEdge_SET,
-			Facets:    mpost.Facets,
-		}
-		return []*pb.DirectedEdge{}, pl.addMutation(ctx, txn, newEdge)
+		return nil, nil
 	}
 	return builder.Run(ctx)
 }

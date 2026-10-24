@@ -72,6 +72,11 @@ type List struct {
 	maxTs       uint64 // max commit timestamp seen for this list.
 
 	cache []byte
+
+	// readStore is set only on uncached lists materialized by an explicitly
+	// supplied store (maintenance or scratch rebuild). Split reads must retain
+	// that authority instead of escaping to the global posting store.
+	readStore Store
 }
 
 // MutableLayer is the structure that will store mutable layer of the posting list. Every posting list has an immutable
@@ -812,6 +817,18 @@ func TypeID(edge *pb.DirectedEdge) types.TypeID {
 }
 
 func fingerprintEdge(t *pb.DirectedEdge) uint64 {
+	return fingerprintEdgeWithList(t, schema.State().IsList(t.Attr))
+}
+func fingerprintEdgeForContext(ctx context.Context, t *pb.DirectedEdge) uint64 {
+	return fingerprintEdgeWithList(t, isListForContext(ctx, t.Attr))
+}
+func isListForContext(ctx context.Context, attr string) bool {
+	if su, ok := schema.StagedWriteSchema(ctx, attr); ok {
+		return su.List
+	}
+	return schema.State().IsList(attr)
+}
+func fingerprintEdgeWithList(t *pb.DirectedEdge, isList bool) uint64 {
 	// There could be a collision if the user gives us a value with Lang = "en" and later gives
 	// us a value = "en" for the same predicate. We would end up overwriting his older lang
 	// value.
@@ -824,7 +841,7 @@ func fingerprintEdge(t *pb.DirectedEdge) uint64 {
 	switch {
 	case len(t.Lang) > 0:
 		id = farm.Fingerprint64([]byte(t.Lang))
-	case schema.State().IsList(t.Attr):
+	case isList:
 		// TODO - When values are deleted for list type, then we should only delete the UID from
 		// index if no other values produces that index token.
 		// Value for list type.
@@ -840,6 +857,10 @@ func (l *List) addMutation(ctx context.Context, txn *Txn, t *pb.DirectedEdge) er
 }
 
 func GetConflictKey(pk x.ParsedKey, key []byte, t *pb.DirectedEdge) uint64 {
+	su, _ := schema.State().Get(context.Background(), t.Attr)
+	return getConflictKeyForSchema(pk, key, t, &su)
+}
+func getConflictKeyForSchema(pk x.ParsedKey, key []byte, t *pb.DirectedEdge, su *pb.SchemaUpdate) uint64 {
 	getKey := func(key []byte, uid uint64) uint64 {
 		// Instead of creating a string first and then doing a fingerprint, let's do a fingerprint
 		// here to save memory allocations.
@@ -849,9 +870,9 @@ func GetConflictKey(pk x.ParsedKey, key []byte, t *pb.DirectedEdge) uint64 {
 
 	var conflictKey uint64
 	switch {
-	case schema.State().HasNoConflict(t.Attr):
+	case su.GetNoConflict():
 		break
-	case schema.State().HasUpsert(t.Attr):
+	case su.GetUpsert():
 		// Consider checking to see if a email id is unique. A user adds:
 		// <uid> <email> "email@email.org", and there's a string equal tokenizer
 		// and upsert directive on the schema.
@@ -861,7 +882,7 @@ func GetConflictKey(pk x.ParsedKey, key []byte, t *pb.DirectedEdge) uint64 {
 		// that two users don't set the same email id.
 		conflictKey = getKey(key, 0)
 
-	case pk.IsData() && schema.State().IsList(t.Attr):
+	case pk.IsData() && su.GetList():
 		// Data keys, irrespective of whether they are UID or values, should be judged based on
 		// whether they are lists or not. For UID, t.ValueId = UID. For value, t.ValueId =
 		// fingerprint(value) or could be fingerprint(lang) or something else.
@@ -910,7 +931,7 @@ func (l *List) addMutationInternal(ctx context.Context, txn *Txn, t *pb.Directed
 	mpost := NewPosting(t)
 	mpost.StartTs = txn.StartTs
 	if mpost.PostingType != pb.Posting_REF {
-		t.ValueId = fingerprintEdge(t)
+		t.ValueId = fingerprintEdgeForContext(ctx, t)
 		mpost.Uid = t.ValueId
 	}
 
@@ -934,7 +955,11 @@ func (l *List) addMutationInternal(ctx context.Context, txn *Txn, t *pb.Directed
 	// We ensure that commit marks are applied to posting lists in the right
 	// order. We can do so by proposing them in the same order as received by the Oracle delta
 	// stream from Zero, instead of in goroutines.
-	txn.addConflictKey(GetConflictKey(pk, l.key, t))
+	if staged, ok := schema.StagedWriteSchema(ctx, t.Attr); ok {
+		txn.addConflictKey(getConflictKeyForSchema(pk, l.key, t, staged))
+	} else {
+		txn.addConflictKey(GetConflictKey(pk, l.key, t))
+	}
 	return nil
 }
 
@@ -1164,7 +1189,8 @@ loop:
 			mp = emptyPosting
 		}
 
-		valid, err := pitr.valid()
+		var valid bool
+		valid, err = pitr.valid()
 		switch {
 		case err != nil:
 			break loop
@@ -1745,11 +1771,16 @@ func (l *List) calculateUids() error {
 	return nil
 }
 
-func (l *List) canUseCalculatedUids() bool {
-	if l.mutationMap == nil {
+func (l *List) canUseCalculatedUids(readTs uint64) bool {
+	l.AssertRLock()
+	if l.mutationMap == nil || readTs < l.minTs {
 		return false
 	}
-	return l.mutationMap.isUidsCalculated && l.mutationMap.currentEntries == nil
+	// The bitmap represents the latest committed view, even when the list was
+	// loaded for a historical request. Older requests must merge their own deltas.
+	// An immutable-only list has no delta timestamp (the field is a sentinel).
+	return l.mutationMap.isUidsCalculated && l.mutationMap.currentEntries == nil &&
+		(len(l.mutationMap.committedEntries) == 0 || readTs >= l.mutationMap.committedUidsTime)
 }
 
 // Uids returns the UIDs given some query params.
@@ -1761,8 +1792,8 @@ func (l *List) Uids(opt ListOptions) (*pb.List, error) {
 	}
 
 	getUidList := func() (*pb.List, error, bool) {
-		if l.canUseCalculatedUids() {
-			l.RLock()
+		l.RLock()
+		if l.canUseCalculatedUids(opt.ReadTs) {
 
 			afterIdx := 0
 
@@ -1786,7 +1817,6 @@ func (l *List) Uids(opt ListOptions) (*pb.List, error) {
 			return out, nil, opt.Intersect != nil
 		}
 		// Pre-assign length to make it faster.
-		l.RLock()
 		defer l.RUnlock()
 		// Use approximate length for initial capacity.
 		res := make([]uint64, 0, l.ApproxLen())
@@ -2241,7 +2271,11 @@ func (l *List) readListPart(startUid uint64) (*pb.PostingList, error) {
 			"cannot generate key for list with base key %s and start UID %d",
 			hex.EncodeToString(l.key), startUid)
 	}
-	txn := postingStore.NewReadTxn(l.minTs)
+	store := l.readStore
+	if store == nil {
+		store = postingStore
+	}
+	txn := store.NewReadTxn(l.minTs)
 	defer txn.Discard()
 	item, err := txn.Get(key)
 	if err != nil {

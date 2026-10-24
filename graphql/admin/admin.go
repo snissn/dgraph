@@ -292,6 +292,11 @@ const (
 		response: Response
 	}
 
+	type RetirePostingHistoryPayload {
+		response: Response
+		floor: UInt64!
+	}
+
 	type Config {
 		cacheMb: Float
 	}
@@ -414,6 +419,13 @@ const (
 		config(input: ConfigInput!): ConfigPayload
 
 		"""
+		Explicitly retire transaction retry and read history through this floor in
+		the addressed Alpha group. Requires an admin token. The ordered request
+		must precede the assigned frontier and every unresolved transaction.
+		"""
+		retirePostingHistory(floor: UInt64!): RetirePostingHistoryPayload
+
+		"""
 		Remove a node from the cluster.
 		"""
 		removeNode(input: RemoveNodeInput!): RemoveNodePayload
@@ -497,21 +509,22 @@ var (
 		"getGroup":       minimalAdminQryMWs,
 	}
 	adminMutationMWConfig = map[string]resolve.MutationMiddlewares{
-		"backup":          gogMutMWs,
-		"config":          gogMutMWs,
-		"draining":        gogMutMWs,
-		"export":          stdAdminMutMWs, // dgraph handles the export for other namespaces by superadmin
-		"login":           minimalAdminMutMWs,
-		"restore":         gogMutMWs,
-		"restoreTenant":   gogMutMWs,
-		"shutdown":        gogMutMWs,
-		"removeNode":      gogMutMWs,
-		"moveTablet":      gogMutMWs,
-		"assign":          gogMutMWs,
-		"updateGQLSchema": stdAdminMutMWs,
-		"addNamespace":    gogAclMutMWs,
-		"deleteNamespace": gogAclMutMWs,
-		"resetPassword":   gogAclMutMWs,
+		"backup":               gogMutMWs,
+		"config":               gogMutMWs,
+		"retirePostingHistory": gogMutMWs,
+		"draining":             gogMutMWs,
+		"export":               stdAdminMutMWs, // dgraph handles the export for other namespaces by superadmin
+		"login":                minimalAdminMutMWs,
+		"restore":              gogMutMWs,
+		"restoreTenant":        gogMutMWs,
+		"shutdown":             gogMutMWs,
+		"removeNode":           gogMutMWs,
+		"moveTablet":           gogMutMWs,
+		"assign":               gogMutMWs,
+		"updateGQLSchema":      stdAdminMutMWs,
+		"addNamespace":         gogAclMutMWs,
+		"deleteNamespace":      gogAclMutMWs,
+		"resetPassword":        gogAclMutMWs,
 		// for queries and mutations related to User/Group, dgraph handles Guardian auth,
 		// so no need to apply GuardianAuth Middleware
 		"addUser":     minimalAdminMutMWs,
@@ -722,27 +735,29 @@ func newAdminResolver(
 			"Serving New GraphQL API.", ns)
 	}, 1, closer)
 
-	go server.initServer()
+	closer.AddRunning(1)
+	go func() { defer closer.Done(); server.initServer(closer.Ctx()) }()
 
 	return server.resolver
 }
 
 func newAdminResolverFactory() resolve.ResolverFactory {
 	adminMutationResolvers := map[string]resolve.MutationResolverFunc{
-		"addNamespace":    resolveAddNamespace,
-		"backup":          resolveBackup,
-		"config":          resolveUpdateConfig,
-		"deleteNamespace": resolveDeleteNamespace,
-		"draining":        resolveDraining,
-		"export":          resolveExport,
-		"login":           resolveLogin,
-		"resetPassword":   resolveResetPassword,
-		"restore":         resolveRestore,
-		"shutdown":        resolveShutdown,
-		"removeNode":      resolveRemoveNode,
-		"moveTablet":      resolveMoveTablet,
-		"assign":          resolveAssign,
-		"restoreTenant":   resolveTenantRestore,
+		"addNamespace":         resolveAddNamespace,
+		"backup":               resolveBackup,
+		"config":               resolveUpdateConfig,
+		"retirePostingHistory": resolveRetirePostingHistory,
+		"deleteNamespace":      resolveDeleteNamespace,
+		"draining":             resolveDraining,
+		"export":               resolveExport,
+		"login":                resolveLogin,
+		"resetPassword":        resolveResetPassword,
+		"restore":              resolveRestore,
+		"shutdown":             resolveShutdown,
+		"removeNode":           resolveRemoveNode,
+		"moveTablet":           resolveMoveTablet,
+		"assign":               resolveAssign,
+		"restoreTenant":        resolveTenantRestore,
 	}
 
 	rf := resolverFactoryWithErrorMsg(errResolverNotFound).
@@ -790,7 +805,11 @@ func newAdminResolverFactory() resolve.ResolverFactory {
 }
 
 func getCurrentGraphQLSchema(namespace uint64) (*worker.GqlSchema, error) {
-	uid, graphQLSchema, err := edgraph.GetGQLSchema(namespace)
+	return getCurrentGraphQLSchemaContext(context.Background(), namespace)
+}
+
+func getCurrentGraphQLSchemaContext(ctx context.Context, namespace uint64) (*worker.GqlSchema, error) {
+	uid, graphQLSchema, err := edgraph.GetGQLSchemaContext(ctx, namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -813,7 +832,7 @@ func generateGQLSchema(sch *worker.GqlSchema, ns uint64) (schema.Schema, error) 
 	return generatedSchema, nil
 }
 
-func (as *adminServer) initServer() {
+func (as *adminServer) initServer(ctx context.Context) {
 	// Nothing else should be able to lock before here.  The admin resolvers aren't yet
 	// set up (they all just error), so we will obtain the lock here without contention.
 	// We then setup the admin resolvers and they must wait until we are done before the
@@ -829,9 +848,12 @@ func (as *adminServer) initServer() {
 	waitFor := 5 * time.Second
 
 	for {
-		<-time.After(waitFor)
-
-		sch, err := getCurrentGraphQLSchema(x.RootNamespace)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(waitFor):
+		}
+		sch, err := getCurrentGraphQLSchemaContext(ctx, x.RootNamespace)
 		if err != nil {
 			glog.Errorf("namespace: %d. Error reading GraphQL schema: %s.", x.RootNamespace, err)
 			continue

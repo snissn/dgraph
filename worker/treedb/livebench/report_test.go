@@ -2,11 +2,73 @@
 package livebench
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestRenderReportAddsAlignedRecoveryWithoutChangingLegacyColumn(t *testing.T) {
+	set := validSet(t, 2)
+	for i := range set {
+		r := &set[i]
+		r.Config.RecoveryProbe = RecoveryReadCommitRead
+		r.Metrics["recovery_read_seconds"] = Metric{Available: true, Value: float64(r.Repeat * 2), Unit: "seconds", Source: "full posting validation"}
+		r.Metrics["recovery_read_write_seconds"] = Metric{Available: true, Value: float64(r.Repeat * 4), Unit: "seconds", Source: "CommitNow ACK then fresh read"}
+	}
+	report, err := RenderReport(set, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"restart median (s) | read-ready median (s) | read/write-ready median (s)",
+		"1.000 | 3.000 (2/2) | 6.000 (2/2) |", "legacy HTTP-health boundary", "not equivalent across backends",
+		"`recovery_read_seconds`", "`recovery_read_write_seconds`", "not abrupt-crash or power-loss certification"} {
+		if !strings.Contains(report, want) {
+			t.Fatalf("aligned recovery report missing %q:\n%s", want, report)
+		}
+	}
+	legacy, err := RenderReport(validSet(t, 1), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, absent := range []string{"read-ready median", "read/write-ready median", "0.000 (0/1)"} {
+		if strings.Contains(legacy, absent) {
+			t.Fatalf("health-only results manufactured aligned readiness: %q", absent)
+		}
+	}
+}
+
+func TestRenderReportRejectsMixedOrInvalidAlignedRecovery(t *testing.T) {
+	for _, bad := range []string{"mixed probe", "missing read", "missing write", "nonfinite", "excluded"} {
+		t.Run(bad, func(t *testing.T) {
+			set := validSet(t, 1)
+			for i := range set {
+				set[i].Config.RecoveryProbe = RecoveryReadCommitRead
+				set[i].Metrics["recovery_read_seconds"] = Metric{Available: true, Value: 2, Unit: "seconds", Source: "validated read"}
+				set[i].Metrics["recovery_read_write_seconds"] = Metric{Available: true, Value: 3, Unit: "seconds", Source: "committed write then read"}
+			}
+			switch bad {
+			case "mixed probe":
+				set[0].Config.RecoveryProbe = ""
+			case "missing read":
+				delete(set[0].Metrics, "recovery_read_seconds")
+			case "missing write":
+				delete(set[0].Metrics, "recovery_read_write_seconds")
+			case "nonfinite":
+				m := set[0].Metrics["recovery_read_seconds"]
+				m.Value = math.NaN()
+				set[0].Metrics["recovery_read_seconds"] = m
+			case "excluded":
+				set[0].Context.Excluded = true
+				set[0].Context.ExclusionReason = "diagnostic only"
+			}
+			if _, err := RenderReport(set, 1); err == nil {
+				t.Fatalf("invalid recovery matrix %q rendered", bad)
+			}
+		})
+	}
+}
 
 func TestDiscoverProfileArtifactsRequiresCompleteNonEmptyFiles(t *testing.T) {
 	dir := t.TempDir()
@@ -34,7 +96,7 @@ func TestSummarizeAveragesEvenMiddleValues(t *testing.T) {
 }
 
 func TestRenderReportSeparatesDurabilityClassesAndMakesDecision(t *testing.T) {
-	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
+	set := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
 	for i := range set {
 		set[i].Context.RawPath = "/raw/" + set[i].RunID
 		set[i].Throughput = 100
@@ -57,7 +119,7 @@ func TestRenderReportSeparatesDurabilityClassesAndMakesDecision(t *testing.T) {
 }
 
 func TestRenderReportIncludesTreeDBDurabilityAndPointSourceDiagnostics(t *testing.T) {
-	set := validSet(1)
+	set := validSet(t, 1)
 	for i := range set {
 		if set[i].Config.Backend != "treedb" {
 			continue
@@ -79,7 +141,7 @@ func TestRenderReportIncludesTreeDBDurabilityAndPointSourceDiagnostics(t *testin
 }
 
 func TestRenderReportIncludesOnlySuppliedProfileArtifactsWithoutFindings(t *testing.T) {
-	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
+	set := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
 	dir := t.TempDir()
 	for _, name := range []string{"treedb-relaxed.pprof", "treedb-relaxed-top.txt", "treedb-durable.pprof", "treedb-durable-top.txt"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("evidence"), 0o644); err != nil {
@@ -107,7 +169,7 @@ func TestRenderReportIncludesOnlySuppliedProfileArtifactsWithoutFindings(t *test
 }
 
 func TestRenderReportUsesExplicitStopOutcome(t *testing.T) {
-	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
+	set := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
 	for i := range set {
 		set[i].Throughput = 100
 	}
@@ -145,7 +207,12 @@ func TestIssue29LegacyArtifactsRemainReportable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report != string(want) {
-		t.Fatal("schema-v3 JSON and retained profiles did not reproduce the committed report byte for byte")
+	if strings.Count(report, legacySurvivalErratum) != 1 {
+		t.Fatal("legacy survival erratum must appear exactly once")
+	}
+	// Preserve every original measured value, gate and counter-coverage note.
+	// Only the explicit later survival clarification is added by the new reader.
+	if strings.Replace(report, legacySurvivalErratum, "", 1) != string(want) {
+		t.Fatal("schema-v3 report changed beyond the explicit survival erratum")
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/golang/glog"
@@ -179,13 +180,43 @@ func (s *ServerState) openPostingStore() error {
 			mode = posting.TreeDBCommitRelaxed
 		}
 		treeOpts, err := dgraphtreedb.ResolveOptions(dgraphtreedb.OpenOptions{
-			Dir: Config.PostingDir, Profile: profile,
+			Dir: Config.PostingDir, Profile: profile, MemtableMode: "cow_ordered",
 			RequireInMemory: x.WorkerConfig.Badger.InMemory,
 		})
 		if err != nil {
 			return fmt.Errorf("resolve TreeDB posting store: %w", err)
 		}
-		s.TreeDBStore, err = posting.OpenTreeDBStore(treeOpts, mode)
+		if Config.PostingStoreDurability == PostingStoreDurabilityRaftCheckpoint {
+			if x.WorkerConfig.AclEnabled || cdcEnabled(Config.ChangeDataConf) {
+				return fmt.Errorf("raft_checkpoint prototype does not support ACL or CDC")
+			}
+			if !x.WorkerConfig.HardSync {
+				return fmt.Errorf("raft_checkpoint requires --survive=filesystem for Alpha and a filesystem-durable Zero")
+			}
+			treeOpts = td.OptionsFor(td.ProfileNoWALFast, Config.PostingDir)
+			treeOpts.MemtableMode = "cow_ordered"
+			walIdentity, identityErr := filepath.Abs(Config.WALDir)
+			if identityErr != nil {
+				return identityErr
+			}
+			identity := "dgraph-raft-v1:" + walIdentity
+			intent, preflightErr := preflightRaftSnapshotInstall(identity)
+			if preflightErr != nil {
+				return preflightErr
+			}
+			if err := cleanupRaftSnapshotStaging(intent); err != nil {
+				return err
+			}
+			s.TreeDBStore, err = posting.OpenRaftTreeDBStore(treeOpts, identity)
+			if err == nil && intent != nil {
+				err = s.reconcileRaftSnapshotOwner(context.Background(), intent)
+				if err != nil {
+					s.TreeDBStore.Close()
+				}
+			}
+		} else {
+			s.TreeDBStore, err = posting.OpenTreeDBStore(treeOpts, mode)
+		}
 		if err != nil {
 			return fmt.Errorf("open TreeDB posting store: %w", err)
 		}
@@ -273,6 +304,27 @@ func (s *ServerState) GetTimestamp(readOnly bool) uint64 {
 	tr := tsReq{readOnly: readOnly, ch: make(chan uint64)}
 	s.needTs <- tr
 	return <-tr.ch
+}
+
+// GetTimestampContext waits for an assigned timestamp until the caller or store stops.
+// Buffered delivery lets the dispatcher complete a batch after a caller cancels.
+func (s *ServerState) GetTimestampContext(ctx context.Context, readOnly bool) (uint64, error) {
+	tr := tsReq{readOnly: readOnly, ch: make(chan uint64, 1)}
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-s.gcCloser.HasBeenClosed():
+		return 0, context.Canceled
+	case s.needTs <- tr:
+	}
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-s.gcCloser.HasBeenClosed():
+		return 0, context.Canceled
+	case ts := <-tr.ch:
+		return ts, nil
+	}
 }
 
 func (s *ServerState) fillTimestampRequests() {

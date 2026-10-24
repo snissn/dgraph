@@ -132,6 +132,9 @@ func runSchemaMutation(ctx context.Context, updates []*pb.SchemaUpdate, startTs 
 	if len(updates) == 0 {
 		return nil
 	}
+	if raftCheckpointEnabled() {
+		return runRaftSchemaMutation(ctx, updates, startTs)
+	}
 	// Wait until schema modification for all predicates is complete. There cannot be two
 	// background tasks running as this is a race condition. We typically won't propose an
 	// index update if one is already going on. If that's not the case, then the receiver
@@ -279,9 +282,28 @@ func runSchemaMutation(ctx context.Context, updates []*pb.SchemaUpdate, startTs 
 // updateSchema commits the schema to disk in blocking way, should be ok because this happens
 // only during schema mutations or we see a new predicate.
 func updateSchema(s *pb.SchemaUpdate, ts uint64) error {
-	schema.State().Set(s.Predicate, s)
-	schema.State().DeleteMutSchema(s.Predicate)
-	txn := postingStore.NewWriteTxn()
+	if !raftCheckpointEnabled() {
+		schema.State().Set(s.Predicate, s)
+		schema.State().DeleteMutSchema(s.Predicate)
+	}
+	if err := writeSchema(s, ts); err != nil {
+		return err
+	}
+	if raftCheckpointEnabled() {
+		// The query schema becomes complete only after all index callbacks and
+		// the final schema write finish inside ordered apply.
+		schema.State().Set(s.Predicate, s)
+		schema.State().DeleteMutSchema(s.Predicate)
+	}
+	return nil
+}
+
+func writeSchema(s *pb.SchemaUpdate, ts uint64) error {
+	return writeSchemaForStore(postingStore, s, ts)
+}
+
+func writeSchemaForStore(store posting.Store, s *pb.SchemaUpdate, ts uint64) error {
+	txn := store.NewWriteTxn()
 	defer txn.Discard()
 	data, err := proto.Marshal(s)
 	x.Check(err)
@@ -297,7 +319,7 @@ func updateSchema(s *pb.SchemaUpdate, ts uint64) error {
 	return txn.CommitAt(ts, nil)
 }
 
-func createSchema(attr string, typ types.TypeID, hint pb.Metadata_HintType, ts uint64) error {
+func inferredSchema(attr string, typ types.TypeID, hint pb.Metadata_HintType) pb.SchemaUpdate {
 	ctx := schema.GetWriteContext(context.Background())
 
 	// Don't overwrite schema blindly, acl's might have been set even though
@@ -321,6 +343,11 @@ func createSchema(attr string, typ types.TypeID, hint pb.Metadata_HintType, ts u
 		default:
 		}
 	}
+	return s
+}
+
+func createSchema(attr string, typ types.TypeID, hint pb.Metadata_HintType, ts uint64) error {
+	s := inferredSchema(attr, typ, hint)
 	if err := checkSchema(&s); err != nil {
 		return err
 	}
@@ -329,14 +356,15 @@ func createSchema(attr string, typ types.TypeID, hint pb.Metadata_HintType, ts u
 
 func runTypeMutation(ctx context.Context, update *pb.TypeUpdate, ts uint64) error {
 	current := proto.Clone(update).(*pb.TypeUpdate)
-	schema.State().SetType(update.TypeName, current)
-	return updateType(update.TypeName, update, ts)
+	return updateType(update.TypeName, current, ts)
 }
 
 // We commit schema to disk in blocking way, should be ok because this happens
 // only during schema mutations or we see a new predicate.
 func updateType(typeName string, t *pb.TypeUpdate, ts uint64) error {
-	schema.State().SetType(typeName, t)
+	if !raftCheckpointEnabled() {
+		schema.State().SetType(typeName, t)
+	}
 	txn := postingStore.NewWriteTxn()
 	defer txn.Discard()
 	data, err := proto.Marshal(t)
@@ -350,7 +378,13 @@ func updateType(typeName string, t *pb.TypeUpdate, ts uint64) error {
 	if err := txn.SetEntry(e); err != nil {
 		return err
 	}
-	return txn.CommitAt(ts, nil)
+	if err := txn.CommitAt(ts, nil); err != nil {
+		return err
+	}
+	if raftCheckpointEnabled() {
+		schema.State().SetType(typeName, t)
+	}
+	return nil
 }
 
 func hasEdges(attr string, startTs uint64) bool {
@@ -377,6 +411,13 @@ func hasEdges(attr string, startTs uint64) bool {
 	return false
 }
 func checkSchema(s *pb.SchemaUpdate) error {
+	return checkSchemaWithDataCheck(s, func(attr string) bool { return hasEdges(attr, math.MaxUint64) })
+}
+
+// Ordered external recovery validates logical data at its preceding frontier
+// separately. It must not use the approximate physical-version hasEdges check,
+// whose answer can differ across independently pruned replicas.
+func checkSchemaWithDataCheck(s *pb.SchemaUpdate, hasData func(string) bool) error {
 	if s == nil {
 		return errors.Errorf("Nil schema")
 	}
@@ -441,14 +482,14 @@ func checkSchema(s *pb.SchemaUpdate) error {
 	case t.IsScalar() == typ.IsScalar():
 		// If old type was list and new type is non-list, we don't allow it until user
 		// has data.
-		if schema.State().IsList(s.Predicate) && !s.List && hasEdges(s.Predicate, math.MaxUint64) {
+		if schema.State().IsList(s.Predicate) && !s.List && hasData(s.Predicate) {
 			return errors.Errorf("Schema change not allowed from [%s] => %s without"+
 				" deleting pred: %s", t.Name(), typ.Name(), x.ParseAttr(s.Predicate))
 		}
 
 	default:
 		// uid => scalar or scalar => uid. Check that there shouldn't be any data.
-		if hasEdges(s.Predicate, math.MaxUint64) {
+		if hasData(s.Predicate) {
 			return errors.Errorf("Schema change not allowed from scalar to uid or vice versa"+
 				" while there is data for pred: %s", x.ParseAttr(s.Predicate))
 		}

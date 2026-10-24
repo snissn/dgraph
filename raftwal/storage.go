@@ -7,6 +7,7 @@ package raftwal
 
 import (
 	"math"
+	"os"
 	"sync"
 
 	"github.com/golang/glog"
@@ -64,6 +65,12 @@ type DiskStorage struct {
 	meta *metaFile
 	wal  *wal
 	lock sync.Mutex
+
+	// External materialized stores may compact only a certified durable prefix.
+	checkpointGuard     bool
+	certifiedIndex      uint64
+	syncStageForTest    func(string)
+	installStageForTest func(string)
 }
 
 // Init initializes an instance of DiskStorage without encryption.
@@ -76,11 +83,14 @@ func Init(dir string) *DiskStorage {
 // InitEncrypted initializes returns a properly initialized instance of DiskStorage.
 // To gracefully shutdown DiskStorage, store.Closer.SignalAndWait() should be called.
 func InitEncrypted(dir string, encKey x.Sensitive) (*DiskStorage, error) {
+	intent, err := ReadAcceptedSnapshotInstall(dir)
+	if err != nil {
+		return nil, err
+	}
 	w := &DiskStorage{
 		dir: dir,
 	}
 
-	var err error
 	if w.meta, err = newMetaFile(dir); err != nil {
 		return nil, err
 	}
@@ -93,6 +103,12 @@ func InitEncrypted(dir string, encKey x.Sensitive) (*DiskStorage, error) {
 	}
 
 	w.elog = trace.NewEventLog("Badger", "RaftStorage")
+	if intent != nil {
+		// The durable archive plus accepted intent owns this transition. Normal
+		// snapshot/log alignment and pruning must wait until the posting owner
+		// confirms its exact receiver root and CompleteSnapshotInstall runs.
+		return w, nil
+	}
 
 	snap, err := w.meta.snapshot()
 	if err != nil {
@@ -128,6 +144,8 @@ func (w *DiskStorage) reset(es []raftpb.Entry) error {
 }
 
 func (w *DiskStorage) HardState() (raftpb.HardState, error) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	if w.meta == nil {
 		return raftpb.HardState{}, errors.Errorf("uninitialized meta file")
 	}
@@ -269,6 +287,40 @@ func (w *DiskStorage) Snapshot() (raftpb.Snapshot, error) {
 
 // ---------------- Raft.Storage interface complete.
 
+// RequireCheckpointCertificate enables fail-closed retention for a materialized
+// state machine. The caller must first validate its durable checkpoint against
+// this WAL. The guard starts at zero; authorization is deliberately not inferred
+// from CheckpointIndex, which historically was only an independently saved hint.
+func (w *DiskStorage) RequireCheckpointCertificate() {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	w.checkpointGuard = true
+	w.certifiedIndex = 0
+	w.wal.dirty = make(map[*logFile]struct{})
+	// One open-time pass also covers Ready writes made before the owner opted in.
+	for _, file := range w.wal.files {
+		w.wal.markDirty(file)
+	}
+	w.wal.markDirty(w.wal.current)
+	w.wal.namespaceDirty = true
+}
+
+// AuthorizeCheckpoint permits pruning through a previously published durable
+// state-machine certificate. Callers must not invoke it before certificate sync.
+func (w *DiskStorage) AuthorizeCheckpoint(index uint64) error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	hs, err := w.meta.HardState()
+	if err != nil {
+		return err
+	}
+	if !w.checkpointGuard || index < w.certifiedIndex || index > hs.Commit {
+		return errors.Errorf("invalid checkpoint retention authorization: index=%d certified=%d commit=%d", index, w.certifiedIndex, hs.Commit)
+	}
+	w.certifiedIndex = index
+	return nil
+}
+
 // CreateSnapshot generates a snapshot with the given ConfState and data and writes it to disk.
 func (w *DiskStorage) CreateSnapshot(i uint64, cs *raftpb.ConfState, data []byte) error {
 	glog.V(2).Infof("CreateSnapshot i=%d, cs=%+v", i, cs)
@@ -276,6 +328,9 @@ func (w *DiskStorage) CreateSnapshot(i uint64, cs *raftpb.ConfState, data []byte
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
+	if w.checkpointGuard && i > w.certifiedIndex {
+		return errors.Errorf("snapshot index %d exceeds certified checkpoint %d", i, w.certifiedIndex)
+	}
 	first := w.firstIndex()
 	if i < first {
 		glog.Errorf("i=%d<first=%d, ErrSnapOutOfDate", i, first)
@@ -297,6 +352,13 @@ func (w *DiskStorage) CreateSnapshot(i uint64, cs *raftpb.ConfState, data []byte
 	if err := w.meta.StoreSnapshot(&snap); err != nil {
 		return err
 	}
+	// Persist retention authorization before deleting any recovery input. Without
+	// this ordering a power loss could retain an old snapshot with missing logs.
+	if w.checkpointGuard {
+		if err := w.syncLocked(); err != nil {
+			return err
+		}
+	}
 	// Now we delete all the files which are below the snapshot index.
 	w.wal.deleteBefore(snap.Metadata.Index)
 	return nil
@@ -313,6 +375,9 @@ func (w *DiskStorage) Save(h *raftpb.HardState, es []raftpb.Entry, snap *raftpb.
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
+	if w.checkpointGuard && snap != nil && !raft.IsEmptySnap(*snap) && snap.Metadata.Index > w.certifiedIndex {
+		return errors.Errorf("snapshot installation requires a certified TreeDB install protocol")
+	}
 	if err := w.wal.AddEntries(es); err != nil {
 		return err
 	}
@@ -355,6 +420,9 @@ func (w *DiskStorage) addEntries(entries []raftpb.Entry) error {
 // truncateEntriesUntil deletes the data field of every raft entry
 // of type EntryNormal and index ∈ [0, lastIdx).
 func (w *DiskStorage) TruncateEntriesUntil(lastIdx uint64) {
+	if w.checkpointGuard {
+		return
+	} // Only certificate-owned snapshot pruning is authorized.
 	w.wal.truncateEntriesUntil(lastIdx)
 }
 
@@ -366,7 +434,48 @@ func (w *DiskStorage) NumLogFiles() int {
 func (w *DiskStorage) Sync() error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
+	return w.syncLocked()
+}
 
+// syncLocked seals every dirty dependency before explicitly syncing metadata
+// with its new commit frontier. Ready and certificate publication share this order.
+func (w *DiskStorage) syncLocked() error {
+	if w.checkpointGuard {
+		for file := range w.wal.dirty {
+			if err := file.Sync(); err != nil {
+				return err
+			}
+			if w.syncStageForTest != nil {
+				w.syncStageForTest("wal")
+			}
+		}
+		if w.wal.namespaceDirty {
+			dir, err := os.Open(w.dir)
+			if err != nil {
+				return err
+			}
+			err = dir.Sync()
+			closeErr := dir.Close()
+			if err != nil {
+				return err
+			}
+			if closeErr != nil {
+				return closeErr
+			}
+			if w.syncStageForTest != nil {
+				w.syncStageForTest("directory")
+			}
+		}
+		if err := w.meta.Sync(); err != nil {
+			return err
+		}
+		if w.syncStageForTest != nil {
+			w.syncStageForTest("meta")
+		}
+		clear(w.wal.dirty)
+		w.wal.namespaceDirty = false
+		return nil
+	}
 	if err := w.meta.Sync(); err != nil {
 		return errors.Wrapf(err, "while syncing meta")
 	}

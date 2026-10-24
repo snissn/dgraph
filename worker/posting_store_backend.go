@@ -55,8 +55,9 @@ func ParsePostingStoreSuperFlag(value string) PostingStoreSuperFlag {
 }
 
 const (
-	PostingStoreDurabilityDurable = "durable"
-	PostingStoreDurabilityRelaxed = "relaxed"
+	PostingStoreDurabilityDurable        = "durable"
+	PostingStoreDurabilityRelaxed        = "relaxed"
+	PostingStoreDurabilityRaftCheckpoint = "raft_checkpoint"
 )
 
 // ValidatePostingStoreSelection enforces the deliberately narrow TreeDB Alpha
@@ -83,10 +84,10 @@ func ValidatePostingStoreSelection(backend, tier, durability string, encrypted, 
 		return fmt.Errorf("posting-store backend %q is restricted to tier %q, got %q",
 			PostingStoreBackendTreeDB, PostingStoreTierBenchmarkMinimal, tier)
 	}
-	if durability != PostingStoreDurabilityDurable && durability != PostingStoreDurabilityRelaxed {
-		return fmt.Errorf("posting-store backend %q durability must be %q or %q, got %q",
+	if durability != PostingStoreDurabilityDurable && durability != PostingStoreDurabilityRelaxed && durability != PostingStoreDurabilityRaftCheckpoint {
+		return fmt.Errorf("posting-store backend %q durability must be %q, %q or %q, got %q",
 			PostingStoreBackendTreeDB, PostingStoreDurabilityDurable,
-			PostingStoreDurabilityRelaxed, durability)
+			PostingStoreDurabilityRelaxed, PostingStoreDurabilityRaftCheckpoint, durability)
 	}
 	if !events {
 		return fmt.Errorf("posting-store backend %q requires events=true so internal ACL and GraphQL schema watchers cannot become stale",

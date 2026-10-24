@@ -32,7 +32,9 @@ import (
 )
 
 type options struct {
+	survival, treeDBPolicy, treeDBMemtable                                                                         string
 	dgraphBin, artifactDir, backend, class, cpuProfile, endpointDiagnostic, operationDiagnostic, storageDiagnostic string
+	memoryDiagnostic                                                                                               string
 	repeat, dataset, concurrency, warmup, timed, zeroOffset, alphaOffset                                           int
 	profileSeconds                                                                                                 int
 	seed                                                                                                           int64
@@ -55,6 +57,9 @@ func main() {
 	flag.StringVar(&o.artifactDir, "artifact-dir", "", "new per-run artifact directory")
 	flag.StringVar(&o.backend, "backend", "", "badger or treedb")
 	flag.StringVar(&o.class, "durability", "", "relaxed or durable")
+	flag.StringVar(&o.survival, "survive", "process", "explicit Zero and Alpha survival: process or filesystem")
+	flag.StringVar(&o.treeDBPolicy, "treedb-durable-policy", "store_wal", "TreeDB durable arm recovery owner: store_wal or raft_checkpoint")
+	flag.StringVar(&o.treeDBMemtable, "require-treedb-memtable", "", "refuse startup/restart unless the observed TreeDB memtable matches")
 	flag.IntVar(&o.repeat, "repeat", 1, "one-based repeat number")
 	flag.IntVar(&o.dataset, "dataset-nodes", 500, "initial node count")
 	flag.IntVar(&o.concurrency, "concurrency", 4, "timed workload concurrency")
@@ -68,6 +73,7 @@ func main() {
 	flag.StringVar(&o.endpointDiagnostic, "endpoint-diagnostic", "", "new JSON sidecar for separate diagnostic-run posting endpoints; diagnostic overhead only")
 	flag.StringVar(&o.operationDiagnostic, "operation-diagnostic", "", "new operation/server-phase JSON sidecar; diagnostic overhead excluded from acceptance")
 	flag.StringVar(&o.storageDiagnostic, "storage-diagnostic", "", "new same-walk posting-file JSON sidecar; diagnostic overhead excluded from acceptance")
+	flag.StringVar(&o.memoryDiagnostic, "memory-diagnostic", "", "new artifact filename prefix for paired Alpha raw memory/forced-GC heap observations; excluded from acceptance")
 	flag.Float64Var(&o.maxLoad, "max-load1", float64(runtime.NumCPU())*.75, "exclude a run if host load1 exceeds this")
 	flag.Parse()
 	if err := run(o); err != nil {
@@ -77,6 +83,9 @@ func main() {
 }
 
 func run(o options) (err error) {
+	if err := normalizeRuntimeOptions(&o); err != nil {
+		return err
+	}
 	if o.dgraphBin == "" || o.artifactDir == "" || (o.backend != "badger" && o.backend != "treedb") || (o.class != "relaxed" && o.class != "durable") {
 		return errors.New("--dgraph-bin, --artifact-dir, valid --backend, and valid --durability are required")
 	}
@@ -95,6 +104,9 @@ func run(o options) (err error) {
 	if err := validateStorageDiagnosticOption(o); err != nil {
 		return err
 	}
+	if err := validateMemoryDiagnosticOption(o); err != nil {
+		return err
+	}
 	if _, err := os.Stat(o.artifactDir); !os.IsNotExist(err) {
 		return fmt.Errorf("artifact directory must not exist: %s", o.artifactDir)
 	}
@@ -107,8 +119,9 @@ func run(o options) (err error) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	posting, badger := selectors(o.backend, o.class)
-	config := livebench.Config{Backend: o.backend, DurabilityClass: o.class, PostingStore: posting, Badger: badger, DatasetNodes: o.dataset, Concurrency: o.concurrency, WarmupOps: o.warmup, TimedOps: o.timed, QueryMix: map[string]int{"point_read": 60, "one_hop_read": 20, "write": 20}, Topology: "single-zero-single-alpha", Seed: o.seed}
+	posting, badger := runtimeSelectors(o)
+	config := runtimeConfig(o)
+	config.RecoveryProbe = livebench.RecoveryReadCommitRead
 	r := livebench.Result{SchemaVersion: livebench.SchemaVersion, RunID: fmt.Sprintf("%s-%s-r%d", o.backend, o.class, o.repeat), Repeat: o.repeat, Config: config, LatencyMS: map[string]float64{}, Metrics: map[string]livebench.Metric{}}
 	r.Context, err = collectContext(o)
 	if err != nil {
@@ -119,6 +132,8 @@ func run(o options) (err error) {
 
 	zeroArgs := []string{"zero", "--wal", filepath.Join(runDir, "zw"), "--replicas=1", fmt.Sprintf("--port_offset=%d", o.zeroOffset)}
 	alphaArgs := []string{"alpha", "--zero", fmt.Sprintf("localhost:%d", 5080+o.zeroOffset), "--postings", filepath.Join(runDir, "p"), "--wal", filepath.Join(runDir, "w"), fmt.Sprintf("--port_offset=%d", o.alphaOffset), "--posting-store", posting, "--badger", badger}
+	zeroArgs = append(zeroArgs, "--survive="+o.survival)
+	alphaArgs = append(alphaArgs, "--survive="+o.survival)
 	zero, err := start(o.dgraphBin, zeroArgs, filepath.Join(o.artifactDir, "zero.log"))
 	if err != nil {
 		return err
@@ -142,6 +157,10 @@ func run(o options) (err error) {
 	}
 	defer dg.Close()
 
+	r.Validation.Runtime, err = captureRuntime(o, "startup", zero, alpha, httpBase)
+	if err != nil {
+		return fmt.Errorf("startup runtime identity: %w", err)
+	}
 	r.SetupStarted = time.Now().UTC()
 	dataset, err := setup(ctx, dg, o.dataset)
 	if err != nil {
@@ -152,6 +171,13 @@ func run(o options) (err error) {
 		return fmt.Errorf("warmup: %w", err)
 	}
 	r.SetupFinished = time.Now().UTC()
+	if o.memoryDiagnostic != "" {
+		profiles, memoryErr := captureMemoryDiagnostic(o.memoryDiagnostic, memoryDiagnosticBoundaries[0], filepath.Join(runDir, "p"), httpBase, alpha.cmd.Process.Pid, r)
+		r.Context.Profiles = append(r.Context.Profiles, profiles...)
+		if memoryErr != nil {
+			return fmt.Errorf("after warmup memory diagnostic: %w", memoryErr)
+		}
+	}
 	var diagnostic *operationDiagnostic
 	var beforeStore, beforeProm, afterStore, afterProm *operationRequest
 	if o.operationDiagnostic != "" {
@@ -249,7 +275,14 @@ func run(o options) (err error) {
 	if err != nil {
 		return fmt.Errorf("collect posting-store status: %w", err)
 	}
-	r.Metrics = metrics(o.backend, cpuAfter-cpuBefore, hwm, diskLogical, diskAllocated, promBefore, promAfter, storeBefore, storeAfter)
+	r.Metrics = metrics(o.backend, config.TreeDBPolicy, cpuAfter-cpuBefore, hwm, diskLogical, diskAllocated, promBefore, promAfter, storeBefore, storeAfter)
+	if o.memoryDiagnostic != "" {
+		profiles, memoryErr := captureMemoryDiagnostic(o.memoryDiagnostic, memoryDiagnosticBoundaries[1], filepath.Join(runDir, "p"), httpBase, alpha.cmd.Process.Pid, r)
+		r.Context.Profiles = append(r.Context.Profiles, profiles...)
+		if memoryErr != nil {
+			return fmt.Errorf("after native metrics memory diagnostic: %w", memoryErr)
+		}
+	}
 	if diagnostic != nil {
 		diagnosticWriteAttempted = true
 		if err := writeOperationDiagnostic(o.operationDiagnostic, diagnostic, filepath.Join(runDir, "p")); err != nil {
@@ -291,6 +324,11 @@ func run(o options) (err error) {
 		return fmt.Errorf("alpha restart: %w", err)
 	}
 	recoverySeconds := time.Since(recoveryStart).Seconds()
+	runtimeAfter, runtimeErr := captureRuntime(o, "after_alpha_restart", zero, alpha, httpBase)
+	if runtimeErr != nil {
+		return fmt.Errorf("restart runtime identity: %w", runtimeErr)
+	}
+	r.Validation.Runtime = append(r.Validation.Runtime, runtimeAfter...)
 	r.Metrics["recovery_seconds"] = livebench.Metric{Available: true, Value: recoverySeconds, Unit: "seconds", Source: "alpha process restart to healthy"}
 	dg, err = client(fmt.Sprintf("localhost:%d", 9080+o.alphaOffset))
 	if err != nil {
@@ -302,6 +340,11 @@ func run(o options) (err error) {
 	if err != nil {
 		return fmt.Errorf("restart validation: %w", err)
 	}
+	r.Metrics["recovery_read_seconds"] = livebench.Metric{Available: true, Value: time.Since(recoveryStart).Seconds(), Unit: "seconds", Source: "alpha restart through runtime witness and fresh full posting validation"}
+	if err := validateRecoveryWrite(ctx, dg); err != nil {
+		return fmt.Errorf("restart write readiness: %w", err)
+	}
+	r.Metrics["recovery_read_write_seconds"] = livebench.Metric{Available: true, Value: time.Since(recoveryStart).Seconds(), Unit: "seconds", Source: "alpha restart through full posting validation, new CommitNow ACK and fresh read of committed probe"}
 	for _, contaminant := range contaminants(o.maxLoad) {
 		if !contains(r.Context.Contaminants, contaminant) {
 			r.Context.Contaminants = append(r.Context.Contaminants, contaminant)
@@ -311,8 +354,14 @@ func run(o options) (err error) {
 		r.Context.Excluded = true
 		r.Context.ExclusionReason = strings.Join(r.Context.Contaminants, "; ")
 	}
+	if err := verifyMeasuredBinary(o.dgraphBin, r.Context.BinarySHA256); err != nil {
+		return err
+	}
 	if err := r.Validate(); err != nil {
 		return fmt.Errorf("result validation: %w", err)
+	}
+	if err := r.VerifyRuntimeArtifacts(o.artifactDir); err != nil {
+		return fmt.Errorf("result runtime artifacts: %w", err)
 	}
 	return livebench.WriteImmutable(r.Context.RawPath, r)
 }
@@ -449,6 +498,30 @@ func dgraphQueryWithVars(ctx context.Context, dg *dgo.Dgraph, query string, vars
 	return withDgraphRPCTimeout(ctx, dgraphRPCTimeout, func(rpcCtx context.Context) (*api.Response, error) {
 		return dg.NewReadOnlyTxn().QueryWithVars(rpcCtx, query, vars)
 	})
+}
+
+// validateRecoveryWrite runs after the measured workload and restart checksum.
+// A new node ensures readiness includes a real write, even if the fixture's
+// existing values would make an overwrite redundant. It never enters throughput,
+// posting disk/RSS counters, or the unchanged pre/post-restart checksum.
+func validateRecoveryWrite(ctx context.Context, dg *dgo.Dgraph) error {
+	const probeValue = "recovery-probe-v1"
+	resp, err := dgraphMutate(ctx, dg, &api.Mutation{SetNquads: []byte("_:recovery <bench.value> \"" + probeValue + "\" ."), CommitNow: true})
+	if err != nil {
+		return err
+	}
+	if resp == nil || resp.Txn == nil || resp.Txn.CommitTs == 0 || resp.Uids["recovery"] == "" {
+		return errors.New("recovery probe lacks committed timestamp or allocated UID")
+	}
+	uid := resp.Uids["recovery"]
+	read, err := dgraphQueryWithVars(ctx, dg, "query q($id: string) { q(func: uid($id)) { uid bench.value } }", map[string]string{"$id": uid})
+	if err != nil {
+		return err
+	}
+	if read == nil || read.Txn == nil || read.Txn.StartTs < resp.Txn.CommitTs {
+		return errors.New("recovery probe read precedes committed timestamp")
+	}
+	return validateReadResponse(read.Json, uid, expectedNode{Value: probeValue}, false)
 }
 
 func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]expectedNode, error) {
@@ -948,17 +1021,18 @@ func delta(after, before map[string]float64, key string) (float64, bool) {
 	return a - b, aok && bok
 }
 
-func metrics(backend string, cpu, hwm, diskLogical, diskAllocated float64, pb, pa, sb, sa map[string]float64) map[string]livebench.Metric {
+func metrics(backend, policy string, cpu, hwm, diskLogical, diskAllocated float64, pb, pa, sb, sa map[string]float64) map[string]livebench.Metric {
 	m := map[string]livebench.Metric{
 		"cpu_seconds": {Available: true, Value: cpu, Unit: "seconds", Source: "/proc alpha utime+stime"}, "rss_peak_bytes": {Available: true, Value: hwm, Unit: "bytes", Source: "/proc alpha VmHWM"}, "disk_logical_bytes": {Available: true, Value: diskLogical, Unit: "bytes", Source: "posting directory walk"}, "disk_allocated_bytes": {Available: true, Value: diskAllocated, Unit: "bytes", Source: "posting directory stat blocks"},
 		"recovery_seconds": {Available: false, Unit: "seconds", Source: "alpha restart", Reason: "populated after restart"},
 	}
 	writeBytes, writeAvail := delta(pa, pb, "badger_write_bytes_user")
 	writeSource := "Badger Prometheus badger_write_bytes_user"
-	writeReason := ""
+	writeReason := "logical user-byte counter unavailable for selected backend"
 	if backend == "treedb" {
 		writeBytes, writeAvail = delta(sa, sb, "treedb.command_wal.public_batch.set.bytes_total")
 		writeSource = "TreeDB /debug/store public batch set bytes"
+		writeReason = "TreeDB public-batch logical-byte counter unavailable"
 		pointAppends, pointAppendOK := delta(sa, sb, "treedb.command_wal.append.point.count_total")
 		switch {
 		case !pointAppendOK:
@@ -969,7 +1043,7 @@ func metrics(backend string, cpu, hwm, diskLogical, diskAllocated float64, pb, p
 			writeReason = "TreeDB direct-point appends bypass the public-batch logical-byte counter"
 		}
 	}
-	m["write_bytes"] = livebench.Metric{Available: writeAvail, Value: writeBytes, Unit: "bytes", Source: writeSource, Reason: writeReason}
+	m["write_bytes"] = availability(writeBytes, writeAvail, "bytes", writeSource, writeReason)
 	physical := 0.0
 	physicalOK := backend == "badger"
 	for _, name := range []string{"badger_write_bytes_l0", "badger_write_bytes_vlog", "badger_write_bytes_compaction"} {
@@ -1002,7 +1076,7 @@ func metrics(backend string, cpu, hwm, diskLogical, diskAllocated float64, pb, p
 	m["gc_cycles"] = availability(gc, gcOK, "count", gcSource, "counter unavailable")
 	m["flushes"] = availability(flush, flushOK, "count", flushSource, flushReason)
 	m["checkpoints"] = availability(check, checkOK, "count", checkSource, "counter unavailable for selected backend")
-	addTreeDBDiagnostics(m, backend, sb, sa)
+	addTreeDBDiagnostics(m, backend, policy, sb, sa)
 	return m
 }
 
@@ -1031,11 +1105,15 @@ var treeDBDiagnostics = []treeDBDiagnostic{
 	{metric: "treedb_leaf_log_segment_rotations", stat: "treedb.cache.leaf_log_lanes.segment_rotations_total"},
 }
 
-func addTreeDBDiagnostics(out map[string]livebench.Metric, backend string, before, after map[string]float64) {
+func addTreeDBDiagnostics(out map[string]livebench.Metric, backend, policy string, before, after map[string]float64) {
 	for _, diagnostic := range treeDBDiagnostics {
 		source := "TreeDB /debug/store timed-phase delta: " + diagnostic.stat
 		if backend != "treedb" {
 			out[diagnostic.metric] = availability(0, false, "count", source, "TreeDB-only diagnostic")
+			continue
+		}
+		if policy == "raft_checkpoint" && strings.HasPrefix(diagnostic.metric, "treedb_group_commit_") {
+			out[diagnostic.metric] = availability(0, false, "count", source, livebench.RaftCheckpointNoCommandWAL)
 			continue
 		}
 		value, ok := delta(after, before, diagnostic.stat)
@@ -1147,10 +1225,14 @@ func collectContext(o options) (livebench.Context, error) {
 	if err != nil {
 		return livebench.Context{}, err
 	}
-	gomapVersion, err := commandRequired("go", "list", "-m", "-f", "{{.Version}}", "github.com/snissn/gomap")
+	binaryRevision, gomapVersion, binaryGoVersion, binaryDirty, err := measuredSources(o.dgraphBin)
 	if err != nil {
 		return livebench.Context{}, err
 	}
+	if binaryRevision != dgraphSHA {
+		return livebench.Context{}, fmt.Errorf("measured binary source %s differs from worktree %s", binaryRevision, dgraphSHA)
+	}
+
 	host, err := commandRequired("hostname")
 	if err != nil {
 		return livebench.Context{}, err
@@ -1175,7 +1257,11 @@ func collectContext(o options) (livebench.Context, error) {
 	for _, name := range []string{"GOWORK", "TMPDIR", "GOMAXPROCS", "GOFLAGS"} {
 		environment[name] = os.Getenv(name)
 	}
-	return livebench.Context{DgraphSHA: dgraphSHA, GomapVersion: gomapVersion, Dirty: command("git", "status", "--porcelain") != "", GoVersion: runtime.Version(), Host: host, Kernel: kernel, CPU: cpu, TotalRAMBytes: ram, Storage: storage, Environment: environment, ExactCommand: cmd, RawPath: filepath.Join(o.artifactDir, "result.json")}, nil
+	binarySHA, buildInfo, err := measuredBinary(o.dgraphBin)
+	if err != nil {
+		return livebench.Context{}, err
+	}
+	return livebench.Context{BinarySHA256: binarySHA, BinaryBuildInfo: buildInfo, DgraphSHA: dgraphSHA, GomapVersion: gomapVersion, Dirty: binaryDirty || command("git", "status", "--porcelain") != "", GoVersion: binaryGoVersion, Host: host, Kernel: kernel, CPU: cpu, TotalRAMBytes: ram, Storage: storage, Environment: environment, ExactCommand: cmd, RawPath: filepath.Join(o.artifactDir, "result.json")}, nil
 }
 func command(name string, args ...string) string {
 	b, _ := exec.Command(name, args...).Output()
@@ -1493,6 +1579,9 @@ func finishOperation(row *operationRow, elapsed time.Duration, err error) {
 
 // Mark all diagnostics at run setup; CPU profiling alone keeps its existing behavior.
 func markDiagnostics(r *livebench.Result, o options) {
+	if o.memoryDiagnostic != "" {
+		r.Context.Contaminants = append(r.Context.Contaminants, memoryDiagnosticReason)
+	}
 	if o.storageDiagnostic != "" {
 		r.Context.Contaminants = append(r.Context.Contaminants, storageDiagnosticReason)
 	}

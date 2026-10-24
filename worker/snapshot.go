@@ -254,30 +254,13 @@ func doStreamSnapshot(snap *pb.Snapshot, out pb.Worker_StreamSnapshotServer) err
 	return nil
 }
 
-func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) error {
-	if _, err := requireBadgerPostingStore("Raft snapshot send"); err != nil {
-		return err
+func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) (err error) {
+	native := raftCheckpointEnabled()
+	if !native {
+		if _, err := requireBadgerPostingStore("Raft snapshot send"); err != nil {
+			return err
+		}
 	}
-	// Pause rollups during snapshot streaming.
-	closer, err := groups().Node.startTask(opSnapshot)
-	if err != nil {
-		return err
-	}
-	defer closer.Done()
-
-	n := groups().Node
-	if n == nil || n.Raft() == nil {
-		return conn.ErrNoNode
-	}
-
-	// Indicate that we're streaming right now. Used to cancel
-	// calculateSnapshot.  However, this logic isn't foolproof. A leader might
-	// have already proposed a snapshot, which it can apply while this streaming
-	// is going on. That can happen after the reqSnap check we're doing below.
-	// However, I don't think we need to tackle this edge case for now.
-	atomic.AddInt32(&n.streaming, 1)
-	defer atomic.AddInt32(&n.streaming, -1)
-
 	snap, err := stream.Recv()
 	if err != nil {
 		// If we don't even receive a request (here or if no StreamSnapshot is called), we can't
@@ -288,10 +271,47 @@ func (w *grpcWorker) StreamSnapshot(stream pb.Worker_StreamSnapshotServer) error
 		// but timeouts are always hard to get right.
 		return err
 	}
+	// Once the requester is known, every failed transfer must release its Raft
+	// snapshot progress, including native-format validation and transport errors.
+	// Retain the same Raft owner throughout the RPC rather than looking it up
+	// again after a restart or node replacement.
+	n := groups().Node
+	if n != nil {
+		if owner := n.Raft(); owner != nil {
+			defer func() {
+				if err != nil {
+					glog.Errorf("While streaming snapshot: %v. Reporting failure.", err)
+					owner.ReportSnapshot(snap.GetContext().GetId(), raft.SnapshotFailure)
+				}
+			}()
+		}
+	}
+	if native {
+		return streamRaftCheckpoint(snap, stream)
+	}
+	if snap.TransferFormat != "" {
+		return errors.Errorf("legacy snapshot sender does not support transfer format %q", snap.TransferFormat)
+	}
+	if n == nil || n.Raft() == nil {
+		return conn.ErrNoNode
+	}
+	// Pause rollups during snapshot streaming.
+	closer, err := n.startTask(opSnapshot)
+	if err != nil {
+		return err
+	}
+	defer closer.Done()
+
+	// Indicate that we're streaming right now. Used to cancel
+	// calculateSnapshot.  However, this logic isn't foolproof. A leader might
+	// have already proposed a snapshot, which it can apply while this streaming
+	// is going on. That can happen after the reqSnap check we're doing below.
+	// However, I don't think we need to tackle this edge case for now.
+	atomic.AddInt32(&n.streaming, 1)
+	defer atomic.AddInt32(&n.streaming, -1)
+
 	glog.Infof("Got StreamSnapshot request: %+v\n", snap)
 	if err := doStreamSnapshot(snap, stream); err != nil {
-		glog.Errorf("While streaming snapshot: %v. Reporting failure.", err)
-		n.Raft().ReportSnapshot(snap.Context.GetId(), raft.SnapshotFailure)
 		return err
 	}
 	glog.Infof("Stream snapshot: OK")

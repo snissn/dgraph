@@ -60,8 +60,27 @@ type node struct {
 	gid     uint32
 	closer  *z.Closer
 
-	checkpointTs uint64 // Timestamp corresponding to checkpoint.
-	streaming    int32  // Used to avoid calculating snapshot
+	raftDebtMu           sync.Mutex
+	raftSemanticMu       sync.Mutex // external apply, expiry and root-install barrier
+	raftReservedBytes    uint64
+	raftReservedEntries  uint64
+	raftAppliedBytes     uint64
+	raftCertifiedIndex   uint64
+	raftRecoveryBytes    uint64
+	raftSemanticIndex    uint64
+	raftStartupComplete  uint32
+	raftConfStateDirty   bool
+	raftFloorDirty       bool
+	raftPostingFloor     uint64
+	raftOrderedAssigned  uint64
+	raftOrderedChecksum  uint64
+	raftChecksumSequence uint64
+	raftChecksumDigest   string
+	raftFloorIndex       uint64
+	raftReplayUntil      uint64
+	appliedProposals     map[uint64]*appliedProposal
+	checkpointTs         uint64 // Timestamp corresponding to checkpoint.
+	streaming            int32  // Used to avoid calculating snapshot
 
 	// Used to track the ops going on in the system.
 	ops         map[op]operation
@@ -128,7 +147,9 @@ func (n *node) startTaskAtTs(id op, ts uint64) (*z.Closer, error) {
 			time.Sleep(10 * time.Second) // Wait for 10s to start rollup operation.
 			// If any other operation is running, this would error out. This error can
 			// be safely ignored because rollups will resume once that other task is done.
-			_, _ = n.startTask(opRollup)
+			if !raftCheckpointEnabled() {
+				_, _ = n.startTask(opRollup)
+			}
 		}
 	}
 
@@ -333,6 +354,14 @@ func detectPendingTxns(attr string) error {
 // involving the predicate are aborted until schema mutations are done.
 func (n *node) applyMutations(ctx context.Context, proposal *pb.Proposal) (rerr error) {
 	span := trace.SpanFromContext(ctx)
+	if raftCheckpointEnabled() {
+		if handled, err := n.applyRaftAdminDrop(ctx, proposal); handled {
+			return err
+		}
+	}
+	if raftCheckpointEnabled() && raftSchemaMutationIsNoop(proposal.Mutations) {
+		return nil
+	}
 
 	if proposal.Mutations.DropOp == pb.Mutations_ALL_IN_NS {
 		ns, err := strconv.ParseUint(proposal.Mutations.DropValue, 0, 64)
@@ -433,12 +462,22 @@ func (n *node) applyMutations(ctx context.Context, proposal *pb.Proposal) (rerr 
 		// would be picked up in building indexes. Any uncommitted txns would be cancelled
 		// by detectPendingTxns below.
 		startTs := posting.Oracle().MaxAssigned()
+		if raftCheckpointEnabled() {
+			// Unordered Zero notifications may have moved the process-local
+			// Oracle ahead. Only the preceding ordered frontier is replay input.
+			startTs = n.raftOrderedAssigned
+			if startTs == 0 {
+				return &raftSemanticRejection{reason: "schema requires an ordered Oracle frontier"}
+			}
+		}
 
 		span.AddEvent("Applying schema and types")
-		for _, supdate := range proposal.Mutations.Schema {
-			// We should not need to check for predicate move here.
-			if err := detectPendingTxns(supdate.Predicate); err != nil {
-				return err
+		if !raftCheckpointEnabled() {
+			for _, supdate := range proposal.Mutations.Schema {
+				// We should not need to check for predicate move here.
+				if err := detectPendingTxns(supdate.Predicate); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -487,6 +526,12 @@ func (n *node) applyMutations(ctx context.Context, proposal *pb.Proposal) (rerr 
 		if _, ok := schemaMap[edge.Attr]; !ok {
 			schemaMap[edge.Attr] = posting.TypeID(edge)
 		}
+	}
+	if raftCheckpointEnabled() {
+		if err := validateRaftMutationEdges(proposal.Mutations, schemaMap); err != nil {
+			return err
+		}
+		return n.stageRaftMutation(ctx, proposal, schemaMap)
 	}
 
 	total := len(proposal.Mutations.Edges)
@@ -538,83 +583,25 @@ func (n *node) applyMutations(ctx context.Context, proposal *pb.Proposal) (rerr 
 	// Discard the posting lists from cache to release memory at the end.
 	defer txn.Update()
 
-	process := func(edges []*pb.DirectedEdge) error {
-		var retries int
-		for _, edge := range edges {
-			for {
-				err := runMutation(ctx, edge, txn)
-				if err == nil {
-					break
-				}
-				if err != posting.ErrRetry {
-					return err
-				}
-				retries++
-			}
-		}
-		if retries > 0 {
-			span.AddEvent("retries=true num=%d", trace.WithAttributes(
-				attribute.Int("retries", retries)))
-		}
-		return nil
-	}
-	numGo, width := x.DivideAndRule(len(m.Edges))
-	span.AddEvent("To apply: %d edges. NumGo: %d. Width: %d", trace.WithAttributes(
-		attribute.Int("num_edges", len(m.Edges)),
-		attribute.Int("num_go", numGo),
-		attribute.Int("width", width)))
-
-	if numGo == 1 {
-		return process(m.Edges)
-	}
-
-	// We need to create batches such that no two batches contains the same entry (<Entity> + <Predicate>)
-	// combination. We have already sorted the edges, all we need to do is increase the batch size until we reach
-	// the next different entry. New number of chans would ne less than NumGo. So we can create the chan with
-	// numGo.
-	sameAttrAndUid := func(i, j int) bool {
-		ei := m.Edges[i]
-		ej := m.Edges[j]
-		if ei.GetAttr() != ej.GetAttr() {
-			return false
-		}
-		return ei.GetEntity() == ej.GetEntity()
-	}
-	numChanCreated := 0
-
-	errCh := make(chan error, numGo)
-	for i := 0; i < len(m.Edges); {
-		end := i + width
-		if end > len(m.Edges) {
-			end = len(m.Edges)
-		}
-
-		for end < len(m.Edges) && sameAttrAndUid(end, end-1) {
-			end++
-		}
-
-		numChanCreated += 1
-		go func(start, end int) {
-			errCh <- process(m.Edges[start:end])
-		}(i, end)
-		i = end
-	}
-	// Earlier we were returning after even if one thread had an error. We should wait for
-	// all the transactions to finish. We call txn.Update() when this function exists. This could cause
-	// a deadlock with runMutation.
-	var errs error
-	for range numChanCreated {
-		if err := <-errCh; err != nil {
-			if errs == nil {
-				errs = errors.New("Got error while running mutation")
-			}
-			errs = errors.Wrap(err, errs.Error())
-		}
-	}
-	return errs
+	return applyRaftMutationEdges(ctx, m, txn)
 }
 
 func (n *node) applyCommitted(proposal *pb.Proposal, key uint64) error {
+	if raftCheckpointEnabled() {
+		if err := checkRaftPrototypeProposal(proposal); err != nil {
+			return err
+		}
+		if proposal.PostingFloor != nil {
+			return n.applyPostingFloor(proposal)
+		}
+		if proposal.DeleteNs != nil {
+			_, err := n.applyRaftAdminDrop(n.Ctx(key), proposal)
+			return err
+		}
+		if proposal.Snapshot != nil {
+			return nil
+		} // Local pruning is certificate-owned.
+	}
 	start := time.Now()
 	defer func() {
 		since := time.Since(start)
@@ -866,26 +853,35 @@ func updateStartTs(p *pb.Proposal) {
 func (n *node) processApplyCh() {
 	defer n.closer.Done() // CLOSER:1
 
-	type P struct {
-		err  error
-		size int
-		seen time.Time
-	}
-	previous := make(map[uint64]*P)
-
 	// This function must be run serially.
 	handle := func(entries []raftpb.Entry) {
+		if raftCheckpointEnabled() {
+			n.raftSemanticMu.Lock()
+			defer n.raftSemanticMu.Unlock()
+		}
 		glog.V(3).Infof("handling element in applyCh with #entries %v", len(entries))
 		defer glog.V(3).Infof("done handling element in applyCh")
 
 		var totalSize int64
 		for _, entry := range entries {
-			x.AssertTrue(len(entry.Data) > 0)
-
 			// We use the size as a double check to ensure that we're
 			// working with the same proposal as before.
 			psz := entry.Size()
 			totalSize += int64(psz)
+			if raftCheckpointEnabled() && (entry.Type == raftpb.EntryConfChange || len(entry.Data) == 0) {
+				if entry.Type == raftpb.EntryConfChange {
+					n.applyConfChange(entry)
+					n.raftConfStateDirty = true
+				}
+				n.raftAppliedBytes += uint64(len(entry.Data))
+				n.raftSemanticIndex = entry.Index
+				if err := n.checkpointRaftCut(entry.Index, false); err != nil {
+					glog.Fatalf("raft_checkpoint control-entry cut failed: %v", err)
+				}
+				n.Applied.Done(entry.Index)
+				continue
+			}
+			x.AssertTrue(len(entry.Data) >= 8)
 
 			var proposal pb.Proposal
 			key := binary.BigEndian.Uint64(entry.Data[:8])
@@ -894,23 +890,19 @@ func (n *node) processApplyCh() {
 			updateStartTs(&proposal)
 
 			var perr error
-			p, ok := previous[key]
-			if ok && p.err == nil && p.size == psz {
+			p, ok := n.appliedProposals[key]
+			if ok && p.err == nil && p.size == psz && !raftCheckpointEnabled() {
 				msg := fmt.Sprintf("Proposal with key: %d already applied. Skipping index: %d."+
 					" Delta: %+v Snapshot: %+v.\n",
 					key, proposal.Index, proposal.Delta, proposal.Snapshot)
 				glog.Infof(msg)
-				previous[key].seen = time.Now() // Update the ts.
+				n.appliedProposals[key].seen = time.Now() // Update the ts.
 				// Don't break here. We still need to call the Done below.
 
 			} else {
 				// if this applyCommitted fails, how do we ensure
 				start := time.Now()
-				perr = n.applyCommitted(&proposal, key)
-				if key != 0 {
-					p := &P{err: perr, size: psz, seen: time.Now()}
-					previous[key] = p
-				}
+				perr = n.applyTrackedProposal(&proposal, key, psz)
 				span := trace.SpanFromContext(n.ctx)
 				if perr != nil {
 					glog.Errorf("Applying proposal. Error: %v. Proposal: %q.", perr, &proposal)
@@ -933,6 +925,16 @@ func (n *node) processApplyCh() {
 				_ = ostats.RecordWithTags(context.Background(), tags, x.LatencyMs.M(ms))
 			}
 
+			if raftCheckpointEnabled() {
+				if perr != nil && !isRaftSemanticRejection(perr) {
+					glog.Fatalf("raft_checkpoint apply failed; refusing a visibility frontier: %v", perr)
+				}
+				n.raftAppliedBytes += uint64(len(entry.Data))
+				n.raftSemanticIndex = proposal.Index
+				if err := n.checkpointRaftCut(proposal.Index, false); err != nil {
+					glog.Fatalf("raft_checkpoint failed: %v", err)
+				}
+			}
 			n.Proposals.Done(key, perr)
 			n.Applied.Done(proposal.Index)
 			ostats.Record(context.Background(), x.RaftAppliedIndex.M(int64(n.Applied.DoneUntil())))
@@ -949,18 +951,39 @@ func (n *node) processApplyCh() {
 		select {
 		case entries, ok := <-n.applyCh:
 			if !ok {
+				if raftCheckpointEnabled() {
+					n.raftSemanticMu.Lock()
+					defer n.raftSemanticMu.Unlock()
+				}
+				if err := n.checkpointRaftCut(n.raftSemanticIndex, true); err != nil {
+					glog.Errorf("final checkpoint: %v", err)
+				}
 				return
 			}
 			handle(entries)
 		case <-tick:
 			// We use this ticker to clear out previous map.
 			now := time.Now()
-			for key, p := range previous {
-				if now.Sub(p.seen) > maxAge {
-					delete(previous, key)
+			if !raftCheckpointEnabled() {
+				for key, p := range n.appliedProposals {
+					if now.Sub(p.seen) > maxAge {
+						delete(n.appliedProposals, key)
+					}
 				}
 			}
-			glog.V(3).Infof("Size of previous map: %d", len(previous))
+			if raftCheckpointEnabled() {
+				// Existing housekeeping schedules only LOCAL reclamation. Semantic S
+				// advances exclusively through ordered PostingFloorRequest input.
+				if _, err := n.pruneRaftPostingHistory(n.ctx, math.MaxUint64, 256); err != nil {
+					if State.TreeDBStore.IsClosed() {
+						glog.Fatalf("Raft posting maintenance sealed owner: %v", err)
+					}
+					glog.Warningf("Raft posting maintenance deferred: %v", err)
+				}
+
+			} else {
+				glog.V(3).Infof("Size of previous map: %d", len(n.appliedProposals))
+			}
 		}
 	}
 }
@@ -1004,6 +1027,15 @@ func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
 	if err := writer.Flush(); err != nil {
 		return errors.Wrapf(err, "while flushing to disk")
 	}
+	if raftCheckpointEnabled() {
+		decisions := make([]posting.RaftTxnDisposition, 0, len(delta.Txns))
+		for _, status := range delta.Txns {
+			decisions = append(decisions, posting.RaftTxnDisposition{StartTs: status.StartTs, CommitTs: status.CommitTs})
+		}
+		if err := State.TreeDBStore.ResolveRaftPendingTxns(decisions); err != nil {
+			return err
+		}
+	}
 
 	if x.WorkerConfig.HardSync && pstore != nil {
 		if err := pstore.Sync(); err != nil {
@@ -1012,7 +1044,13 @@ func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
 	}
 
 	g := groups()
-	if delta.GroupChecksums != nil && delta.GroupChecksums[g.groupId()] > 0 {
+	if raftCheckpointEnabled() {
+		if delta.ChecksumSequence > n.raftChecksumSequence {
+			n.raftOrderedChecksum, n.raftChecksumSequence = delta.GroupChecksums[n.gid], delta.ChecksumSequence
+			n.raftChecksumDigest = raftChecksumDigest(delta)
+		}
+		atomic.StoreUint64(&g.deltaChecksum, n.raftOrderedChecksum)
+	} else if delta.GroupChecksums != nil && delta.GroupChecksums[g.groupId()] > 0 {
 		atomic.StoreUint64(&g.deltaChecksum, delta.GroupChecksums[g.groupId()])
 	}
 
@@ -1175,6 +1213,9 @@ func rampMeter(address *int64, maxSize int64, component string) {
 }
 
 func (n *node) updateRaftProgress() error {
+	if raftCheckpointEnabled() {
+		return nil
+	}
 	// Both leader and followers can independently update their Raft progress. We don't store
 	// this in Raft WAL. Instead, this is used to just skip over log records that this Alpha
 	// has already applied, to speed up things on a restart.
@@ -1215,7 +1256,7 @@ func (n *node) checkpointAndClose(done chan struct{}) {
 				glog.Errorf("While updating Raft progress: %v", err)
 			}
 
-			if n.AmLeader() {
+			if n.AmLeader() && !raftCheckpointEnabled() {
 				// If leader doesn't have a snapshot, we should create one immediately. This is very
 				// useful when you bring up the cluster from bulk loader. If you remove an alpha and
 				// add a new alpha, the new follower won't get a snapshot if the leader doesn't have
@@ -1267,6 +1308,8 @@ func (n *node) checkpointAndClose(done chan struct{}) {
 						lastSnapshotTime = time.Now()
 					}
 				}
+			}
+			if n.AmLeader() {
 				go n.abortOldTransactions()
 			}
 
@@ -1314,6 +1357,7 @@ func (n *node) Run() {
 
 	firstRun := true
 	var leader bool
+	var resumeSnapshotHealth bool
 	// See also our configuration of HeartbeatTick and ElectionTick.
 	// Before we used to have 20ms ticks, but they would overload the Raft tick channel, causing
 	// "tick missed to fire" logs. Etcd uses 100ms and they haven't seen those issues.
@@ -1398,9 +1442,10 @@ func (n *node) Run() {
 					// When there is a `raftpb.EntryConfChange` after creating the snapshot,
 					// then the confState included in the snapshot is out of date. so We need
 					// to update the confState before sending a snapshot to a follower.
-					if rd.Messages[i].Type == raftpb.MsgSnap {
+					if rd.Messages[i].Type == raftpb.MsgSnap && !raftCheckpointEnabled() {
 						rd.Messages[i].Snapshot.Metadata.ConfState = *n.ConfState()
 					}
+					x.Check(n.bindRaftSnapshotSource(&rd.Messages[i]))
 
 					// NOTE: We can do some optimizations here to drop messages.
 					n.Send(&rd.Messages[i])
@@ -1427,7 +1472,33 @@ func (n *node) Run() {
 				x.Check(proto.Unmarshal(rd.Snapshot.Data, snap))
 				rc := snap.GetContext()
 				x.AssertTrue(rc.GetGroup() == n.gid)
-				if rc.Id != n.Id {
+				if raftCheckpointEnabled() && snap.TransferFormat != raftCheckpointTransferFormat {
+					glog.Fatal("external snapshot receiver refuses incompatible transfer format")
+				}
+				if !raftCheckpointEnabled() && snap.TransferFormat != "" {
+					glog.Fatal("legacy snapshot receiver refuses external checkpoint format")
+				}
+				if rc.Id != n.Id && raftCheckpointEnabled() {
+					x.Check(n.Applied.WaitForMark(n.ctx, n.Applied.LastIndex()))
+					n.raftSemanticMu.Lock()
+					x.UpdateHealthStatus(false)
+					x.Check(n.persistSnapshotElection(rd.HardState))
+					if err := n.retrieveRaftCheckpoint(rd.Snapshot, rd.HardState); err != nil {
+						glog.Errorf("Native snapshot preparation failed: %v; recovering prior authority", err)
+						if raftwal.SnapshotInstallPublicationUncertain(err) {
+							glog.Fatalf("Native snapshot intent publication requires reopen: %v", err)
+						}
+						x.Check(n.restartAfterRaftSnapshotFailure(n.ctx))
+						n.raftSemanticMu.Unlock()
+						applied = n.Cfg.Applied
+						leader, lastLead, resumeSnapshotHealth = false, math.MaxUint64, true
+						span.End()
+						continue // abandon this Ready; never Advance an unapplied snapshot
+					}
+					applied = n.Cfg.Applied
+					n.raftSemanticMu.Unlock()
+					resumeSnapshotHealth = true
+				} else if rc.Id != n.Id {
 					// Set node to unhealthy state here while it applies the snapshot.
 					x.UpdateHealthStatus(false)
 
@@ -1483,13 +1554,18 @@ func (n *node) Run() {
 
 			// Store the hardstate and entries. Note that these are not CommittedEntries.
 			n.SaveToStorage(&rd.HardState, rd.Entries, &rd.Snapshot)
+			if raftCheckpointEnabled() {
+				for _, e := range rd.Entries {
+					atomic.AddUint64(&n.raftRecoveryBytes, uint64(len(e.Data)))
+				}
+			}
 			timer.Record("disk")
 			span.AddEvent(fmt.Sprintf("Saved %d entries. Snapshot, HardState empty? (%v, %v)",
 				len(rd.Entries),
 				raft.IsEmptySnap(rd.Snapshot),
 				raft.IsEmptyHardState(rd.HardState)))
 
-			for x.WorkerConfig.HardSync && rd.MustSync {
+			for x.WorkerConfig.HardSync && (rd.MustSync || (raftCheckpointEnabled() && len(rd.CommittedEntries) > 0)) {
 				if err := n.Store.Sync(); err != nil {
 					glog.Errorf("Error while calling Store.Sync: %+v", err)
 					time.Sleep(10 * time.Millisecond)
@@ -1509,6 +1585,23 @@ func (n *node) Run() {
 				// Mark{3, false} is emitted. So it's safer to emit watermarks as soon as
 				// possible sequentially
 				n.Applied.Begin(entry.Index)
+				if raftCheckpointEnabled() {
+					// Membership and empty entries belong to the same ordered cut
+					// as mutations. Ready must not install future ConfState while
+					// older semantic entries are still queued for certification.
+					if entry.Index <= applied {
+						n.Applied.Done(entry.Index)
+						continue
+					}
+					if entry.Type != raftpb.EntryConfChange && len(entry.Data) > 0 {
+						key := binary.BigEndian.Uint64(entry.Data[:8])
+						if pctx := n.Proposals.Get(key); pctx != nil {
+							atomic.AddUint32(&pctx.Found, 1)
+						}
+					}
+					entries = append(entries, entry)
+					continue
+				}
 
 				switch {
 				case entry.Type == raftpb.EntryConfChange:
@@ -1519,7 +1612,7 @@ func (n *node) Run() {
 				case len(entry.Data) == 0:
 					glog.V(3).Infof("Found empty data at index: %d", entry.Index)
 					n.Applied.Done(entry.Index)
-				case entry.Index < applied:
+				case entry.Index < applied || (raftCheckpointEnabled() && entry.Index == applied):
 					glog.V(3).Infof("Skipping over already applied entry: %d", entry.Index)
 					n.Applied.Done(entry.Index)
 				default:
@@ -1560,9 +1653,10 @@ func (n *node) Run() {
 					// When there is a `raftpb.EntryConfChange` after creating the snapshot,
 					// then the confState included in the snapshot is out of date. so We need
 					// to update the confState before sending a snapshot to a follower.
-					if rd.Messages[i].Type == raftpb.MsgSnap {
+					if rd.Messages[i].Type == raftpb.MsgSnap && !raftCheckpointEnabled() {
 						rd.Messages[i].Snapshot.Metadata.ConfState = *n.ConfState()
 					}
+					x.Check(n.bindRaftSnapshotSource(&rd.Messages[i]))
 					// NOTE: We can do some optimizations here to drop messages.
 					n.Send(&rd.Messages[i])
 				}
@@ -1573,6 +1667,13 @@ func (n *node) Run() {
 			timer.Record("proposals")
 
 			n.Raft().Advance()
+			if resumeSnapshotHealth {
+				x.Check(n.Applied.WaitForMark(n.ctx, n.Applied.LastIndex()))
+				if atomic.LoadUint32(&n.raftStartupComplete) != 0 {
+					x.UpdateHealthStatus(true)
+				}
+				resumeSnapshotHealth = false
+			}
 			timer.Record("advance")
 
 			if firstRun && n.canCampaign {
@@ -1952,6 +2053,13 @@ func (n *node) retryUntilSuccess(fn func() error, pause time.Duration) {
 
 // InitAndStartNode gets called after having at least one membership sync with the cluster.
 func (n *node) InitAndStartNode() {
+	x.Check(n.recoverRaftCheckpoint())
+	if raftCheckpointEnabled() {
+		// Deterministic built-in schemas are versioned by the application contract.
+		// Bootstrap them before semantic replay so they cannot race certificate cuts.
+		gr.applyInitialSchema()
+		gr.applyInitialTypes()
+	}
 	x.Check(initProposalKey(n.Id))
 	_, restart, err := n.PastLife()
 	x.Check(err)
@@ -2032,7 +2140,9 @@ func (n *node) InitAndStartNode() {
 	go n.cdcTracker.processCDCEvents()
 	// Ignoring the error since InitAndStartNode does not return an error and using x.Check would
 	// not be the right thing to do.
-	_, _ = n.startTask(opRollup)
+	if !raftCheckpointEnabled() {
+		_, _ = n.startTask(opRollup)
+	}
 	go n.stopAllTasks()
 	go n.Run()
 }

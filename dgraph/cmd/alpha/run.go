@@ -132,7 +132,7 @@ they form a Raft group and provide synchronous replication.
 			Head("Experimental Alpha posting-store backend selector.").
 			Flag("backend", "Posting-store backend. Supported values: badger (default), treedb (experimental benchmark-minimal runtime).").
 			Flag("tier", "Capability tier. Defaults to benchmark_minimal for TreeDB and production for Badger.").
-			Flag("durability", "TreeDB acknowledgement boundary: durable or relaxed.").
+			Flag("durability", "TreeDB acknowledgement boundary: durable, relaxed, or experimental raft_checkpoint (single Alpha, filesystem-survival Raft recovery).").
 			Flag("events", "Enable Dgraph-owned in-process successful post-commit events. Required and enabled by default for TreeDB; disabled by default for Badger.").
 			String())
 
