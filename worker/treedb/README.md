@@ -13,7 +13,8 @@ that version, checksum and any local replacement rather than reuse a historical 
 The public pin includes the ordinary command-WAL append-capture owner and its fail-stop error
 handling; the Dgraph `pressure_v4` adapter remains unchanged. The CRC assembly dependency is also
 pinned to a published revision, so this configuration needs no local Gomap or CRC replacement.
-Dependency resolution and owning-package checks alone do not qualify throughput, memory or recovery.
+Throughput, memory and recovery qualification of this public dependency snapshot remains pending;
+dependency resolution and owning-package checks alone do not qualify those gates.
 
 What is wired here:
 
