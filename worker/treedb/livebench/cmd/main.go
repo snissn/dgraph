@@ -32,7 +32,7 @@ import (
 )
 
 type options struct {
-	survival, treeDBPolicy, treeDBMemtable                                                                         string
+	survival, treeDBPolicy, treeDBMemtable, mix                                                                    string
 	dgraphBin, artifactDir, backend, class, cpuProfile, endpointDiagnostic, operationDiagnostic, storageDiagnostic string
 	memoryDiagnostic                                                                                               string
 	repeat, dataset, concurrency, warmup, timed, zeroOffset, alphaOffset                                           int
@@ -65,6 +65,7 @@ func main() {
 	flag.IntVar(&o.concurrency, "concurrency", 4, "timed workload concurrency")
 	flag.IntVar(&o.warmup, "warmup-ops", 100, "excluded warmup operations")
 	flag.IntVar(&o.timed, "timed-ops", 2000, "fixed operation count in timed phase")
+	flag.StringVar(&o.mix, "workload-mix", "mixed", "mixed (60/20/20) or write-heavy (10/10/80) point/one-hop/write percent")
 	flag.IntVar(&o.zeroOffset, "zero-port-offset", 18000, "Zero port offset")
 	flag.IntVar(&o.alphaOffset, "alpha-port-offset", 19000, "Alpha port offset")
 	flag.Int64Var(&o.seed, "seed", 20260711, "workload seed")
@@ -166,7 +167,7 @@ func run(o options) (err error) {
 	if err != nil {
 		return fmt.Errorf("setup: %w", err)
 	}
-	_, warmupWrites, err := exercise(ctx, dg, dataset, o.warmup, 1, o.seed, 0x200000)
+	_, warmupWrites, err := exerciseWithMix(ctx, dg, dataset, o.warmup, 1, o.seed, 0x200000, o.mix, nil)
 	if err != nil {
 		return fmt.Errorf("warmup: %w", err)
 	}
@@ -183,7 +184,7 @@ func run(o options) (err error) {
 	if o.operationDiagnostic != "" {
 		diagnostic = &operationDiagnostic{SchemaVersion: 1, DiagnosticOnly: true, RunID: r.RunID,
 			Backend: o.backend, DurabilityClass: o.class, Seed: o.seed, Concurrency: o.concurrency,
-			ExpectedOperations: o.timed, Rows: make([]operationRow, o.timed),
+			ExpectedOperations: o.timed, Mix: o.mix, Rows: make([]operationRow, o.timed),
 			Before: operationBoundary{Boundary: "before_workload"},
 			After:  operationBoundary{Boundary: "native_metrics_after"}}
 		beforeStore, beforeProm = &diagnostic.Before.Store, &diagnostic.Before.Prometheus
@@ -209,7 +210,7 @@ func run(o options) (err error) {
 	if diagnostic != nil {
 		operationRows = diagnostic.Rows
 	}
-	latencies, timedWrites, err := exerciseWithOperations(ctx, dg, dataset, o.timed, o.concurrency, o.seed, 0x300000, operationRows)
+	latencies, timedWrites, err := exerciseWithMix(ctx, dg, dataset, o.timed, o.concurrency, o.seed, 0x300000, o.mix, operationRows)
 	r.TimedFinished = time.Now().UTC()
 	diagnosticWriteAttempted := false
 	if diagnostic != nil {
@@ -569,6 +570,14 @@ func exercise(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNo
 }
 
 func exerciseWithOperations(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNode, ops, concurrency int, seed int64, writeBase int, rows []operationRow) ([]float64, map[string]expectedNode, error) {
+	return exerciseWithMix(ctx, dg, dataset, ops, concurrency, seed, writeBase, "mixed", rows)
+}
+
+func exerciseWithMix(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNode, ops, concurrency int, seed int64, writeBase int, mix string, rows []operationRow) ([]float64, map[string]expectedNode, error) {
+	pointPercent, hopPercent, err := workloadPercentages(mix)
+	if err != nil {
+		return nil, nil, err
+	}
 	if rows != nil && len(rows) != ops {
 		return nil, nil, errors.New("operation diagnostic row count differs from workload")
 	}
@@ -597,16 +606,16 @@ func exerciseWithOperations(ctx context.Context, dg *dgo.Dgraph, dataset map[str
 				kind := (int(seed) + i*37) % 100
 				if rows != nil {
 					name := "write"
-					if kind < 60 {
+					if kind < pointPercent {
 						name = "point_read"
-					} else if kind < 80 {
+					} else if kind < pointPercent+hopPercent {
 						name = "one_hop_read"
 					}
 					rows[i] = operationRow{Index: i, Worker: worker, Kind: name, StartedAt: start, Outcome: "ok"}
 				}
 				uid := uids[(int(seed)+i*17)%len(uids)]
 				var err error
-				if kind < 60 {
+				if kind < pointPercent {
 					var resp *api.Response
 					resp, err = dgraphQueryWithVars(exerciseCtx, dg, "query q($u: string) { q(func: uid($u)) { uid bench.value } }", map[string]string{"$u": uid})
 					if rows != nil {
@@ -615,7 +624,7 @@ func exerciseWithOperations(ctx context.Context, dg *dgo.Dgraph, dataset map[str
 					if err == nil {
 						err = validateReadResponse(resp.Json, uid, dataset[uid], false)
 					}
-				} else if kind < 80 {
+				} else if kind < pointPercent+hopPercent {
 					var resp *api.Response
 					resp, err = dgraphQueryWithVars(exerciseCtx, dg, "query q($u: string) { q(func: uid($u)) { uid bench.value bench.next { uid bench.value } } }", map[string]string{"$u": uid})
 					if rows != nil {
@@ -1087,6 +1096,9 @@ type treeDBDiagnostic struct {
 }
 
 var treeDBDiagnostics = []treeDBDiagnostic{
+	{metric: "treedb_adapter_durable_cohorts", stat: "dgraph.treedb.durable_cohorts_total"},
+	{metric: "treedb_adapter_durable_requests", stat: "dgraph.treedb.durable_requests_total"},
+	{metric: "treedb_adapter_durable_cohort_size_max", stat: "dgraph.treedb.durable_cohort_size_max", gauge: true},
 	{metric: "treedb_public_batch_write_calls", stat: "treedb.public.batch.write.calls_total"},
 	{metric: "treedb_public_batch_write_sync_calls", stat: "treedb.public.batch.write_sync.calls_total"},
 	{metric: "treedb_command_wal_append_point_calls", stat: "treedb.command_wal.append.point.count_total"},
@@ -1544,6 +1556,7 @@ type operationDiagnostic struct {
 	Seed               int64             `json:"seed"`
 	Concurrency        int               `json:"concurrency"`
 	ExpectedOperations int               `json:"expected_operations"`
+	Mix                string            `json:"workload_mix,omitempty"`
 	WorkloadSucceeded  bool              `json:"workload_succeeded"`
 	TimedStarted       time.Time         `json:"timed_started"`
 	TimedFinished      time.Time         `json:"timed_finished"`
@@ -1600,6 +1613,10 @@ func markDiagnostics(r *livebench.Result, o options) {
 // Serialization is outside the measured operation and workload boundaries.
 // A failed workload is retained only after cancellation and all workers drain.
 func writeOperationDiagnostic(path string, d *operationDiagnostic, postings string) error {
+	pointPercent, hopPercent, err := workloadPercentages(d.Mix)
+	if err != nil {
+		return err
+	}
 	output, err := diagnosticOutputPath(path, postings, nil)
 	if err != nil {
 		return err
@@ -1610,9 +1627,9 @@ func writeOperationDiagnostic(path string, d *operationDiagnostic, postings stri
 	for i, row := range d.Rows {
 		kind := (int(d.Seed) + i*37) % 100
 		name := "write"
-		if kind < 60 {
+		if kind < pointPercent {
 			name = "point_read"
-		} else if kind < 80 {
+		} else if kind < pointPercent+hopPercent {
 			name = "one_hop_read"
 		}
 		if row.Kind != name || (row.Outcome != "ok" && row.Outcome != "rpc_error" && row.Outcome != "validation_error") ||

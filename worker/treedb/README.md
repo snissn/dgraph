@@ -4,6 +4,9 @@ This package is the Dgraph-side TreeDB entry point for the posting-store replace
 and compile-tests current TreeDB APIs and supports an explicit restricted benchmark-minimal Alpha
 runtime. Badger remains the default and production backend.
 
+Durable posting writes use the bounded timestamp-preserving scheduler described in
+[Durable posting commit cohorts](DURABLE_COMMIT_COHORTS.md).
+
 The exact `github.com/snissn/gomap` dependency is pinned in the repository's [go.mod](../../go.mod).
 Resolve it with `GOWORK=off go list -m -json github.com/snissn/gomap`; qualification must record
 that version, checksum and any local replacement rather than reuse a historical source label here.

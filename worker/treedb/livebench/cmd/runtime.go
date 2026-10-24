@@ -15,7 +15,24 @@ import (
 	"github.com/dgraph-io/dgraph/v25/worker/treedb/livebench"
 )
 
+func workloadPercentages(mix string) (point, hop int, err error) {
+	switch mix {
+	case "", "mixed":
+		return 60, 20, nil
+	case "write-heavy":
+		return 10, 10, nil
+	default:
+		return 0, 0, errors.New("--workload-mix must be mixed or write-heavy")
+	}
+}
+
 func normalizeRuntimeOptions(o *options) error {
+	if _, _, err := workloadPercentages(o.mix); err != nil {
+		return err
+	}
+	if o.mix == "" {
+		o.mix = "mixed"
+	}
 	if o.survival == "" {
 		o.survival = "process"
 	}
@@ -43,9 +60,10 @@ func runtimeSelectors(o options) (string, string) {
 
 func runtimeConfig(o options) livebench.Config {
 	posting, badger := runtimeSelectors(o)
+	point, hop, _ := workloadPercentages(o.mix) // normalized before use
 	c := livebench.Config{SurvivalMode: o.survival, Backend: o.backend, DurabilityClass: o.class,
 		PostingStore: posting, Badger: badger, DatasetNodes: o.dataset, Concurrency: o.concurrency,
-		WarmupOps: o.warmup, TimedOps: o.timed, QueryMix: map[string]int{"point_read": 60, "one_hop_read": 20, "write": 20},
+		WarmupOps: o.warmup, TimedOps: o.timed, QueryMix: map[string]int{"point_read": point, "one_hop_read": hop, "write": 100 - point - hop},
 		Topology: "single-zero-single-alpha", Seed: o.seed}
 	if o.backend == "treedb" {
 		c.TreeDBPolicy, c.TreeDBMemtable = "store_wal", o.treeDBMemtable
