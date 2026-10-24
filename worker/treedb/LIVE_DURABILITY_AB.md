@@ -35,6 +35,15 @@ bytes, available write/GC/flush/checkpoint counters, recovery time, runtime-obse
 backend/durability, schema status, posting checksum/count, restart parity, unsupported-feature
 status, SHAs, dirty state, command, CPU/RAM/storage/filesystem/environment, and contamination.
 
+New runs also record ten equal wall-time windows of successful RPC completions, throughput and p99
+latency within the workload. Completion times reuse the existing RPC measurements; the sample
+collector adds no server requests or locks. Empty windows retain zero completions and unavailable
+latency. Optional maintenance metrics use the existing status requests outside the timed phase:
+backend tree-apply calls and operations, plus before/after mutable bytes, queue backlog, queue
+length and dependency debt. Backend apply calls are distinct from command-WAL flushes; absent
+counters remain unavailable. These boundary observations alone do not establish steady-state
+maintenance.
+
 `recovery_seconds` retains its original restart-to-HTTP-health boundary. That boundary differs by
 backend: Raft-owned TreeDB waits for election and ordered replay, while legacy Badger can report
 health before election. New runs also record `recovery_read_seconds` through runtime identity checks
