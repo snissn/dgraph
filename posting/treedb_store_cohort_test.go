@@ -83,7 +83,15 @@ func testTreeDBStoreDurableCohortSharesSyncAcrossVersions(t *testing.T, mode str
 	after, err := store.Stats()
 	require.NoError(t, err)
 	syncs := treeDBStatDelta(t, before, after, "treedb.command_wal.file_sync.calls_total")
-	require.Equal(t, uint64(2), syncs, "one gate sync and one shared aggregate sync")
+	if mode == "cow_ordered" {
+		// This gate is before append, not a held physical sync. The staged
+		// pipeline may append both records before the coordinator captures one
+		// shared barrier. The physical-sync test checks separate certificates.
+		require.GreaterOrEqual(t, syncs, uint64(1))
+		require.LessOrEqual(t, syncs, uint64(2))
+	} else {
+		require.Equal(t, uint64(2), syncs, "one gate sync and one shared aggregate sync")
+	}
 	require.Equal(t, uint64(2), store.durableCohorts.Load())
 	require.Equal(t, uint64(commits-1), store.durableCohortMax.Load())
 	require.NoError(t, store.Close())

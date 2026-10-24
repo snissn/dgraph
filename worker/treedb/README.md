@@ -90,6 +90,26 @@ The restricted Alpha runtime uses that seam for basic posting and schema paths. 
 must use `CheckFeatureAvailable(...)` and fail at invocation rather than silently dropping TTL,
 stream/import/export, subscription, protobuf, monitoring, or encryption semantics.
 
+The ordinary durable command-WAL COW path uses one ordered submitter, two reusable aggregate records
+and one completion owner. While a disk barrier runs, the successor stages native operands without
+preparing a root or assigning a WAL command. It seals on a physical-work/byte/request bound,
+producer completion fence, or predecessor completion; temporary queue emptiness does not split that
+successor. `TxnWriter.Wait` forwards the fence through the commit-event decorator before waiting.
+Both records share a 4 MiB staged-input allowance; oversized atomic inputs stage alone. The original
+65 request credits and TreeDB's own resource admission remain in force. Append and COW installation
+stay ordered, and callbacks/events wait for the original captured durable prefix. Unsupported
+profiles retain the synchronous FIFO implementation.
+
+TreeDB estimates conservative physical work before copying each posting entry. A nonempty write
+transaction reports `badger.ErrTxnTooBig` before changing its accepted prefix, so Dgraph's existing
+`CommitToDisk` loop commits bounded chunks at the original timestamp. An oversized first entry is a
+terminal error. The adapter also bounds combined cohorts so it cannot recombine those chunks into an
+oversized command. Each assigned TreeDB command remains atomic; Dgraph advances Oracle visibility
+and success-only cache publication only after all chunk callbacks succeed. If a later chunk fails,
+the pending transaction keeps its original Raft mutation and decision available for replay even when
+the attempted-apply marker has advanced. Storage errors never authorize adapter subdivision or retry
+of an assigned command.
+
 ### Snapshot publication and discard floors
 
 Applying a Raft snapshot preserves Badger's `SetDiscardTs` hint. It does not advance TreeDB's
