@@ -23,14 +23,26 @@ runs four live cells:
 
 Each cell uses one Zero and one Alpha, the same deterministic schema, leased UID dataset, 60% point
 reads, 20% one-hop reads, 20% unique writes, fixed operation count, concurrency, seed, and excluded
-warmup. Every timed read is checked against the expected value and cycle edge. Post-run and restart
-checksums include canonical `source value -> target value` topology, so they are UID-independent;
-unique write nodes are expected to have no edge. Validation enumerates every node carrying
-`bench.value` and rejects unexpected, duplicate, or omitted UIDs before hashing. Raw JSON includes
-throughput, p50/p95/p99 latency, Alpha CPU and RSS/HWM, logical and allocated posting bytes,
-available write/GC/flush/checkpoint counters, recovery time, runtime-observed backend/durability,
-schema status, posting checksum/count, restart parity, unsupported-feature status, SHAs, dirty
-state, command, CPU/RAM/storage/filesystem/environment, and contamination.
+warmup. The livebench command also accepts `--workload-mix=write-heavy` for 10% point reads, 10%
+one-hop reads and 80% unique writes. Its recorded query mix changes the workload fingerprint; it
+cannot be pooled with the default mixed workload. Both excluded warmup and timed operations use the
+selected mix. Every timed read checks the expected value; one-hop reads also check the cycle edge.
+Post-run and restart checksums include canonical `source value -> target value` topology, so they
+are UID-independent; unique write nodes are expected to have no edge. Validation enumerates every
+node carrying `bench.value` and rejects unexpected, duplicate, or omitted UIDs before hashing. Raw
+JSON includes throughput, p50/p95/p99 latency, Alpha CPU and RSS/HWM, logical and allocated posting
+bytes, available write/GC/flush/checkpoint counters, recovery time, runtime-observed
+backend/durability, schema status, posting checksum/count, restart parity, unsupported-feature
+status, SHAs, dirty state, command, CPU/RAM/storage/filesystem/environment, and contamination.
+
+New runs also record ten equal wall-time windows of successful RPC completions, throughput and p99
+latency within the workload. Completion times reuse the existing RPC measurements; the sample
+collector adds no server requests or locks. Empty windows retain zero completions and unavailable
+latency. Optional maintenance metrics use the existing status requests outside the timed phase:
+backend tree-apply calls and operations, plus before/after mutable bytes, queue backlog, queue
+length and dependency debt. Backend apply calls are distinct from command-WAL flushes; absent
+counters remain unavailable. These boundary observations alone do not establish steady-state
+maintenance.
 
 `recovery_seconds` retains its original restart-to-HTTP-health boundary. That boundary differs by
 backend: Raft-owned TreeDB waits for election and ordered replay, while legacy Badger can report
