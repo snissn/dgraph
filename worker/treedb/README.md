@@ -10,6 +10,10 @@ Durable posting writes use the bounded timestamp-preserving scheduler described 
 The exact `github.com/snissn/gomap` dependency is pinned in the repository's [go.mod](../../go.mod).
 Resolve it with `GOWORK=off go list -m -json github.com/snissn/gomap`; qualification must record
 that version, checksum and any local replacement rather than reuse a historical source label here.
+The public pin includes the ordinary command-WAL append-capture owner and its fail-stop error
+handling; the Dgraph `pressure_v4` adapter remains unchanged. The CRC assembly dependency is also
+pinned to a published revision, so this configuration needs no local Gomap or CRC replacement.
+Dependency resolution and owning-package checks alone do not qualify throughput, memory or recovery.
 
 What is wired here:
 
