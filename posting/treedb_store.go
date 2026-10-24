@@ -629,7 +629,7 @@ func (s *TreeDBStore) enqueueCommit(request treeDBCommitRequest) error {
 
 // SealCommitWindow publishes an admitted FIFO endpoint without waiting for
 // storage or claiming completion. The endpoint coalesces duplicate producer
-// wakeups; collection still follows the shared deadline and original bounds.
+// wakeups; collection still follows the predecessor completion or capacity boundary and original bounds.
 func (s *TreeDBStore) SealCommitWindow() {
 	if s == nil || s.mode != TreeDBCommitDurable {
 		return
