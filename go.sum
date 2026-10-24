@@ -525,8 +525,8 @@ github.com/snissn/compress v1.18.2-snissn.0.0.20261014112447-88a027b09341 h1:brG
 github.com/snissn/compress v1.18.2-snissn.0.0.20261014112447-88a027b09341/go.mod h1:p4xiZN07JMUF5xuybNGkG+pozT12MAblxCx36z+PIYM=
 github.com/snissn/go-crc32-asm v0.0.0-20260522204125-08945951423a h1:uqSq50AAT36ZzDiRApq8GNsbeJASPaneZ6aKfw3KShc=
 github.com/snissn/go-crc32-asm v0.0.0-20260522204125-08945951423a/go.mod h1:PDwKLbWpRDAN2IPbK9PxIgSx0YdwQaSOLWObRawQJ58=
-github.com/snissn/gomap v0.6.2-0.20261024100840-99df191b3b38 h1:K7HYlag1fG62+skD23k2TIMY/p689KlxSq+hG/mRK/o=
-github.com/snissn/gomap v0.6.2-0.20261024100840-99df191b3b38/go.mod h1:ujmjsQcMGB8X4C3NGdc1Zt+UhyW5r6fHbY+CkdPQch8=
+github.com/snissn/gomap v0.6.2-0.20261024173750-d58f920425fb h1:ca8QtC1M5a+JzEBTS/rwRhqBpdfplssR4Y6b2vB+Ef4=
+github.com/snissn/gomap v0.6.2-0.20261024173750-d58f920425fb/go.mod h1:ujmjsQcMGB8X4C3NGdc1Zt+UhyW5r6fHbY+CkdPQch8=
 github.com/soheilhy/cmux v0.1.5 h1:jjzc5WVemNEDTLwv9tlmemhC73tI08BNOIGwBOo10Js=
 github.com/soheilhy/cmux v0.1.5/go.mod h1:T7TcVDs9LWfQgPlPsdngu6I6QIoyIFZDDC6sNE1GqG0=
 github.com/spf13/afero v1.15.0 h1:b/YBCLWAJdFWJTN9cLhiXXcD7mzKn9Dm86dNnfyQw1I=
