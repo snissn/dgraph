@@ -83,14 +83,7 @@ func testTreeDBStoreDurableCohortSharesSyncAcrossVersions(t *testing.T, mode str
 	after, err := store.Stats()
 	require.NoError(t, err)
 	syncs := treeDBStatDelta(t, before, after, "treedb.command_wal.file_sync.calls_total")
-	if mode == "cow_ordered" {
-		// The two atomic publications may now share one physical durability
-		// barrier: submission of the aggregate need not wait for the gate ACK.
-		require.GreaterOrEqual(t, syncs, uint64(1), "successful durable commits must reach storage")
-		require.LessOrEqual(t, syncs, uint64(2), "the six queued requests share a durability barrier")
-	} else {
-		require.Equal(t, uint64(2), syncs, "one gate sync and one shared aggregate sync")
-	}
+	require.Equal(t, uint64(2), syncs, "one gate sync and one shared aggregate sync")
 	require.Equal(t, uint64(2), store.durableCohorts.Load())
 	require.Equal(t, uint64(commits-1), store.durableCohortMax.Load())
 	require.NoError(t, store.Close())
