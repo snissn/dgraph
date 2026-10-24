@@ -210,7 +210,8 @@ func run(o options) (err error) {
 	if diagnostic != nil {
 		operationRows = diagnostic.Rows
 	}
-	latencies, timedWrites, err := exerciseWithMix(ctx, dg, dataset, o.timed, o.concurrency, o.seed, 0x300000, o.mix, operationRows)
+	var progress workloadProgress
+	latencies, timedWrites, err := exerciseWithProgress(ctx, dg, dataset, o.timed, o.concurrency, o.seed, 0x300000, o.mix, operationRows, &progress)
 	r.TimedFinished = time.Now().UTC()
 	diagnosticWriteAttempted := false
 	if diagnostic != nil {
@@ -277,6 +278,8 @@ func run(o options) (err error) {
 		return fmt.Errorf("collect posting-store status: %w", err)
 	}
 	r.Metrics = metrics(o.backend, config.TreeDBPolicy, cpuAfter-cpuBefore, hwm, diskLogical, diskAllocated, promBefore, promAfter, storeBefore, storeAfter)
+	progress.addMetrics(r.Metrics)
+	addMaintenanceMetrics(r.Metrics, o.backend, storeBefore, storeAfter)
 	if o.memoryDiagnostic != "" {
 		profiles, memoryErr := captureMemoryDiagnostic(o.memoryDiagnostic, memoryDiagnosticBoundaries[1], filepath.Join(runDir, "p"), httpBase, alpha.cmd.Process.Pid, r)
 		r.Context.Profiles = append(r.Context.Profiles, profiles...)
@@ -574,6 +577,10 @@ func exerciseWithOperations(ctx context.Context, dg *dgo.Dgraph, dataset map[str
 }
 
 func exerciseWithMix(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNode, ops, concurrency int, seed int64, writeBase int, mix string, rows []operationRow) ([]float64, map[string]expectedNode, error) {
+	return exerciseWithProgress(ctx, dg, dataset, ops, concurrency, seed, writeBase, mix, rows, nil)
+}
+
+func exerciseWithProgress(ctx context.Context, dg *dgo.Dgraph, dataset map[string]expectedNode, ops, concurrency int, seed int64, writeBase int, mix string, rows []operationRow, progress *workloadProgress) ([]float64, map[string]expectedNode, error) {
 	pointPercent, hopPercent, err := workloadPercentages(mix)
 	if err != nil {
 		return nil, nil, err
@@ -584,11 +591,12 @@ func exerciseWithMix(ctx context.Context, dg *dgo.Dgraph, dataset map[string]exp
 	exerciseCtx, cancelExercise := context.WithCancel(ctx)
 	defer cancelExercise()
 	type sample struct {
-		ms    float64
-		uid   string
-		value string
-		write bool
-		err   error
+		ms        float64
+		completed time.Time
+		uid       string
+		value     string
+		write     bool
+		err       error
 	}
 	uids := make([]string, 0, len(dataset))
 	for uid := range dataset {
@@ -596,6 +604,10 @@ func exerciseWithMix(ctx context.Context, dg *dgo.Dgraph, dataset map[string]exp
 	}
 	sort.Strings(uids)
 	out := make(chan sample, ops)
+	if progress != nil {
+		progress.started = time.Now()
+		progress.samples = make([]progressSample, 0, ops)
+	}
 	var wg sync.WaitGroup
 	for worker := 0; worker < concurrency; worker++ {
 		wg.Add(1)
@@ -645,7 +657,7 @@ func exerciseWithMix(ctx context.Context, dg *dgo.Dgraph, dataset map[string]exp
 						if rows != nil {
 							finishOperation(&rows[i], elapsed, nil)
 						}
-						out <- sample{ms: float64(elapsed.Microseconds()) / 1000, uid: resp.Uids["w"], value: value(writeID), write: true}
+						out <- sample{ms: float64(elapsed.Microseconds()) / 1000, completed: start.Add(elapsed), uid: resp.Uids["w"], value: value(writeID), write: true}
 						continue
 					}
 				}
@@ -653,7 +665,7 @@ func exerciseWithMix(ctx context.Context, dg *dgo.Dgraph, dataset map[string]exp
 				if rows != nil {
 					finishOperation(&rows[i], elapsed, err)
 				}
-				out <- sample{ms: float64(elapsed.Microseconds()) / 1000, err: err}
+				out <- sample{ms: float64(elapsed.Microseconds()) / 1000, completed: start.Add(elapsed), err: err}
 			}
 		}(worker)
 	}
@@ -685,6 +697,12 @@ func exerciseWithMix(ctx context.Context, dg *dgo.Dgraph, dataset map[string]exp
 			}
 		}
 		values = append(values, s.ms)
+		if progress != nil {
+			progress.samples = append(progress.samples, progressSample{completed: s.completed.Sub(progress.started), latencyMS: s.ms})
+		}
+	}
+	if progress != nil {
+		progress.elapsed = time.Since(progress.started)
 	}
 	if workloadErr != nil {
 		return nil, nil, workloadErr
