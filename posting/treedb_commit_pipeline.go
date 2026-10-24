@@ -8,7 +8,6 @@ package posting
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/snissn/gomap/TreeDB/mvcc"
 )
@@ -78,12 +77,6 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 		close(ready)
 		<-finished
 	}()
-	collectionTimer := time.NewTimer(time.Hour)
-	if !collectionTimer.Stop() {
-		<-collectionTimer.C
-	}
-	defer collectionTimer.Stop()
-
 	var carried treeDBCommitRequest
 	hasCarried := false
 	var predecessor uint64
@@ -105,12 +98,13 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 			<-s.commitWake
 		}
 		aggregate.ownedBytes = ownedBytes
-		s.stageDurableRequest(aggregate, 0)
-		deadline := aggregate.builder.CollectionDeadline()
-		if s.commitCollectionDeadlineForTest != nil {
-			deadline = s.commitCollectionDeadlineForTest(deadline)
+		// An idle cut already has all its ready operands available. Keep its
+		// native allocation sized once at Submit. Only a successor overlaps
+		// incremental owned staging with an outstanding durability barrier.
+		incremental := predecessor != 0 && s.commitCompleted.Load() < predecessor
+		if incremental {
+			s.stageDurableRequest(aggregate, 0)
 		}
-		timerArmed := false
 	collect:
 		for aggregate.n < len(aggregate.requests) && ownedBytes < treeDBCommitCohortBytes && work < s.writeWorkLimit {
 			var request treeDBCommitRequest
@@ -118,21 +112,14 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 			select {
 			case request, ok = <-queue:
 			default:
-				if predecessor == 0 || s.commitCompleted.Load() >= predecessor ||
-					deadline.IsZero() || !time.Now().Before(deadline) ||
+				if predecessor == 0 || s.commitCompleted.Load() >= predecessor || s.closed.Load() ||
 					len(s.commitSlots) == cap(s.commitSlots) {
 					break collect
-				}
-				if !timerArmed {
-					collectionTimer.Reset(time.Until(deadline))
-					timerArmed = true
 				}
 				select {
 				case request, ok = <-queue:
 				case <-s.commitWake:
 					continue
-				case <-collectionTimer.C:
-					break collect
 				}
 			}
 			if !ok {
@@ -145,17 +132,13 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 				break collect
 			}
 			aggregate.requests[aggregate.n] = request
-			s.stageDurableRequest(aggregate, aggregate.n)
+			if incremental {
+				s.stageDurableRequest(aggregate, aggregate.n)
+			}
 			aggregate.n++
 			aggregate.ownedBytes += size
 			ownedBytes += size
 			work += request.batch.work
-		}
-		if timerArmed && !collectionTimer.Stop() {
-			select {
-			case <-collectionTimer.C:
-			default:
-			}
 		}
 		s.submitDurableAggregate(aggregate)
 		if aggregate.await && predecessor != 0 && s.commitCompleted.Load() < predecessor {
@@ -224,8 +207,12 @@ func (s *TreeDBStore) submitDurableAggregate(a *treeDBCommitAggregate) {
 	}
 	err := a.buildErr
 	if err == nil {
-		err = a.builder.Submit(s.commitMode, &a.completion)
-		a.building = false // Submit transfers custody or releases it on error.
+		if a.building {
+			err = a.builder.Submit(s.commitMode, &a.completion)
+			a.building = false // Submit transfers custody or releases it on error.
+		} else {
+			err = s.mvcc.SubmitCommitGroupAt(a.groups[:a.n], s.commitMode, &a.completion)
+		}
 	}
 	if err == nil {
 		a.await = true

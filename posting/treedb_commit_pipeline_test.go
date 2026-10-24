@@ -38,21 +38,13 @@ func openPipelinePostingStore(t *testing.T, dir string) (*TreeDBStore, treedb.Op
 }
 
 func TestTreeDBDurablePipelineStagesAndInstallsDuringPhysicalSync(t *testing.T) {
-	for _, seal := range []string{"shared-deadline", "ownership-full"} {
+	for _, seal := range []string{"predecessor-complete", "ownership-full", "close"} {
 		t.Run(seal, func(t *testing.T) { testTreeDBDurablePipelinePhysicalSync(t, seal) })
 	}
 }
 
 func testTreeDBDurablePipelinePhysicalSync(t *testing.T, seal string) {
 	store, opts := openPipelinePostingStore(t, t.TempDir())
-	// The production 200us budget is tested in Gomap. This longer, test-only
-	// window coordinates staggered native stages while a real file sync is held.
-	deadlines := make(chan time.Time, 2)
-	store.commitCollectionDeadlineForTest = func(time.Time) time.Time {
-		deadline := time.Now().Add(time.Second)
-		deadlines <- deadline
-		return deadline
-	}
 	staged := make(chan struct{}, treeDBCommitOwnershipLimit+1)
 	bus := NewCommitEventBus(128)
 	defer bus.Close()
@@ -96,14 +88,14 @@ func testTreeDBDurablePipelinePhysicalSync(t *testing.T, seal string) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("first request did not enter the physical file sync")
 	}
-	<-staged // The first aggregate staged before entering the held sync.
-	<-deadlines
+	require.Zero(t, stages.Load(), "idle known-size submission must bypass the incremental builder")
 	preparesBefore := preparations.Load()
 	successor := NewTxnWriterForStore(wrapped)
 	count := 2
 	if seal == "ownership-full" {
 		count = treeDBCommitOwnershipLimit - 1
 	}
+	flushed := make(chan error, 1)
 	for i := 0; i < count; i++ {
 		ts := uint64(i + 2)
 		require.NoError(t, successor.SetAt([]byte("shared"), []byte(fmt.Sprint(ts)), 0, ts))
@@ -116,27 +108,53 @@ func testTreeDBDurablePipelinePhysicalSync(t *testing.T, seal string) {
 			require.Equal(t, int32(1), appends.Load(), "an open successor must not append on queue emptiness")
 			require.Equal(t, preparesBefore, preparations.Load(), "root-dependent COW work is built once after seal")
 		}
+		if seal == "predecessor-complete" && i == 0 {
+			go func() { flushed <- successor.Flush() }()
+			// Cross the retired timer boundary with the real predecessor sync
+			// still held. Flush must wake collection without sealing sparse B;
+			// the next request must join its already staged native operands.
+			select {
+			case err := <-flushed:
+				t.Fatalf("sparse successor completed before its barrier: %v", err)
+			case <-time.After(10 * time.Millisecond):
+			}
+			require.Equal(t, int32(1), appends.Load(), "elapsed time must not fragment an open successor")
+			require.Equal(t, preparesBefore, preparations.Load())
+		}
 	}
-	deadline := <-deadlines
-	flushed := make(chan error, 1)
-	if seal == "shared-deadline" {
-		go func() { flushed <- successor.Flush() }()
-	}
-	awaitTreeDBCohort(t, "successor ordered append/install while predecessor sync is held", func() bool { return store.durableOverlap.Load() == 1 })
-	if seal == "shared-deadline" {
-		require.False(t, time.Now().Before(deadline), "producer Flush must not cut the shared collection window short")
+	var closeDone chan error
+	if seal == "predecessor-complete" {
+		require.Equal(t, int32(1), appends.Load())
+		release(0)
+		select {
+		case <-entered[1]:
+		case <-time.After(5 * time.Second):
+			t.Fatal("predecessor completion did not seal the staged successor")
+		}
+	} else {
+		if seal == "close" {
+			closeDone = make(chan error, 1)
+			go func() { closeDone <- store.Close() }()
+		}
+		awaitTreeDBCohort(t, "pressure or Close seals and installs B while A sync is held", func() bool { return store.durableOverlap.Load() == 1 })
 	}
 	require.Equal(t, int32(2), appends.Load())
 	require.Equal(t, preparesBefore+1, preparations.Load())
-	require.Equal(t, int32(1), syncs.Load())
-	lastTs := uint64(count + 1)
-	for ts := uint64(2); ts <= lastTs; ts++ {
-		require.Equal(t, fmt.Sprint(ts), pointSnapshot(t, store, ts, []byte("shared")).Value)
+	if seal != "predecessor-complete" {
+		require.Equal(t, int32(1), syncs.Load())
 	}
-	select {
-	case event := <-events:
-		t.Fatalf("event acknowledged before physical sync: %+v", event)
-	default:
+	lastTs := uint64(count + 1)
+	if seal != "close" {
+		for ts := uint64(2); ts <= lastTs; ts++ {
+			require.Equal(t, fmt.Sprint(ts), pointSnapshot(t, store, ts, []byte("shared")).Value)
+		}
+	}
+	if seal != "predecessor-complete" {
+		select {
+		case event := <-events:
+			t.Fatalf("event acknowledged before physical sync: %+v", event)
+		default:
+		}
 	}
 	release(0)
 	select {
@@ -144,7 +162,7 @@ func testTreeDBDurablePipelinePhysicalSync(t *testing.T, seal string) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("completion owner did not drive successor physical sync")
 	}
-	if seal == "ownership-full" {
+	if seal != "predecessor-complete" {
 		go func() { flushed <- successor.Flush() }()
 	}
 	require.NoError(t, first.Flush())
@@ -167,6 +185,15 @@ func testTreeDBDurablePipelinePhysicalSync(t *testing.T, seal string) {
 	awaitTreeDBCohort(t, "both original record budgets drain", func() bool { return len(store.commitSlots) == 0 && store.commitStagedBytes.Load() == 0 })
 	require.Equal(t, uint64(2), store.durableCohorts.Load())
 	require.Equal(t, uint64(count), store.durableCohortMax.Load())
+	if closeDone != nil {
+		require.NoError(t, receiveTreeDBCohortResult(t, closeDone))
+		reopened, err := OpenTreeDBStore(opts, TreeDBCommitDurable)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, reopened.Close()) }()
+		for ts := uint64(2); ts <= lastTs; ts++ {
+			require.Equal(t, fmt.Sprint(ts), pointSnapshot(t, reopened, ts, []byte("shared")).Value)
+		}
+	}
 }
 
 // Exercise CommitToDisk's real key cursor and ErrTxnTooBig protocol at the

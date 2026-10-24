@@ -5,19 +5,22 @@ caller-owned aggregate records and one completion owner. The submitter copies re
 unassigned native batch while the preceding aggregate waits for its physical barrier. Root
 preparation runs once at seal; ordered append and installation transfer the original batch to the
 completion owner, which drives the existing contiguous durable-prefix certificate before ACK. Every
-transaction retains its original timestamp and callback. No goroutine or future is allocated per
-request. Unsupported profiles retain the synchronous FIFO `mvcc.CommitGroupAt` owner; relaxed and
-externally recoverable stores retain their existing paths and recovery authority.
+transaction retains its original timestamp and callback. Storage submission uses no per-request
+worker or future; existing asynchronous callback dispatch is unchanged. Unsupported profiles retain
+the synchronous FIFO `mvcc.CommitGroupAt` owner; relaxed and externally recoverable stores retain
+their existing paths and recovery authority.
 
-Begin establishes one monotonic deadline using the engine's existing 200us collection budget. An
-idle aggregate submits immediately. A successor drains ready work and may wait for more until that
-deadline, predecessor completion, a resource bound or shutdown. Processing already-ready work is
-bounded by request/byte/physical-work limits. Producer Flush/Wait fences wake progress and preserve
-completion ordering; they do not cut a small successor at temporary queue emptiness. A sealed native
-aggregate carries scheduling metadata so the engine never adds a second collection window. This
-metadata creates no force ticket, log position, durability certificate or new recovery owner.
-Ordinary generic engine callers age the same budget from their first pending registration rather
-than restarting it after the preceding physical I/O.
+An idle aggregate drains ready requests and uses the existing known-size ordered submission, without
+opening an incremental builder or waiting to collect more input. While a predecessor is incomplete,
+the successor stages arriving operands into one open native batch. It keeps collecting until
+predecessor completion, a request/byte/physical-work/shared-staging bound, or shutdown. Temporary
+queue emptiness, elapsed time and producer Flush/Wait do not seal that successor. Producer fences
+only wake progress. Pressure can therefore prepare, append and install a full successor while the
+preceding physical sync runs; a sparse successor can remain unassigned until it completes.
+
+A sealed native aggregate carries scheduling metadata so the engine does not add a collection wait.
+This metadata creates no force ticket, log position, durability certificate or new recovery owner.
+Ordinary generic engine callers retain their existing collection policy; the adapter adds no timer.
 
 This replaces the eight-worker conflict scheduler. Distinct versions of the same logical key can
 share a durable publication instead of waiting for separate disk confirmations. MVCC validation and
@@ -37,13 +40,14 @@ group budget is carried to the next group, retaining its admission slot and buff
 still shares the 65-request ownership bound; the group budget is not a maximum transaction size or a
 bound on arbitrary input.
 
-Mutation buffers are scrubbed and returned to the existing pool only after original durable
-completion. Validation vectors are reused, borrowed operands are cleared after native staging, and
-duplicate-version identities own their keys until seal or Abort. Invalid appends roll back only
-their own new identities. Oversized scratch is dropped at the cut boundary. Completion delivery
-remains FIFO. Callback functions run asynchronously and may reenter Close; callback execution order
-is not guaranteed. Close drains every admitted request before closing the owned database. Requests
-still waiting for capacity recheck closed state before admission.
+Both submission paths retain the original floor, lifecycle and completion owners. Mutation buffers
+are scrubbed and returned to the existing pool only after original durable completion. Validation
+vectors are reused, borrowed operands are cleared after native staging, and duplicate-version
+identities own their keys until seal or Abort. Invalid appends roll back only their own new
+identities. Oversized scratch is dropped at the cut boundary. Completion delivery remains FIFO.
+Callback functions run asynchronously and may reenter Close; callback execution order is not
+guaranteed. Close drains every admitted request before closing the owned database. Requests still
+waiting for capacity recheck closed state before admission.
 
 ## Validation and ambiguous failures
 
@@ -64,7 +68,7 @@ failed sync attempt is not a durable acknowledgement.
 
 | Stat                                              | Meaning                                                                                               |
 | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `dgraph.treedb.commit_pipeline`                   | `one_window_v3` for native staging, `fifo` for unsupported profiles                                   |
+| `dgraph.treedb.commit_pipeline`                   | `pressure_v4` for native staging, `fifo` for unsupported profiles                                     |
 | `dgraph.treedb.durable_staged_input_bytes`        | Current shared staged-input custody; not peak heap                                                    |
 | `dgraph.treedb.durable_overlap_submissions_total` | Submit finished before predecessor completion; physical overlap requires the separate sync-gate proof |
 | `dgraph.treedb.durable_requests_total`            | Requests selected into scheduler cohorts                                                              |

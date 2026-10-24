@@ -91,17 +91,17 @@ must use `CheckFeatureAvailable(...)` and fail at invocation rather than silentl
 stream/import/export, subscription, protobuf, monitoring, or encryption semantics.
 
 The ordinary durable command-WAL COW path uses one ordered submitter, two reusable aggregate records
-and one completion owner. While a disk barrier runs, the successor stages native operands without
-preparing a root or assigning a WAL command. It seals on a physical-work/byte/request bound,
-predecessor completion, shutdown or the engine collection deadline established at Begin. The
-existing 200us budget is shared across the adapter and engine; sealed submission never starts a
-second engine collection wait. An idle first request submits immediately. Temporary queue emptiness
-and producer completion fences do not split an open successor. `TxnWriter.Wait` forwards a progress
-wake through the commit-event decorator before waiting. Both records share a 4 MiB staged-input
-allowance; oversized atomic inputs stage alone. The original 65 request credits and TreeDB's own
-resource admission remain in force. Append and COW installation stay ordered, and callbacks/events
-wait for the original captured durable prefix. Unsupported profiles retain the synchronous FIFO
-implementation.
+and one completion owner. Idle groups drain ready requests and use known-size ordered submission
+without opening an incremental builder or delaying first work. While a disk barrier runs, the
+successor stages native operands without preparing a root or assigning a WAL command. It seals on an
+actual physical-work/byte/request/shared-staging bound, predecessor completion or shutdown. There is
+no adapter collection timer. Sealed submission never starts an engine collection wait. Temporary
+queue emptiness and producer completion fences do not split an open successor. `TxnWriter.Wait`
+forwards a progress wake through the commit-event decorator before waiting. Both records share a 4
+MiB staged-input allowance; oversized atomic inputs stage alone. The original 65 request credits and
+TreeDB's own resource admission remain in force. Append and COW installation stay ordered, and
+callbacks/events wait for the original captured durable prefix. Unsupported profiles retain the
+synchronous FIFO implementation.
 
 TreeDB estimates conservative physical work before copying each posting entry. A nonempty write
 transaction reports `badger.ErrTxnTooBig` before changing its accepted prefix, so Dgraph's existing

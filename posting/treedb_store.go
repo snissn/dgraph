@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/dgraph-io/badger/v4"
 	treedb "github.com/snissn/gomap/TreeDB"
@@ -125,9 +124,6 @@ type TreeDBStore struct {
 	// commitGroupsForTest injects the storage result at the ambiguity boundary.
 	// Production stores always use the owned MVCC store.
 	commitGroupsForTest func([]mvcc.CommitGroup, mvcc.CommitMode) error
-	// commitCollectionDeadlineForTest extends the existing collection window only
-	// for causal tests that hold a real physical sync across staggered arrivals.
-	commitCollectionDeadlineForTest func(time.Time) time.Time
 }
 
 // OpenTreeDBStore opens and owns a TreeDB posting store. The adapter commit
@@ -206,6 +202,9 @@ func (s *TreeDBStore) Close() error {
 		s.lifecycleMu.Lock()
 		s.closed.Store(true)
 		s.lifecycleMu.Unlock()
+		// Seal an open native successor before waiting for its completion. The
+		// input channel stays open until every admitted commit has drained.
+		s.wakeCommitSubmitter()
 
 		// No new commit can be admitted after closed is published. Wait for every
 		// commit accepted before that boundary before closing the owned DB.
@@ -270,7 +269,7 @@ func (s *TreeDBStore) Stats() (map[string]string, error) {
 	if s.mode == TreeDBCommitDurable {
 		stats["dgraph.treedb.commit_pipeline"] = "fifo"
 		if s.stagedCommitGroups {
-			stats["dgraph.treedb.commit_pipeline"] = "one_window_v3"
+			stats["dgraph.treedb.commit_pipeline"] = "pressure_v4"
 		}
 	}
 	stats["dgraph.treedb.durable_staged_input_bytes"] = strconv.FormatInt(s.commitStagedBytes.Load(), 10)
