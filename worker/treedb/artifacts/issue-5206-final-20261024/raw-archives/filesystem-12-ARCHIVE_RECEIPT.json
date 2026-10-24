@@ -1,0 +1,7 @@
+{
+  "archive": "filesystem-12-EVIDENCE.tar",
+  "bytes": 8888320,
+  "sha256": "bbeba5a291ec76f66b4feb04d53a7de4b26321f917d9c144c905e5ce4a955ecc",
+  "selected_files": 162,
+  "omitted": "database directories and binaries retained remotely; executedserver hash-boundmanifest"
+}

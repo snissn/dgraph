@@ -1,0 +1,637 @@
+[
+  {
+    "name": "00-mount",
+    "argv": [
+      "findmnt",
+      "-T",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+      "-n",
+      "-o",
+      "TARGET,SOURCE,FSTYPE,OPTIONS"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785969.5274756,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.0035715103149414062,
+    "stdout_sha256": "22d7f5edc58afdc36c2a93515bdd7abd76c083595d3000a8176016e1491b9074",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "01-clone-dgraph",
+    "argv": [
+      "git",
+      "clone",
+      "--no-hardlinks",
+      "--no-checkout",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/dgraph",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785969.5346742,
+    "timeout_seconds": 600,
+    "exit_code": 0,
+    "wall_seconds": 0.4652595520019531,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "60a0c844d76fdffe684a58d12a73f12ffc3c5906ea5b126e7490be8dcbf49525"
+  },
+  {
+    "name": "02-clone-gomap",
+    "argv": [
+      "git",
+      "clone",
+      "--no-hardlinks",
+      "--no-checkout",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/gomap",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785970.0001912,
+    "timeout_seconds": 600,
+    "exit_code": 0,
+    "wall_seconds": 0.7648863792419434,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "ea87a0e3b7ec484c8dea64354fd42719f2cd8b341673fc33ea2b89be7343d359"
+  },
+  {
+    "name": "03-checkout-dgraph",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "checkout",
+      "--detach",
+      "b87e967bc3c18d4c609e652d79c7ccb8e94ace1b"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785970.7653635,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.16403651237487793,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "37d94be0b1349e21ef406c9465f6af3cf596e3dcf7aae1c206f25a1b2bf43c48"
+  },
+  {
+    "name": "04-checkout-gomap",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+      "checkout",
+      "--detach",
+      "fc3c3db97ec2954d47a1adf731d501e7b73f181f"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785970.9296613,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 2.016983985900879,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "80942e4f67b7c9c05a169098ce8735f474fa7c8693643b24beacd554abd05488"
+  },
+  {
+    "name": "05-dgraph-head",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "rev-parse",
+      "HEAD"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785972.9469693,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.0035703182220458984,
+    "stdout_sha256": "1b0d0a9a36c2f6641c8356b958d9d97175cccba34c76ae116b6fdac0d3858599",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "06-dgraph-tree",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "rev-parse",
+      "HEAD^{tree}"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785972.9507608,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.003515958786010742,
+    "stdout_sha256": "949b1812d69ffc0556846be8bf78631ecb1d220e7602cde843d06a1d738f0532",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "07-dgraph-clean",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785972.9545023,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.21404170989990234,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "05-gomap-head",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+      "rev-parse",
+      "HEAD"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785973.1690443,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.0037314891815185547,
+    "stdout_sha256": "0fcaf424406d41bdc79bb673f4f4f527bfebf33aea57dbc1b63c7bb73be9e0fc",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "06-gomap-tree",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+      "rev-parse",
+      "HEAD^{tree}"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785973.173056,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.003559112548828125,
+    "stdout_sha256": "5d3fd0dba0dba07076fcc6fc4f45e79cd7e19c98a52eddf89e3bd056953e8bf4",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "07-gomap-clean",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785973.17686,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 1.065246820449829,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "08-apply-check",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "apply",
+      "--check",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-baseline-prep-01/baseline.patch"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785974.2424712,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.0036156177520751953,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "09-apply",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "apply",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-baseline-prep-01/baseline.patch"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785974.2463818,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.003507852554321289,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "10-tracked-diff",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "diff",
+      "--name-only"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785974.250224,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.0035750865936279297,
+    "stdout_sha256": "6d780a918766ed59bc2f5d691316282dba0ecf2d2fc35f7dae9483e78f99cad1",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "11-untracked-diff",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "ls-files",
+      "--others",
+      "--exclude-standard"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785974.2540922,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.007599830627441406,
+    "stdout_sha256": "62b2085a4a4e0f84706419c3137436256808fe9ff338956174a3c58950373de8",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "12-stage-accepted",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "add",
+      "--",
+      "dgraph/cmd/zero/run.go",
+      "worker/server_state.go",
+      "worker/treedb/LIVE_DURABILITY_AB.md",
+      "worker/treedb/livebench/cmd/main.go",
+      "worker/treedb/livebench/cmd/main_test.go",
+      "worker/treedb/livebench/cmd/memory_diagnostic.go",
+      "worker/treedb/livebench/cmd/memory_diagnostic_test.go",
+      "worker/treedb/livebench/cmd/runtime.go",
+      "worker/treedb/livebench/cmd/runtime_test.go",
+      "worker/treedb/livebench/report.go",
+      "worker/treedb/livebench/report_test.go",
+      "worker/treedb/livebench/result.go",
+      "worker/treedb/livebench/result_test.go",
+      "worker/treedb/livebench/runtime.go",
+      "worker/treedb/livebench/runtime_test.go",
+      "worker/treedb/run_durability_ab.sh"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785974.2624998,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.007599592208862305,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "13-write-tree",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "write-tree"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785974.2704303,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.007561206817626953,
+    "stdout_sha256": "e460b8f44a1206af949beeaa232ca26903124838dba47acd07d72b601b3a7dc2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "14-adaptation-commit",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "commit",
+      "-m",
+      "build: bind accepted ordinary-COW qualification baseline adaptation"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785974.278298,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.015605449676513672,
+    "stdout_sha256": "fbb0a6cc842d4b6da58f2275a9b98ac44064040aaf881a8fedd46554c5cc4495",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "15-committed-clean",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785974.2943025,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.007591962814331055,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "16-prepare-module",
+    "argv": [
+      "python3",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-baseline-prep-01/prepare_build_mod.py",
+      "--dgraph-source",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "--gomap-source",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+      "--output",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-baseline-build-01/build-inputs"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792785974.302255,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.06384587287902832,
+    "stdout_sha256": "c9b88d80e53cae1a3b6f04c3fde1e32235e1a69daf13862c940bec29ed6c357e",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "17-go-version",
+    "argv": [
+      "go",
+      "version"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+    "started_unix": 1792785974.366652,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.0035033226013183594,
+    "stdout_sha256": "34113d5d84bc5406ab3bfd0028c381611cad764f40baa15e43cffd89485c0aee",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "18-go-env",
+    "argv": [
+      "go",
+      "env",
+      "-json"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+    "started_unix": 1792785974.3705122,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.007471799850463867,
+    "stdout_sha256": "8b45844042e4fa7c1f4eb7fd32a80106671b2c97aba56f2dddb0c7c6dcb4ef0f",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "19-gomap-module",
+    "argv": [
+      "go",
+      "list",
+      "-m",
+      "-json",
+      "github.com/snissn/gomap"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+    "started_unix": 1792785974.3783896,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.003447294235229492,
+    "stdout_sha256": "62446584879e61020558b0717989cb531a5b8916b8165bc4187f82a6ddf660d7",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "20-all-modules",
+    "argv": [
+      "go",
+      "list",
+      "-m",
+      "-json",
+      "all"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+    "started_unix": 1792785974.3822122,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.11374783515930176,
+    "stdout_sha256": "199836b977e2ff7559d97d82b429c8fa64d94c616261f39f28a736cd7a570e3a",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "21-build-dgraph",
+    "argv": [
+      "go",
+      "build",
+      "-o",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-baseline-build-01/bin/dgraph",
+      "./dgraph"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+    "started_unix": 1792785974.4966295,
+    "timeout_seconds": 900,
+    "exit_code": 0,
+    "wall_seconds": 28.31101083755493,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "21-buildinfo-dgraph",
+    "argv": [
+      "go",
+      "version",
+      "-m",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-baseline-build-01/bin/dgraph"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+    "started_unix": 1792786002.8081226,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.0035893917083740234,
+    "stdout_sha256": "b6cc8c47a72f6273e264bbe39601865084c64473d3b90f995d01190a1b781d02",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "22-build-livebench",
+    "argv": [
+      "go",
+      "build",
+      "-o",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-baseline-build-01/bin/livebench",
+      "./worker/treedb/livebench/cmd"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+    "started_unix": 1792786002.8121302,
+    "timeout_seconds": 900,
+    "exit_code": 0,
+    "wall_seconds": 0.8650648593902588,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "22-buildinfo-livebench",
+    "argv": [
+      "go",
+      "version",
+      "-m",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-baseline-build-01/bin/livebench"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+    "started_unix": 1792786003.677721,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.003512859344482422,
+    "stdout_sha256": "3e12fc937034a2ef179df3434abeb9fdc933ec8a6cb44a115d4b32818d23efe8",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "23-build-report",
+    "argv": [
+      "go",
+      "build",
+      "-o",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-baseline-build-01/bin/report",
+      "./worker/treedb/livebench/reportcmd"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+    "started_unix": 1792786003.681701,
+    "timeout_seconds": 900,
+    "exit_code": 0,
+    "wall_seconds": 0.1639552116394043,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "23-buildinfo-report",
+    "argv": [
+      "go",
+      "version",
+      "-m",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-baseline-build-01/bin/report"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+    "started_unix": 1792786003.8461561,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.0034699440002441406,
+    "stdout_sha256": "ddab3229789025b912260d5c46cf9dc7cca79e440f3f487c7c758fadc7a8b044",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "24-final-dgraph-status",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792786003.9726973,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.007699012756347656,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "25-final-dgraph-head",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "rev-parse",
+      "HEAD"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792786003.9808857,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.0014426708221435547,
+    "stdout_sha256": "f6ebce98b5f029604ab9818a12e940e231c622c406864094389c6582e586264f",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "26-final-dgraph-tree",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "rev-parse",
+      "HEAD^{tree}"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792786003.982782,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.003489971160888672,
+    "stdout_sha256": "e460b8f44a1206af949beeaa232ca26903124838dba47acd07d72b601b3a7dc2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "24-final-gomap-status",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792786003.9867535,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.03170299530029297,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "25-final-gomap-head",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+      "rev-parse",
+      "HEAD"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792786004.0190153,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.0035631656646728516,
+    "stdout_sha256": "0fcaf424406d41bdc79bb673f4f4f527bfebf33aea57dbc1b63c7bb73be9e0fc",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "26-final-gomap-tree",
+    "argv": [
+      "git",
+      "-C",
+      "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+      "rev-parse",
+      "HEAD^{tree}"
+    ],
+    "cwd": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z",
+    "started_unix": 1792786004.0230408,
+    "timeout_seconds": 180,
+    "exit_code": 0,
+    "wall_seconds": 0.0035893917083740234,
+    "stdout_sha256": "5d3fd0dba0dba07076fcc6fc4f45e79cd7e19c98a52eddf89e3bd056953e8bf4",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]

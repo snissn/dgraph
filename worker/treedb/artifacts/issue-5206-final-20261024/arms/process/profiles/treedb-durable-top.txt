@@ -1,0 +1,33 @@
+File: dgraph
+Build ID: 06cc5c15adba5268572c94cc0482422ea6cb6d22
+Type: cpu
+Time: 2026-10-23 17:25:26 HST
+Duration: 5s, Total samples = 660ms (13.20%)
+Showing nodes accounting for 360ms, 54.55% of 660ms total
+Showing top 25 nodes out of 426
+      flat  flat%   sum%        cum   cum%
+      60ms  9.09%  9.09%       60ms  9.09%  internal/runtime/syscall/linux.Syscall6
+      30ms  4.55% 13.64%       30ms  4.55%  time.runtimeNow
+      20ms  3.03% 16.67%       20ms  3.03%  runtime.growslice
+      20ms  3.03% 19.70%       20ms  3.03%  runtime.memmove
+      20ms  3.03% 22.73%       20ms  3.03%  runtime.newarray
+      20ms  3.03% 25.76%       20ms  3.03%  runtime.unlock2
+      10ms  1.52% 27.27%       10ms  1.52%  aeshashbody
+      10ms  1.52% 28.79%       10ms  1.52%  bytes.(*Buffer).WriteByte
+      10ms  1.52% 30.30%       10ms  1.52%  cmpbody
+      10ms  1.52% 31.82%       10ms  1.52%  fmt.(*fmt).pad
+      10ms  1.52% 33.33%       10ms  1.52%  fmt.(*pp).handleMethods
+      10ms  1.52% 34.85%       30ms  4.55%  github.com/dgraph-io/dgraph/v25/dql.getQuery
+      10ms  1.52% 36.36%       10ms  1.52%  github.com/dgraph-io/dgraph/v25/dql.parseFunction
+      10ms  1.52% 37.88%       60ms  9.09%  github.com/dgraph-io/dgraph/v25/posting.getNewForStore
+      10ms  1.52% 39.39%       40ms  6.06%  github.com/dgraph-io/dgraph/v25/query.(*Request).ProcessQuery
+      10ms  1.52% 40.91%       10ms  1.52%  github.com/dgraph-io/dgraph/v25/query.(*SubGraph).handleCountUIDNodes
+      10ms  1.52% 42.42%       10ms  1.52%  github.com/dgraph-io/dgraph/v25/query.(*SubGraph).populateVarMap
+      10ms  1.52% 43.94%       10ms  1.52%  github.com/dgraph-io/ristretto/v2.(*lockedMap[go.shape.*uint8]).Set
+      10ms  1.52% 45.45%       10ms  1.52%  github.com/snissn/gomap/TreeDB/caching.(*cowCache).retainCut
+      10ms  1.52% 46.97%       20ms  3.03%  github.com/snissn/gomap/TreeDB/caching.seekPointSuccessorTable
+      10ms  1.52% 48.48%       40ms  6.06%  github.com/snissn/gomap/TreeDB/db.(*DB).appendCommandWALIntentWithTiming
+      10ms  1.52% 50.00%       10ms  1.52%  github.com/snissn/gomap/TreeDB/internal/cowbtree.(*MapIter[go.shape.uint64,go.shape.*uint8]).Last
+      10ms  1.52% 51.52%       10ms  1.52%  github.com/snissn/gomap/TreeDB/internal/memtable.cowOrderedSuffix
+      10ms  1.52% 53.03%       10ms  1.52%  github.com/snissn/gomap/TreeDB/internal/mvcckey.inspect
+      10ms  1.52% 54.55%       10ms  1.52%  go.opentelemetry.io/otel/attribute.Key.Int64

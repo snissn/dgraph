@@ -1,0 +1,43 @@
+{
+  "frozen_utc": "2026-10-24T03:04:29.340615+00:00",
+  "state": "MERGED_SOURCE_EXECUTION_FROZEN",
+  "host": "mikers@192.168.0.111",
+  "root": "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01",
+  "source_rule": "Actual final merged Dgraph SHA; normal clean clones; official authenticated W8 Gomap noReplace; exact accepted baseline7f2720/fc3c with external readonly modfile. Freeze actual merged SHA and paths in executionreceipt before setup.",
+  "toolchain": "Go1.26.9 official authenticated download; native samecompiler/toolchain/cache; GOMAXPROCS2 GOWORKoff CGO_ENABLED1 ordinaryGC",
+  "order": [
+    "five candidate and three baseline readonly builds, manifests",
+    "original four-cell smoke filesystem/raft_checkpoint/cow_ordered",
+    "actual smoke server v2 manifest verify",
+    "original schema ACK/suffix verification",
+    "original history-floor verification",
+    "original admin/lifecycle verification",
+    "original native-peers verification",
+    "candidate process/store_wal12rows",
+    "candidate filesystem/raft_checkpoint12rows",
+    "baseline filesystem/store_wal12rows"
+  ],
+  "each_profile": {
+    "repeats": 3,
+    "dataset_nodes": 500,
+    "warmup_ops": 100,
+    "timed_ops": 2000,
+    "concurrency": 4,
+    "seed": 20260711,
+    "row_order": "Original script relaxedBadger r1-3,relaxedTreeDB r1-3,durableBadger r1-3,durableTreeDB r1-3",
+    "microbench": "Original default count5/1s",
+    "excluded_profiles": "Original 100000relaxed/10000durable ops,5s each; neverdecisionrows"
+  },
+  "observation_policy": "Original maintained physical quiet acquisition once before each profile, with raw outcomes retained. Explicit user physical-host quiet override permits execution if it exhausts original60s cap. No retries, process exemptions, threshold/workload changes, or claim physicalquiet whenfalse. Existing workload load/context checks remain. No new observer added inside decisionrows.",
+  "acceptance": "Read actual originalreport verdict; shell0doesnotmeanPASS. Original throughput TreeDB>=.97matchedBadger bothclasses, parity/restart/runtimeHardSync/cowactivation and noacceptedmaterialregression. Available pairedlowerisbetter median>5%growth blocksreview; missing remainsUNQUALIFIED. Keep all rows/failures/NULL, no retryuntilpass.",
+  "scope": "Guarded benchmark_minimal staged integration, full parent operational/equilibrium/resource/powerloss obligations remain open. SIGKILLnotpowerloss.",
+  "runtime_execution_authorized": true,
+  "root_owner": "root",
+  "Gomap_merged_sha": "f906b8a2aa1279ed6b6627028cba71d491db04c3",
+  "Dgraph_merged_sha": "bad4ced2c88e15076f73e3647a72e965f63be2b9",
+  "candidate_source": "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/source/prospective-dgraph",
+  "candidate_build_output": "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/build-merged",
+  "runtime_output": "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01",
+  "M0_stability_disposition": "EXPLICIT_USER_WAIVER_originalFAILretained",
+  "source_role": "merged"
+}

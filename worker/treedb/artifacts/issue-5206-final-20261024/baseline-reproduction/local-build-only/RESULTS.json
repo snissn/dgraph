@@ -1,0 +1,24 @@
+{
+  "status": "BUILD_ONLY_NO_RUNTIME_QUALIFICATION",
+  "binary_sha256": {
+    "dgraph": "9e720b7b14f42a91e3bceaf89b50ae691739d69525073c857aea9f3f544af2f7",
+    "livebench": "c9c26cee493fd69bd1a6c64c6cebf3e04741d6340c6fff796810075d5712ddef",
+    "report": "353a404d282e228244036f2eca3f3f5d5eff1fd91553a34120d75191b1689a19"
+  },
+  "module_sha256": {
+    "build.mod": "811b4349671612fba40b02cb750084bddd4026fc9ee6f1efac13217782a5764c",
+    "build.sum": "5951dd5a2e63c085a555bf772487031de3ca16dda6e5644e99979e5eae182b04"
+  },
+  "source": {
+    "dgraph": {
+      "path": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-dgraph",
+      "revision": "7f2720bf0d7ed90e82b04c52911bff92e9f22726",
+      "tree": "0ba5d97bc1d9c71f37b04c8e4b067ed6aee540e2"
+    },
+    "gomap": {
+      "path": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+      "revision": "fc3c3db97ec2954d47a1adf731d501e7b73f181f",
+      "tree": "c202dbc8cbcfc85b929845433c322cc012168d39"
+    }
+  }
+}

@@ -1,0 +1,147 @@
+{
+  "success": true,
+  "diagnostic_only": true,
+  "commands": [
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/admin-close/zw",
+      "--replicas=1",
+      "--port_offset=44000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:49080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/admin-close/p",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/admin-close/w",
+      "--port_offset=45000",
+      "--survive=filesystem",
+      "--security",
+      "token=admin-lifecycle-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/admin-close/zw",
+      "--replicas=1",
+      "--port_offset=44000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:49080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/admin-close/p",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/admin-close/w",
+      "--port_offset=45000",
+      "--survive=filesystem",
+      "--security",
+      "token=admin-lifecycle-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/admin-close/zw",
+      "--replicas=1",
+      "--port_offset=44000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:49080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/admin-close/p",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/admin-close/w",
+      "--port_offset=45000",
+      "--survive=filesystem",
+      "--security",
+      "token=admin-lifecycle-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true"
+    ]
+  ],
+  "binary_sha256": "46763a6bfcd02c37a44fb36e8c866dd7bbf7e2ca9777ad0a0aefb1ada9325175",
+  "pending_drop_refusal": {
+    "errors": [
+      {
+        "message": "drop conflicts with pending transactions; resolve them and submit a new request",
+        "extensions": {
+          "code": "Error"
+        }
+      }
+    ]
+  },
+  "drop_data": {
+    "data": {
+      "code": "Success",
+      "message": "Done"
+    }
+  },
+  "drop_predicate": {
+    "data": {
+      "code": "Success",
+      "message": "Done"
+    }
+  },
+  "drop_all_ack": {
+    "data": {
+      "code": "Success",
+      "message": "Done"
+    }
+  },
+  "zero_outage_read": {
+    "data": {
+      "q": [
+        {
+          "admin_value": "after-drop"
+        }
+      ]
+    },
+    "extensions": {
+      "server_latency": {
+        "parsing_ns": 34251,
+        "processing_ns": 82601,
+        "encoding_ns": 5340,
+        "total_ns": 130122
+      },
+      "txn": {
+        "start_ts": 10005
+      },
+      "metrics": {
+        "num_uids": {
+          "_total": 1,
+          "admin_value": 1
+        }
+      }
+    }
+  },
+  "orderly_close_exit_code": 0,
+  "restored_pending_decision": {
+    "errors": [
+      {
+        "message": "rpc error: code = Aborted desc = Transaction has been aborted. Please retry",
+        "extensions": {
+          "code": "ErrorInvalidRequest"
+        }
+      }
+    ]
+  }
+}

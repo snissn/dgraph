@@ -1,0 +1,297 @@
+{
+  "success": true,
+  "diagnostic_only": true,
+  "commands": [
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/zw",
+      "--replicas=3",
+      "--port_offset=41000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:46080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/p1",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/w1",
+      "--port_offset=42100",
+      "--survive=filesystem",
+      "--raft",
+      "idx=1;group=1",
+      "--security",
+      "token=native-peer-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:46080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/p2",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/w2",
+      "--port_offset=42200",
+      "--survive=filesystem",
+      "--raft",
+      "idx=2;group=1",
+      "--security",
+      "token=native-peer-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:46080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/p3",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/w3",
+      "--port_offset=42300",
+      "--survive=filesystem",
+      "--raft",
+      "idx=3;group=1",
+      "--security",
+      "token=native-peer-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:46080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/p2",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/w2",
+      "--port_offset=42200",
+      "--survive=filesystem",
+      "--raft",
+      "idx=2;group=1",
+      "--security",
+      "token=native-peer-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/zw",
+      "--replicas=3",
+      "--port_offset=41000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:46080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/p1",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/w1",
+      "--port_offset=42100",
+      "--survive=filesystem",
+      "--raft",
+      "idx=1;group=1",
+      "--security",
+      "token=native-peer-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:46080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/p2",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/w2",
+      "--port_offset=42200",
+      "--survive=filesystem",
+      "--raft",
+      "idx=2;group=1",
+      "--security",
+      "token=native-peer-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:46080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/p3",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/native-peers/w3",
+      "--port_offset=42300",
+      "--survive=filesystem",
+      "--raft",
+      "idx=3;group=1",
+      "--security",
+      "token=native-peer-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ]
+  ],
+  "binary_sha256": "46763a6bfcd02c37a44fb36e8c866dd7bbf7e2ca9777ad0a0aefb1ada9325175",
+  "pending_transaction": {
+    "start_ts": 5,
+    "keys": [
+      "2mfk51x8p1fjq",
+      "37oqlzzqlnrrx"
+    ],
+    "preds": [
+      "1-0-peer_value"
+    ]
+  },
+  "seed_floor": {
+    "data": {
+      "retirePostingHistory": {
+        "floor": 3
+      }
+    },
+    "extensions": {
+      "tracing": {
+        "version": 1,
+        "startTime": "2026-10-23T17:14:42.863620444-10:00",
+        "endTime": "2026-10-23T17:14:42.938613805-10:00",
+        "duration": 74993371
+      }
+    }
+  },
+  "retained_decision": {
+    "data": {
+      "code": "Success",
+      "message": "Done",
+      "queries": null,
+      "uids": {
+        "resolved": "0x3"
+      }
+    },
+    "extensions": {
+      "server_latency": {
+        "parsing_ns": 7480,
+        "processing_ns": 14522400,
+        "assign_timestamp_ns": 238732,
+        "total_ns": 14829453
+      },
+      "txn": {
+        "start_ts": 8,
+        "commit_ts": 9,
+        "preds": [
+          "1-0-peer_value"
+        ]
+      }
+    }
+  },
+  "native_2_join": [
+    [
+      "19",
+      "1",
+      "2",
+      "1",
+      "17",
+      "1"
+    ]
+  ],
+  "native_3_join": [
+    [
+      "24",
+      "1",
+      "3",
+      "1",
+      "18",
+      "1"
+    ]
+  ],
+  "pending_commit": {
+    "data": {
+      "code": "Success",
+      "message": "Done"
+    },
+    "extensions": {
+      "txn": {
+        "start_ts": 5,
+        "commit_ts": 18
+      }
+    }
+  },
+  "offline_floor": {
+    "data": {
+      "retirePostingHistory": {
+        "floor": 22
+      }
+    },
+    "extensions": {
+      "tracing": {
+        "version": 1,
+        "startTime": "2026-10-23T17:14:49.572537557-10:00",
+        "endTime": "2026-10-23T17:14:49.706670156-10:00",
+        "duration": 134132619
+      }
+    }
+  },
+  "native_2_rejoin": [
+    [
+      "43",
+      "1",
+      "2",
+      "0",
+      "22",
+      "0"
+    ]
+  ],
+  "immediate_ack": {
+    "data": {
+      "code": "Success",
+      "message": "Done",
+      "queries": null,
+      "uids": {
+        "ack": "0x5"
+      }
+    },
+    "extensions": {
+      "server_latency": {
+        "parsing_ns": 11620,
+        "processing_ns": 19933302,
+        "assign_timestamp_ns": 228302,
+        "total_ns": 20210624
+      },
+      "txn": {
+        "start_ts": 27,
+        "commit_ts": 28,
+        "preds": [
+          "1-0-peer_value"
+        ]
+      }
+    }
+  }
+}

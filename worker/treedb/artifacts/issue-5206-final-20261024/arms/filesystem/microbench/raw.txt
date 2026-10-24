@@ -1,0 +1,149 @@
+badger 2026/10/23 17:29:12 INFO: All 0 tables opened in 0s
+badger 2026/10/23 17:29:12 INFO: Discard stats nextEmptySlot: 0
+badger 2026/10/23 17:29:12 INFO: Set nextTxnTs to 0
+goos: linux
+goarch: amd64
+pkg: github.com/dgraph-io/dgraph/v25/posting
+cpu: AMD Ryzen 7 9700X 8-Core Processor             
+BenchmarkCommitEventDisabledAndUnsubscribed/direct-2         	829314772	         1.446 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/direct-2         	828171837	         1.447 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/direct-2         	829423969	         1.447 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/direct-2         	828376855	         1.448 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/direct-2         	829896690	         1.601 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/disabled-2       	737302158	         1.662 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/disabled-2       	829951671	         1.446 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/disabled-2       	829531704	         1.447 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/disabled-2       	828891951	         1.447 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/disabled-2       	821153420	         1.446 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/unsubscribed-2   	364633330	         3.274 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/unsubscribed-2   	397109061	         2.989 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/unsubscribed-2   	414874231	         3.055 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/unsubscribed-2   	414666039	         3.044 ns/op	       0 B/op	       0 allocs/op
+BenchmarkCommitEventDisabledAndUnsubscribed/unsubscribed-2   	393210619	         3.046 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBadgerStoreSeam/point-read/direct-2                 	 3259135	       366.4 ns/op	     408 B/op	       7 allocs/op
+BenchmarkBadgerStoreSeam/point-read/direct-2                 	 3072580	       363.6 ns/op	     408 B/op	       7 allocs/op
+BenchmarkBadgerStoreSeam/point-read/direct-2                 	 3147228	       355.9 ns/op	     408 B/op	       7 allocs/op
+BenchmarkBadgerStoreSeam/point-read/direct-2                 	 3173714	       366.2 ns/op	     408 B/op	       7 allocs/op
+BenchmarkBadgerStoreSeam/point-read/direct-2                 	 3060472	       364.8 ns/op	     408 B/op	       7 allocs/op
+BenchmarkBadgerStoreSeam/point-read/seam-2                   	 3154336	       365.0 ns/op	     408 B/op	       7 allocs/op
+BenchmarkBadgerStoreSeam/point-read/seam-2                   	 3039057	       362.7 ns/op	     408 B/op	       7 allocs/op
+BenchmarkBadgerStoreSeam/point-read/seam-2                   	 3171265	       360.7 ns/op	     408 B/op	       7 allocs/op
+BenchmarkBadgerStoreSeam/point-read/seam-2                   	 3136756	       360.7 ns/op	     408 B/op	       7 allocs/op
+BenchmarkBadgerStoreSeam/point-read/seam-2                   	 3023505	       362.6 ns/op	     408 B/op	       7 allocs/op
+BenchmarkBadgerStoreSeam/bounded-iterator/direct-2           	  171528	      7112 ns/op	     904 B/op	      17 allocs/op
+BenchmarkBadgerStoreSeam/bounded-iterator/direct-2           	  169177	      6987 ns/op	     904 B/op	      17 allocs/op
+BenchmarkBadgerStoreSeam/bounded-iterator/direct-2           	  174003	      7032 ns/op	     904 B/op	      17 allocs/op
+BenchmarkBadgerStoreSeam/bounded-iterator/direct-2           	  173370	      6984 ns/op	     904 B/op	      17 allocs/op
+BenchmarkBadgerStoreSeam/bounded-iterator/direct-2           	  175675	      7013 ns/op	     904 B/op	      17 allocs/op
+BenchmarkBadgerStoreSeam/bounded-iterator/seam-2             	  171778	      7165 ns/op	     904 B/op	      17 allocs/op
+BenchmarkBadgerStoreSeam/bounded-iterator/seam-2             	  169525	      7203 ns/op	     904 B/op	      17 allocs/op
+BenchmarkBadgerStoreSeam/bounded-iterator/seam-2             	  170727	      7147 ns/op	     904 B/op	      17 allocs/op
+BenchmarkBadgerStoreSeam/bounded-iterator/seam-2             	  171492	      7128 ns/op	     904 B/op	      17 allocs/op
+BenchmarkBadgerStoreSeam/bounded-iterator/seam-2             	  171369	      7211 ns/op	     904 B/op	      17 allocs/op
+BenchmarkBadgerStoreSeam/exact-key-all-versions/direct-2     	 2078084	       572.2 ns/op	     872 B/op	      16 allocs/op
+BenchmarkBadgerStoreSeam/exact-key-all-versions/direct-2     	 2016720	       574.0 ns/op	     872 B/op	      16 allocs/op
+BenchmarkBadgerStoreSeam/exact-key-all-versions/direct-2     	 1938210	       598.2 ns/op	     872 B/op	      16 allocs/op
+BenchmarkBadgerStoreSeam/exact-key-all-versions/direct-2     	 2143731	       558.6 ns/op	     872 B/op	      16 allocs/op
+BenchmarkBadgerStoreSeam/exact-key-all-versions/direct-2     	 2058596	       591.9 ns/op	     872 B/op	      16 allocs/op
+BenchmarkBadgerStoreSeam/exact-key-all-versions/seam-2       	 2061922	       596.0 ns/op	     872 B/op	      16 allocs/op
+BenchmarkBadgerStoreSeam/exact-key-all-versions/seam-2       	 1965906	       609.6 ns/op	     872 B/op	      16 allocs/op
+BenchmarkBadgerStoreSeam/exact-key-all-versions/seam-2       	 2122210	       566.0 ns/op	     872 B/op	      16 allocs/op
+BenchmarkBadgerStoreSeam/exact-key-all-versions/seam-2       	 2062676	       588.4 ns/op	     872 B/op	      16 allocs/op
+BenchmarkBadgerStoreSeam/exact-key-all-versions/seam-2       	 2061180	       589.8 ns/op	     872 B/op	      16 allocs/op
+BenchmarkBadgerStoreSeam/write/direct-2                      	  558062	      2211 ns/op	    1440 B/op	      33 allocs/op
+BenchmarkBadgerStoreSeam/write/direct-2                      	  580875	      2262 ns/op	    1456 B/op	      33 allocs/op
+BenchmarkBadgerStoreSeam/write/direct-2                      	  564484	      2249 ns/op	    1439 B/op	      33 allocs/op
+BenchmarkBadgerStoreSeam/write/direct-2                      	  580629	      2281 ns/op	    1456 B/op	      33 allocs/op
+BenchmarkBadgerStoreSeam/write/direct-2                      	  577810	      2297 ns/op	    1457 B/op	      33 allocs/op
+BenchmarkBadgerStoreSeam/write/seam-2                        	  562658	      2213 ns/op	    1439 B/op	      33 allocs/op
+BenchmarkBadgerStoreSeam/write/seam-2                        	  557103	      2322 ns/op	    1440 B/op	      33 allocs/op
+BenchmarkBadgerStoreSeam/write/seam-2                        	  577354	      2290 ns/op	    1457 B/op	      33 allocs/op
+BenchmarkBadgerStoreSeam/write/seam-2                        	  572043	      2299 ns/op	    1458 B/op	      33 allocs/op
+BenchmarkBadgerStoreSeam/write/seam-2                        	  556971	      2295 ns/op	    1440 B/op	      33 allocs/op
+BenchmarkBadgerStoreSeam/batch-write/direct-2                	  117147	     10734 ns/op	   10957 B/op	     239 allocs/op
+BenchmarkBadgerStoreSeam/batch-write/direct-2                	  111170	     10972 ns/op	   10964 B/op	     238 allocs/op
+BenchmarkBadgerStoreSeam/batch-write/direct-2                	  111085	     10620 ns/op	   10965 B/op	     238 allocs/op
+BenchmarkBadgerStoreSeam/batch-write/direct-2                	  116541	     10989 ns/op	   10942 B/op	     238 allocs/op
+BenchmarkBadgerStoreSeam/batch-write/direct-2                	  110055	     10971 ns/op	   10974 B/op	     238 allocs/op
+BenchmarkBadgerStoreSeam/batch-write/seam-2                  	  120270	     10735 ns/op	   10961 B/op	     239 allocs/op
+BenchmarkBadgerStoreSeam/batch-write/seam-2                  	  114727	     11019 ns/op	   10949 B/op	     238 allocs/op
+BenchmarkBadgerStoreSeam/batch-write/seam-2                  	  114459	     11299 ns/op	   10949 B/op	     238 allocs/op
+BenchmarkBadgerStoreSeam/batch-write/seam-2                  	  115006	     11053 ns/op	   10941 B/op	     238 allocs/op
+BenchmarkBadgerStoreSeam/batch-write/seam-2                  	  113019	     11456 ns/op	   10959 B/op	     238 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/PointGet/DirectMVCC-2    	 1000000	      1445 ns/op	     484 B/op	       6 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/PointGet/DirectMVCC-2    	  822534	      1459 ns/op	     488 B/op	       7 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/PointGet/DirectMVCC-2    	  820818	      1468 ns/op	     488 B/op	       7 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/PointGet/DirectMVCC-2    	  792820	      1527 ns/op	     488 B/op	       7 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/PointGet/DirectMVCC-2    	  809590	      1454 ns/op	     488 B/op	       7 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/PointGet/TreeDBStore-2   	  792997	      1516 ns/op	     592 B/op	       9 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/PointGet/TreeDBStore-2   	  799468	      1510 ns/op	     592 B/op	       9 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/PointGet/TreeDBStore-2   	  805486	      1512 ns/op	     592 B/op	       9 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/PointGet/TreeDBStore-2   	  801009	      1509 ns/op	     592 B/op	       9 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/PointGet/TreeDBStore-2   	  802520	      1514 ns/op	     592 B/op	       9 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/AllVersionsScan/DirectMVCC-2         	   44805	     25835 ns/op	   45496 B/op	     535 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/AllVersionsScan/DirectMVCC-2         	   45424	     25569 ns/op	   45497 B/op	     535 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/AllVersionsScan/DirectMVCC-2         	   45234	     25814 ns/op	   45496 B/op	     535 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/AllVersionsScan/DirectMVCC-2         	   44442	     25759 ns/op	   45497 B/op	     535 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/AllVersionsScan/DirectMVCC-2         	   45354	     25816 ns/op	   45497 B/op	     535 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/AllVersionsScan/TreeDBStore-2        	   38529	     30288 ns/op	   45736 B/op	     538 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/AllVersionsScan/TreeDBStore-2        	   38784	     30248 ns/op	   45737 B/op	     538 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/AllVersionsScan/TreeDBStore-2        	   38252	     30112 ns/op	   45737 B/op	     538 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/AllVersionsScan/TreeDBStore-2        	   39050	     29948 ns/op	   45736 B/op	     538 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/AllVersionsScan/TreeDBStore-2        	   39015	     30238 ns/op	   45737 B/op	     538 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/RandomSeek/DirectMVCC-2              	 1672316	       700.2 ns/op	     399 B/op	       4 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/RandomSeek/DirectMVCC-2              	 1689444	       702.2 ns/op	     399 B/op	       4 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/RandomSeek/DirectMVCC-2              	 1682359	       700.9 ns/op	     399 B/op	       4 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/RandomSeek/DirectMVCC-2              	 1683274	       701.2 ns/op	     399 B/op	       4 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/RandomSeek/DirectMVCC-2              	 1692459	       697.6 ns/op	     399 B/op	       4 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/RandomSeek/TreeDBStore-2             	 1627878	       724.5 ns/op	     399 B/op	       4 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/RandomSeek/TreeDBStore-2             	 1635949	       721.4 ns/op	     399 B/op	       4 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/RandomSeek/TreeDBStore-2             	 1636455	       721.3 ns/op	     399 B/op	       4 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/RandomSeek/TreeDBStore-2             	 1641568	       718.1 ns/op	     399 B/op	       4 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/RandomSeek/TreeDBStore-2             	 1630831	       727.2 ns/op	     399 B/op	       4 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch1/DirectMVCC-2             	  739942	      1630 ns/op	        20.77 disk-B/item	        20.77 disk-B/op	     867 B/op	       8 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch1/DirectMVCC-2             	  754504	      1635 ns/op	        20.66 disk-B/item	        20.66 disk-B/op	     902 B/op	       8 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch1/DirectMVCC-2             	  750252	      1634 ns/op	        20.69 disk-B/item	        20.69 disk-B/op	     844 B/op	       8 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch1/DirectMVCC-2             	  750902	      1634 ns/op	        20.68 disk-B/item	        20.68 disk-B/op	     907 B/op	       8 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch1/DirectMVCC-2             	  754815	      1636 ns/op	        20.66 disk-B/item	        20.66 disk-B/op	     847 B/op	       8 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch1/TreeDBStore-2            	  693178	      1791 ns/op	        21.13 disk-B/item	        21.13 disk-B/op	     919 B/op	       9 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch1/TreeDBStore-2            	  693175	      1776 ns/op	        21.13 disk-B/item	        21.13 disk-B/op	     918 B/op	       9 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch1/TreeDBStore-2            	  663976	      1768 ns/op	        21.38 disk-B/item	        21.38 disk-B/op	     923 B/op	       9 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch1/TreeDBStore-2            	  690046	      1775 ns/op	        21.15 disk-B/item	        21.15 disk-B/op	     905 B/op	       9 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch1/TreeDBStore-2            	  696697	      1779 ns/op	        21.10 disk-B/item	        21.10 disk-B/op	     912 B/op	       9 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch16/DirectMVCC-2            	  107886	     21795 ns/op	        12.55 disk-B/item	       200.8 disk-B/op	   20963 B/op	      61 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch16/DirectMVCC-2            	  120678	     14452 ns/op	        14.53 disk-B/item	       232.4 disk-B/op	   19122 B/op	      61 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch16/DirectMVCC-2            	  121150	     14321 ns/op	        14.51 disk-B/item	       232.2 disk-B/op	   19246 B/op	      61 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch16/DirectMVCC-2            	  121162	     14020 ns/op	        14.51 disk-B/item	       232.2 disk-B/op	   19521 B/op	      61 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch16/DirectMVCC-2            	  124368	     13869 ns/op	        14.41 disk-B/item	       230.6 disk-B/op	   19416 B/op	      61 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch16/TreeDBStore-2           	  114266	     13567 ns/op	        12.46 disk-B/item	       199.4 disk-B/op	   19597 B/op	      62 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch16/TreeDBStore-2           	  113666	     13783 ns/op	        12.47 disk-B/item	       199.5 disk-B/op	   19601 B/op	      62 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch16/TreeDBStore-2           	  115845	     14947 ns/op	        12.44 disk-B/item	       199.0 disk-B/op	   19298 B/op	      62 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch16/TreeDBStore-2           	  116158	     13902 ns/op	        14.69 disk-B/item	       235.0 disk-B/op	   19326 B/op	      62 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/WriteBatch16/TreeDBStore-2           	  111956	     14664 ns/op	        12.50 disk-B/item	       200.0 disk-B/op	   20061 B/op	      62 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/ExactKeyAllVersions/DirectMVCC-2     	  341196	      3602 ns/op	    4600 B/op	      55 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/ExactKeyAllVersions/DirectMVCC-2     	  328993	      3606 ns/op	    4600 B/op	      55 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/ExactKeyAllVersions/DirectMVCC-2     	  336530	      3606 ns/op	    4600 B/op	      55 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/ExactKeyAllVersions/DirectMVCC-2     	  339649	      3558 ns/op	    4600 B/op	      55 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/ExactKeyAllVersions/DirectMVCC-2     	  340419	      3612 ns/op	    4600 B/op	      55 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/ExactKeyAllVersions/TreeDBStore-2    	  313154	      3903 ns/op	    4840 B/op	      58 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/ExactKeyAllVersions/TreeDBStore-2    	  307960	      3918 ns/op	    4840 B/op	      58 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/ExactKeyAllVersions/TreeDBStore-2    	  311756	      3899 ns/op	    4840 B/op	      58 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/ExactKeyAllVersions/TreeDBStore-2    	  311367	      3908 ns/op	    4840 B/op	      58 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/ExactKeyAllVersions/TreeDBStore-2    	  311140	      3909 ns/op	    4840 B/op	      58 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/DirectMVCC-2                  	      51	  22397517 ns/op	46597517 B/op	    3850 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/DirectMVCC-2                  	      45	  22903406 ns/op	46548535 B/op	    3855 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/DirectMVCC-2                  	      45	  22586519 ns/op	46548788 B/op	    3856 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/DirectMVCC-2                  	      45	  23253896 ns/op	46548440 B/op	    3853 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/DirectMVCC-2                  	      45	  22834822 ns/op	46548944 B/op	    3858 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/TreeDBStore-2                 	      44	  23251644 ns/op	46543055 B/op	    3861 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/TreeDBStore-2                 	      45	  23015587 ns/op	46552549 B/op	    3862 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/TreeDBStore-2                 	      46	  22489902 ns/op	46561234 B/op	    3859 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/TreeDBStore-2                 	      45	  23083602 ns/op	46552220 B/op	    3860 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/TreeDBStore-2                 	      46	  22720912 ns/op	46561999 B/op	    3863 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/PairedLatency-2               	      22	  49609653 ns/op	  24682452 adapter-ns/op	        -0.9783 adapter-overhead-%	  24926297 direct-ns/op	92231033 B/op	    7779 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/PairedLatency-2               	      24	  47651101 ns/op	  23792829 adapter-ns/op	        -0.2701 adapter-overhead-%	  23857260 direct-ns/op	92366996 B/op	    7771 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/PairedLatency-2               	      22	  47105898 ns/op	  23506358 adapter-ns/op	        -0.3911 adapter-overhead-%	  23598654 direct-ns/op	92224604 B/op	    7785 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/PairedLatency-2               	      24	  44245324 ns/op	  21976201 adapter-ns/op	        -1.312 adapter-overhead-%	  22268314 direct-ns/op	92372717 B/op	    7769 allocs/op
+BenchmarkTreeDBStoreAdapterOverhead/Reopen/PairedLatency-2               	      25	  43182296 ns/op	  21329418 adapter-ns/op	        -2.392 adapter-overhead-%	  21852025 direct-ns/op	92430088 B/op	    7771 allocs/op
+PASS
+ok  	github.com/dgraph-io/dgraph/v25/posting	271.779s

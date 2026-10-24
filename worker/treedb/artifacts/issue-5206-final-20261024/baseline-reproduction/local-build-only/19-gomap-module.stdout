@@ -1,0 +1,13 @@
+{
+	"Path": "github.com/snissn/gomap",
+	"Version": "v0.6.2-0.20260721120929-84e3f6652651",
+	"Replace": {
+		"Path": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+		"Dir": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+		"GoMod": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap/go.mod",
+		"GoVersion": "1.26"
+	},
+	"Dir": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap",
+	"GoMod": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/final-qualification-source/baseline-gomap/go.mod",
+	"GoVersion": "1.26"
+}

@@ -1,0 +1,43 @@
+{
+  "authoritative_readme_final_analysis_commit_push": "ROOT_ACCEPTED_REPORT_CONTAINING_COMMIT_IS_EVIDENCE_ONLY_NOT_MEASURED_RUNTIME",
+  "base_dgraph": "bad4ced2c88e15076f73e3647a72e965f63be2b9",
+  "baseline_local_commit_policy": "7f2720 is an owned local adaptation, not claimed publicly fetchable; accepted patch and local Git bundle included",
+  "baseline_micro_preview_final_archive_byte_identity": true,
+  "copied_bytes": 25913032,
+  "counts": {
+    "baseline": {
+      "cpu_profiles": 2,
+      "cpu_top_texts": 2,
+      "decision_results": 12,
+      "excluded_profile_results": 2,
+      "runtime_config_sidecars": 56,
+      "runtime_store_sidecars": 28
+    },
+    "filesystem": {
+      "cpu_profiles": 2,
+      "cpu_top_texts": 2,
+      "decision_results": 12,
+      "excluded_profile_results": 2,
+      "runtime_config_sidecars": 56,
+      "runtime_store_sidecars": 28
+    },
+    "process": {
+      "cpu_profiles": 2,
+      "cpu_top_texts": 2,
+      "decision_results": 12,
+      "excluded_profile_results": 2,
+      "runtime_config_sidecars": 56,
+      "runtime_store_sidecars": 28
+    }
+  },
+  "decision_results": 36,
+  "excluded_profile_results": 6,
+  "file_count": 461,
+  "missing_arm_inputs": [],
+  "raw_archive_policy": "Deterministic gzip copies + unchanged original receipts staged under raw-archives; original tar SHA verified after decompression. Databases and executable binaries not duplicated.",
+  "raw_archives_staged": 7,
+  "raw_gzip_bytes": 3442812,
+  "remaining_publication_inputs": [],
+  "status": "ROOT_ACCEPTED_COMPLETED_STOP_EVIDENCE_PACKET",
+  "whole_campaign_disposition": "STOP_LOCKED_PRIOR_PROCESS_ARM_NUMERIC_FAILURE"
+}

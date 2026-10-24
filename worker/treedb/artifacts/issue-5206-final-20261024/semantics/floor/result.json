@@ -1,0 +1,328 @@
+{
+  "success": true,
+  "diagnostic_only": true,
+  "commands": [
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/floor-ack/zw",
+      "--replicas=1",
+      "--port_offset=39000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:44080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/floor-ack/p",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/floor-ack/w",
+      "--port_offset=40000",
+      "--survive=filesystem",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--security",
+      "token=floor-diagnostic-token",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/floor-ack/zw",
+      "--replicas=1",
+      "--port_offset=39000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:44080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/floor-ack/p",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/floor-ack/w",
+      "--port_offset=40000",
+      "--survive=filesystem",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--security",
+      "token=floor-diagnostic-token",
+      "--badger",
+      "syncwrites=false"
+    ]
+  ],
+  "binary_sha256": "46763a6bfcd02c37a44fb36e8c866dd7bbf7e2ca9777ad0a0aefb1ada9325175",
+  "contract": "authenticated explicit S; ordered apply+certificate before ACK; immediate both-server SIGKILL",
+  "unauthenticated": {
+    "errors": [
+      {
+        "message": "Invalid X-Dgraph-AuthToken",
+        "extensions": {
+          "code": "ErrorUnauthorized"
+        }
+      }
+    ]
+  },
+  "wrong_token": {
+    "errors": [
+      {
+        "message": "Invalid X-Dgraph-AuthToken",
+        "extensions": {
+          "code": "ErrorUnauthorized"
+        }
+      }
+    ]
+  },
+  "mutation": {
+    "data": {
+      "code": "Success",
+      "message": "Done",
+      "queries": null,
+      "uids": {
+        "floor": "0x1"
+      }
+    },
+    "extensions": {
+      "server_latency": {
+        "parsing_ns": 18920,
+        "processing_ns": 74808598,
+        "assign_timestamp_ns": 287663,
+        "total_ns": 75158932
+      },
+      "txn": {
+        "start_ts": 5,
+        "commit_ts": 6,
+        "preds": [
+          "1-0-floor_value"
+        ]
+      }
+    }
+  },
+  "too_high": {
+    "errors": [
+      {
+        "message": "resolving retirePostingHistory failed because posting floor must precede assigned frontier and every pending start",
+        "locations": [
+          {
+            "line": 1,
+            "column": 22
+          }
+        ]
+      }
+    ],
+    "data": {
+      "retirePostingHistory": null
+    },
+    "extensions": {
+      "tracing": {
+        "version": 1,
+        "startTime": "2026-10-23T17:13:14.611992468-10:00",
+        "endTime": "2026-10-23T17:13:14.616291949-10:00",
+        "duration": 4299481
+      }
+    }
+  },
+  "floor_retries": [
+    {
+      "errors": [
+        {
+          "message": "resolving retirePostingHistory failed because posting floor must precede assigned frontier and every pending start",
+          "locations": [
+            {
+              "line": 1,
+              "column": 22
+            }
+          ]
+        }
+      ],
+      "data": {
+        "retirePostingHistory": null
+      },
+      "extensions": {
+        "tracing": {
+          "version": 1,
+          "startTime": "2026-10-23T17:13:14.616699123-10:00",
+          "endTime": "2026-10-23T17:13:14.625413367-10:00",
+          "duration": 8714224
+        }
+      }
+    },
+    {
+      "errors": [
+        {
+          "message": "resolving retirePostingHistory failed because posting floor must precede assigned frontier and every pending start",
+          "locations": [
+            {
+              "line": 1,
+              "column": 22
+            }
+          ]
+        }
+      ],
+      "data": {
+        "retirePostingHistory": null
+      },
+      "extensions": {
+        "tracing": {
+          "version": 1,
+          "startTime": "2026-10-23T17:13:14.726120505-10:00",
+          "endTime": "2026-10-23T17:13:14.731033792-10:00",
+          "duration": 4913267
+        }
+      }
+    },
+    {
+      "errors": [
+        {
+          "message": "resolving retirePostingHistory failed because posting floor must precede assigned frontier and every pending start",
+          "locations": [
+            {
+              "line": 1,
+              "column": 22
+            }
+          ]
+        }
+      ],
+      "data": {
+        "retirePostingHistory": null
+      },
+      "extensions": {
+        "tracing": {
+          "version": 1,
+          "startTime": "2026-10-23T17:13:14.832409926-10:00",
+          "endTime": "2026-10-23T17:13:14.837483865-10:00",
+          "duration": 5073919
+        }
+      }
+    },
+    {
+      "errors": [
+        {
+          "message": "resolving retirePostingHistory failed because posting floor must precede assigned frontier and every pending start",
+          "locations": [
+            {
+              "line": 1,
+              "column": 22
+            }
+          ]
+        }
+      ],
+      "data": {
+        "retirePostingHistory": null
+      },
+      "extensions": {
+        "tracing": {
+          "version": 1,
+          "startTime": "2026-10-23T17:13:14.938855298-10:00",
+          "endTime": "2026-10-23T17:13:14.943917347-10:00",
+          "duration": 5062069
+        }
+      }
+    },
+    {
+      "errors": [
+        {
+          "message": "resolving retirePostingHistory failed because posting floor must precede assigned frontier and every pending start",
+          "locations": [
+            {
+              "line": 1,
+              "column": 22
+            }
+          ]
+        }
+      ],
+      "data": {
+        "retirePostingHistory": null
+      },
+      "extensions": {
+        "tracing": {
+          "version": 1,
+          "startTime": "2026-10-23T17:13:15.045276472-10:00",
+          "endTime": "2026-10-23T17:13:15.050179449-10:00",
+          "duration": 4902957
+        }
+      }
+    }
+  ],
+  "floor_response": {
+    "data": {
+      "retirePostingHistory": {
+        "floor": 5,
+        "response": {
+          "code": "Success",
+          "message": "Posting history retirement applied"
+        }
+      }
+    },
+    "extensions": {
+      "tracing": {
+        "version": 1,
+        "startTime": "2026-10-23T17:13:15.15150502-10:00",
+        "endTime": "2026-10-23T17:13:15.228089288-10:00",
+        "duration": 76584248
+      }
+    }
+  },
+  "floor": 5,
+  "recovered_index": 20,
+  "stale_read": {
+    "errors": [
+      {
+        "message": ": read timestamp 5 is at or below replicated posting floor 5",
+        "extensions": {
+          "code": "ErrorInvalidRequest"
+        }
+      }
+    ],
+    "data": null
+  },
+  "stale_floor": {
+    "errors": [
+      {
+        "message": "resolving retirePostingHistory failed because invalid posting floor version or regression",
+        "locations": [
+          {
+            "line": 1,
+            "column": 22
+          }
+        ]
+      }
+    ],
+    "data": {
+      "retirePostingHistory": null
+    },
+    "extensions": {
+      "tracing": {
+        "version": 1,
+        "startTime": "2026-10-23T17:13:25.778732656-10:00",
+        "endTime": "2026-10-23T17:13:25.78327955-10:00",
+        "duration": 4546894
+      }
+    }
+  },
+  "idempotent": {
+    "data": {
+      "retirePostingHistory": {
+        "floor": 5,
+        "response": {
+          "code": "Success",
+          "message": "Posting history retirement applied"
+        }
+      }
+    },
+    "extensions": {
+      "tracing": {
+        "version": 1,
+        "startTime": "2026-10-23T17:13:25.784106898-10:00",
+        "endTime": "2026-10-23T17:13:25.792484058-10:00",
+        "duration": 8377160
+      }
+    }
+  }
+}

@@ -1,0 +1,82 @@
+I1023 17:52:31.071538 3315918 init.go:69] 
+
+Dgraph version   : dev
+Dgraph codename  : 
+Dgraph SHA-256   : 58075e248543eb56ec618fe4099c04fd7fc741817558765e83e98af6432960a8
+Commit SHA-1     : 
+Commit timestamp : 
+Branch           : 
+Go version       : go1.26.9
+jemalloc enabled : false
+GOMAXPROCS       : 2
+Num CPUs         : 16
+
+For Dgraph official documentation, visit https://docs.dgraph.io
+For discussions about Dgraph     , visit https://github.com/orgs/dgraph-io/discussions
+
+Licensed under the Apache Public License 2.0.
+© Istari Digital, Inc.
+
+
+I1023 17:52:31.071702 3315918 run.go:829] x.Config: {PortOffset:23342 Limit:query-edge=1000000; normalize-node=10000; mutations-nquad=1000000; disallow-drop=false; query-timeout=0ms; max-pending-queries=10000; txn-abort-after=5m; max-retries=10; shared-instance=false; type-filter-uid-limit=10; mutations=allow LimitMutationsNquad:1000000 LimitQueryEdge:1000000 BlockClusterWideDrop:false LimitNormalizeNode:10000 QueryTimeout:0s MaxRetries:10 SharedInstance:false GraphQL:introspection=true; debug=false; extensions=true; poll-interval=1s; lambda-url= GraphQLDebug:false NormalizeCompatibilityMode:}
+I1023 17:52:31.071718 3315918 run.go:830] x.WorkerConfig: {TmpDir:t ExportPath:export MyAddr: ZeroAddr:[localhost:28382] Raft:snapshot-after-duration=30m; pending-proposals=256; idx=; group=; learner=false; snapshot-after-entries=10000 WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:5m0s ProposedGroupId:0 StartTime:2026-10-23 17:52:30.977354782 -1000 HST m=+0.061953240 Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}
+I1023 17:52:31.071728 3315918 run.go:831] worker.Config: {PostingDir:/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/baseline-filesystem-12/live/treedb-durable-r1/cluster/p WALDir:/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/baseline-filesystem-12/live/treedb-durable-r1/cluster/w PostingStoreBackend:treedb PostingStoreTier:benchmark_minimal PostingStoreDurability:durable PostingStoreEvents:true MutationsMode:0 AuthToken:**** AclJwtAlg:<nil> AclSecretKey:**** AclSecretKeyBytes:**** AccessJwtTtl:0s RefreshJwtTtl:0s CachePercentage:40,40,20 CacheMb:4096 RemoveOnUpdate:false Audit:<nil> ChangeDataConf:file=; kafka=; sasl_user=; sasl_password=; ca_cert=; client_cert=; client_key=; sasl-mechanism=PLAIN; tls=false; TypeFilterUidLimit:10}
+I1023 17:52:31.071978 3315918 storage.go:113] Init Raft Storage with snap: 0, first: 1, last: 0
+I1023 17:52:31.072005 3315918 server_state.go:154] posting-store backend treedb: experimental, tier=benchmark_minimal; tier=benchmark_minimal; durability=durable; post_commit_events=true
+I1023 17:52:31.175802 3315918 server_state.go:204] livebench TreeDB verified memtable_mode=cow_ordered
+I1023 17:52:31.178614 3315918 groups.go:89] Current Raft Id: 0x0
+I1023 17:52:31.178642 3315918 groups.go:105] Sending member request to Zero: addr:"localhost:30422"
+I1023 17:52:31.178932 3315918 worker.go:125] Worker listening at address: [::]:30422
+I1023 17:52:31.179207 3315918 run.go:626] Bringing up GraphQL HTTP API at 0.0.0.0:31422/graphql
+E1023 17:52:31.179196 3315918 groups.go:1164] Error during SubscribeForUpdates for prefix "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15dgraph.graphql.schema\x00": unable to find any servers for group: 1. closer err: <nil>
+I1023 17:52:31.179213 3315918 run.go:627] Bringing up GraphQL HTTP admin API at 0.0.0.0:31422/admin
+I1023 17:52:31.179336 3315918 run.go:665] gRPC server started.  Listening on port 32422
+I1023 17:52:31.179340 3315918 run.go:666] HTTP server started.  Listening on port 31422
+I1023 17:52:31.279604 3315918 pool.go:172] CONN: Connecting to localhost:28382
+E1023 17:52:32.179816 3315918 groups.go:1164] Error during SubscribeForUpdates for prefix "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15dgraph.graphql.schema\x00": unable to find any servers for group: 1. closer err: <nil>
+E1023 17:52:33.179897 3315918 groups.go:1164] Error during SubscribeForUpdates for prefix "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15dgraph.graphql.schema\x00": unable to find any servers for group: 1. closer err: <nil>
+E1023 17:52:34.180792 3315918 groups.go:1164] Error during SubscribeForUpdates for prefix "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15dgraph.graphql.schema\x00": unable to find any servers for group: 1. closer err: <nil>
+E1023 17:52:35.181026 3315918 groups.go:1164] Error during SubscribeForUpdates for prefix "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15dgraph.graphql.schema\x00": unable to find any servers for group: 1. closer err: <nil>
+I1023 17:52:35.287581 3315918 groups.go:124] Connected to group zero. Assigned group: 1
+I1023 17:52:35.287605 3315918 groups.go:126] Raft Id after connection to Zero: 0x1
+I1023 17:52:35.287616 3315918 draft.go:257] Node ID: 0x1 with GroupID: 1
+I1023 17:52:35.287621 3315918 draft.go:266] RaftContext: id:1  group:1  addr:"localhost:30422"
+I1023 17:52:35.287694 3315918 node.go:146] Setting raft.Config to: &{ID:1 ElectionTick:20 HeartbeatTick:1 Storage:0x180b97452cc0 Applied:0 MaxSizePerMsg:262144 MaxCommittedSizePerReady:67108864 MaxUncommittedEntriesSize:0 MaxInflightMsgs:256 CheckQuorum:false PreVote:true ReadOnlyOption:0 Logger:0x4f52640 DisableProposalForwarding:false}
+I1023 17:52:35.287763 3315918 groups.go:143] Load schema from DB: OK
+I1023 17:52:35.287777 3315918 node.go:320] Group 1 found 0 entries
+I1023 17:52:35.287784 3315918 draft.go:2008] New Node for group: 1
+I1023 17:52:35.287795 3315918 log.go:22] 1 switched to configuration voters=()
+I1023 17:52:35.287812 3315918 log.go:22] 1 became follower at term 0
+I1023 17:52:35.287817 3315918 log.go:22] newRaft 1 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
+I1023 17:52:35.287822 3315918 log.go:22] 1 became follower at term 1
+I1023 17:52:35.287845 3315918 log.go:22] 1 switched to configuration voters=(1)
+I1023 17:52:35.287861 3315918 draft.go:198] Operation started with id: opRollup
+I1023 17:52:35.287872 3315918 groups.go:146] Init and start Raft node: OK
+I1023 17:52:35.287924 3315918 draft.go:1345] Found Raft progress: 0
+I1023 17:52:35.287969 3315918 groups.go:851] Got address of a Zero leader: localhost:28382
+I1023 17:52:35.288066 3315918 groups.go:865] Starting a new membership stream receive from localhost:28382.
+I1023 17:52:35.288251 3315918 groups.go:882] Received first state update from Zero: counter:3  groups:{key:1  value:{members:{key:1  value:{id:1  groupId:1  addr:"localhost:30422"}}}}  zeros:{key:1  value:{id:1  addr:"localhost:28382"  leader:true}}  maxRaftId:1
+I1023 17:52:35.303938 3315918 log.go:22] 1 switched to configuration voters=(1)
+I1023 17:52:35.303953 3315918 node.go:182] Setting conf state to voters:1 
+I1023 17:52:35.304061 3315918 log.go:22] 1 is starting a new election at term 1
+I1023 17:52:35.304067 3315918 log.go:22] 1 became pre-candidate at term 1
+I1023 17:52:35.304069 3315918 log.go:22] 1 received MsgPreVoteResp from 1 at term 1
+I1023 17:52:35.304075 3315918 log.go:22] 1 became candidate at term 2
+I1023 17:52:35.304077 3315918 log.go:22] 1 received MsgVoteResp from 1 at term 2
+I1023 17:52:35.304081 3315918 log.go:22] 1 became leader at term 2
+I1023 17:52:35.304083 3315918 log.go:22] raft.node: 1 elected leader 1 at term 2
+E1023 17:52:36.179825 3315918 admin.go:836] namespace: 0. Error reading GraphQL schema: Please retry again, server is not ready to accept requests.
+I1023 17:52:36.184021 3315918 pool.go:172] CONN: Connecting to localhost:30422
+I1023 17:52:36.288303 3315918 groups.go:153] Informed Zero about tablets I have: OK
+I1023 17:52:36.288372 3315918 groups.go:935] Leader idx=0x1 of group=1 is connecting to Zero for txn updates
+I1023 17:52:36.288388 3315918 groups.go:947] Got Zero leader: localhost:28382
+I1023 17:52:36.301236 3315918 groups.go:479] Serving tablet for: 0-dgraph.type
+I1023 17:52:36.314090 3315918 groups.go:479] Serving tablet for: 0-dgraph.drop.op
+I1023 17:52:36.326833 3315918 groups.go:479] Serving tablet for: 0-dgraph.graphql.schema
+I1023 17:52:36.338622 3315918 groups.go:479] Serving tablet for: 0-dgraph.graphql.xid
+I1023 17:52:36.349940 3315918 groups.go:479] Serving tablet for: 0-dgraph.graphql.p_query
+I1023 17:52:36.363006 3315918 groups.go:479] Serving tablet for: 0-dgraph.namespace.name
+I1023 17:52:36.375909 3315918 groups.go:479] Serving tablet for: 0-dgraph.namespace.id
+I1023 17:52:36.395328 3315918 groups.go:156] Upserted Schema and Types: OK
+I1023 17:52:36.395342 3315918 groups.go:159] Server is ready: OK
+I1023 17:52:36.395348 3315918 access.go:419] InitializeAcl closed

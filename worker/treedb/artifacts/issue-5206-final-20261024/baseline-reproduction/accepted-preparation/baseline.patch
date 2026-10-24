@@ -1,0 +1,2381 @@
+diff --git a/dgraph/cmd/zero/run.go b/dgraph/cmd/zero/run.go
+--- a/dgraph/cmd/zero/run.go
++++ b/dgraph/cmd/zero/run.go
+@@ -231,6 +231,7 @@
+ 	}
+ 	glog.Infof("Setting Config to: %+v", opts)
+ 	x.WorkerConfig.Parse(Zero.Conf)
++	glog.Infof("x.WorkerConfig: %+v", x.WorkerConfig)
+ 
+ 	if opts.numReplicas < 0 || opts.numReplicas%2 == 0 {
+ 		log.Fatalf("ERROR: Number of replicas must be odd for consensus. Found: %d",
+diff --git a/worker/server_state.go b/worker/server_state.go
+--- a/worker/server_state.go
++++ b/worker/server_state.go
+@@ -180,6 +180,7 @@
+ 		}
+ 		treeOpts, err := dgraphtreedb.ResolveOptions(dgraphtreedb.OpenOptions{
+ 			Dir: Config.PostingDir, Profile: profile,
++			MemtableMode: "cow_ordered",
+ 			RequireInMemory: x.WorkerConfig.Badger.InMemory,
+ 		})
+ 		if err != nil {
+@@ -189,6 +190,18 @@
+ 		if err != nil {
+ 			return fmt.Errorf("open TreeDB posting store: %w", err)
+ 		}
++		stats, err := s.TreeDBStore.Stats()
++		if err != nil {
++			_ = s.TreeDBStore.Close()
++			s.TreeDBStore = nil
++			return fmt.Errorf("verify livebench TreeDB memtable mode: %w", err)
++		}
++		if got := stats["treedb.cache.memtable_mode"]; got != "cow_ordered" {
++			_ = s.TreeDBStore.Close()
++			s.TreeDBStore = nil
++			return fmt.Errorf("livebench TreeDB memtable mode = %q, want cow_ordered", got)
++		}
++		glog.Infof("livebench TreeDB verified memtable_mode=cow_ordered")
+ 		s.PostingStore = s.TreeDBStore
+ 	}
+ 	if Config.PostingStoreEvents {
+diff --git a/worker/treedb/LIVE_DURABILITY_AB.md b/worker/treedb/LIVE_DURABILITY_AB.md
+--- a/worker/treedb/LIVE_DURABILITY_AB.md
++++ b/worker/treedb/LIVE_DURABILITY_AB.md
+@@ -31,6 +31,26 @@
+ available write/GC/flush/checkpoint counters, recovery time, runtime-observed backend/durability,
+ schema status, posting checksum/count, restart parity, unsupported-feature status, SHAs, dirty
+ state, command, CPU/RAM/storage/filesystem/environment, and contamination.
++
++`recovery_seconds` retains its original restart-to-HTTP-health boundary. That boundary differs by
++backend: Raft-owned TreeDB waits for election and ordered replay, while legacy Badger can report
++health before election. New runs also record `recovery_read_seconds` through runtime identity checks
++and a fresh full posting validation, then `recovery_read_write_seconds` through a new-node CommitNow
++ACK and a fresh verified read at or after its commit timestamp. Both start at the same Alpha exec
++boundary. These include the declared validation work, rather than estimating an internal open-only
++latency. The new probe runs after all timed metrics and restart checksums; its node does not enter
++them. The `recovery_probe=read-commit-read-v1` configuration is fingerprinted so these results
++cannot silently pool with older health-only runs. This is a clean Alpha restart with Zero alive, not
++a crash or power-loss recovery measurement.
++
++Reports retain the original `restart median (s)` column for `recovery_seconds`. For a matrix with
++the aligned probe, they add `read-ready median (s)` and `read/write-ready median (s)` columns for
++the two readiness metrics, including available/total repeat counts. Compare these additive columns
++for the declared equivalent end-to-end boundaries; the legacy HTTP-health column is not a matched
++readiness comparison. Health-only matrices retain their original table and do not manufacture
++aligned times or zeros. Mixed probe fingerprints, missing/invalid aligned metrics and excluded
++diagnostic rows are rejected before reporting. Each column is an independent per-metric median, not
++a sequence of measurements from one representative repeat.
+ 
+ Aggregation fails on an incomplete matrix, wrong backend or durability, workload mismatch, missing
+ metric contract, setup/timed overlap, dirty or excluded run, cross-run
+@@ -111,6 +131,49 @@
+ calculation are unchanged, but these runs explicitly set `Context.Excluded` and an overhead reason.
+ Native acceptance aggregation rejects them. The flag is optional and does not enable runtime
+ tracing.
++
++## Paired Alpha memory attribution (separate diagnostic only)
++
++Use `--memory-diagnostic /absolute/private-artifacts/memory` as a new filename prefix in a
++separately admitted run. Its parent directory must exist (the new run artifact directory itself is
++also supported). Both Badger and TreeDB use identical hooks: after warmup before timed baseline
++counters, and after the native post-workload CPU/HWM/disk/store/Prometheus metrics have been
++captured, before schema/posting validation or restart. It refuses combination with CPU, endpoint,
++operation or storage diagnostics so other waits cannot move these boundaries.
++
++Each boundary writes seven immutable raw artifacts: Alpha `/proc/PID/status`,
++`/proc/PID/smaps_rollup` and `/debug/vars`, followed by `/debug/pprof/heap?gc=1`, then those same
++three raw-state sources again. The GC-assisted heap profile gives a current retained Go heap sample;
++the manifest records whether that request was attempted. Pre-GC raw state is preserved before the
++request, and post-GC raw state also includes serving/serializing the profile. Each schema-v1
++manifest binds the actual Alpha PID, run/backend/durability, server hash, named boundary, capture
++envelope, completion/error, and each raw artifact's source, timestamps, path, byte count and
++SHA-256. A failed capture preserves the completed raw artifacts and an incomplete/error manifest and
++refuses a successful native result. Existing destinations, cluster-state paths and resolved aliases
++into cluster state are refused using the maintained sidecar path guards. Heap artifact paths are
++forwarded in `Context.Profiles` for ordinary `go tool pprof` inspection.
++
++For a within-run retained-heap delta, using that exact run's prefix and binary:
++
++```sh
++go tool pprof -top -sample_index=inuse_space \
++  -base /absolute/private-artifacts/memory.after_warmup_before_counters.heap.gc1.pprof \
++  /absolute/private-artifacts/memory.after_native_metrics_before_validation.heap.gc1.pprof
++```
++
++This subtraction compares two GC-assisted live-heap samples; it is not allocation bytes/op or a
++direct decomposition of the kernel RSS/HWM difference between backends.
++
++The first observation is outside the timed CPU baseline but deliberately changes the process's
++GC/heap state before workload execution. It can itself raise the later kernel `VmHWM`; the second
++GC/profile request runs only after native metrics were captured. Every such run is explicitly
++excluded from performance acceptance. Do not substitute its HWM, throughput or GC count for the
++uninstrumented A/B rows. `/debug/vars` and heap profile serialization allocate and perturb state;
++these sequential observations are not atomic snapshots. Forced GC does not promise immediate return
++of idle memory to the OS or clearing kernel HWM. Go heap retention is distinct from cumulative
++allocation churn, off-heap allocator memory, file mappings and RSS. Compare raw runtime state with
++`smaps_rollup` before attributing the original RSS difference. This diagnostic neither establishes
++sustained memory equilibrium nor qualifies resource/performance acceptance.
+ 
+ ## Native-boundary storage attribution (separate diagnostic only)
+ 
+diff --git a/worker/treedb/livebench/cmd/main.go b/worker/treedb/livebench/cmd/main.go
+--- a/worker/treedb/livebench/cmd/main.go
++++ b/worker/treedb/livebench/cmd/main.go
+@@ -32,7 +32,9 @@
+ )
+ 
+ type options struct {
++	survival, treeDBPolicy, treeDBMemtable                                                                         string
+ 	dgraphBin, artifactDir, backend, class, cpuProfile, endpointDiagnostic, operationDiagnostic, storageDiagnostic string
++	memoryDiagnostic                                                                                               string
+ 	repeat, dataset, concurrency, warmup, timed, zeroOffset, alphaOffset                                           int
+ 	profileSeconds                                                                                                 int
+ 	seed                                                                                                           int64
+@@ -55,6 +57,9 @@
+ 	flag.StringVar(&o.artifactDir, "artifact-dir", "", "new per-run artifact directory")
+ 	flag.StringVar(&o.backend, "backend", "", "badger or treedb")
+ 	flag.StringVar(&o.class, "durability", "", "relaxed or durable")
++	flag.StringVar(&o.survival, "survive", "process", "explicit Zero and Alpha survival: process or filesystem")
++	flag.StringVar(&o.treeDBPolicy, "treedb-durable-policy", "store_wal", "TreeDB durable arm recovery owner: store_wal or raft_checkpoint")
++	flag.StringVar(&o.treeDBMemtable, "require-treedb-memtable", "", "refuse startup/restart unless the observed TreeDB memtable matches")
+ 	flag.IntVar(&o.repeat, "repeat", 1, "one-based repeat number")
+ 	flag.IntVar(&o.dataset, "dataset-nodes", 500, "initial node count")
+ 	flag.IntVar(&o.concurrency, "concurrency", 4, "timed workload concurrency")
+@@ -68,6 +73,7 @@
+ 	flag.StringVar(&o.endpointDiagnostic, "endpoint-diagnostic", "", "new JSON sidecar for separate diagnostic-run posting endpoints; diagnostic overhead only")
+ 	flag.StringVar(&o.operationDiagnostic, "operation-diagnostic", "", "new operation/server-phase JSON sidecar; diagnostic overhead excluded from acceptance")
+ 	flag.StringVar(&o.storageDiagnostic, "storage-diagnostic", "", "new same-walk posting-file JSON sidecar; diagnostic overhead excluded from acceptance")
++	flag.StringVar(&o.memoryDiagnostic, "memory-diagnostic", "", "new artifact filename prefix for paired Alpha raw memory/forced-GC heap observations; excluded from acceptance")
+ 	flag.Float64Var(&o.maxLoad, "max-load1", float64(runtime.NumCPU())*.75, "exclude a run if host load1 exceeds this")
+ 	flag.Parse()
+ 	if err := run(o); err != nil {
+@@ -77,6 +83,9 @@
+ }
+ 
+ func run(o options) (err error) {
++	if err := normalizeRuntimeOptions(&o); err != nil {
++		return err
++	}
+ 	if o.dgraphBin == "" || o.artifactDir == "" || (o.backend != "badger" && o.backend != "treedb") || (o.class != "relaxed" && o.class != "durable") {
+ 		return errors.New("--dgraph-bin, --artifact-dir, valid --backend, and valid --durability are required")
+ 	}
+@@ -95,6 +104,9 @@
+ 	if err := validateStorageDiagnosticOption(o); err != nil {
+ 		return err
+ 	}
++	if err := validateMemoryDiagnosticOption(o); err != nil {
++		return err
++	}
+ 	if _, err := os.Stat(o.artifactDir); !os.IsNotExist(err) {
+ 		return fmt.Errorf("artifact directory must not exist: %s", o.artifactDir)
+ 	}
+@@ -107,8 +119,9 @@
+ 	}
+ 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+ 	defer cancel()
+-	posting, badger := selectors(o.backend, o.class)
+-	config := livebench.Config{Backend: o.backend, DurabilityClass: o.class, PostingStore: posting, Badger: badger, DatasetNodes: o.dataset, Concurrency: o.concurrency, WarmupOps: o.warmup, TimedOps: o.timed, QueryMix: map[string]int{"point_read": 60, "one_hop_read": 20, "write": 20}, Topology: "single-zero-single-alpha", Seed: o.seed}
++	posting, badger := runtimeSelectors(o)
++	config := runtimeConfig(o)
++	config.RecoveryProbe = livebench.RecoveryReadCommitRead
+ 	r := livebench.Result{SchemaVersion: livebench.SchemaVersion, RunID: fmt.Sprintf("%s-%s-r%d", o.backend, o.class, o.repeat), Repeat: o.repeat, Config: config, LatencyMS: map[string]float64{}, Metrics: map[string]livebench.Metric{}}
+ 	r.Context, err = collectContext(o)
+ 	if err != nil {
+@@ -119,6 +132,8 @@
+ 
+ 	zeroArgs := []string{"zero", "--wal", filepath.Join(runDir, "zw"), "--replicas=1", fmt.Sprintf("--port_offset=%d", o.zeroOffset)}
+ 	alphaArgs := []string{"alpha", "--zero", fmt.Sprintf("localhost:%d", 5080+o.zeroOffset), "--postings", filepath.Join(runDir, "p"), "--wal", filepath.Join(runDir, "w"), fmt.Sprintf("--port_offset=%d", o.alphaOffset), "--posting-store", posting, "--badger", badger}
++	zeroArgs = append(zeroArgs, "--survive="+o.survival)
++	alphaArgs = append(alphaArgs, "--survive="+o.survival)
+ 	zero, err := start(o.dgraphBin, zeroArgs, filepath.Join(o.artifactDir, "zero.log"))
+ 	if err != nil {
+ 		return err
+@@ -142,6 +157,10 @@
+ 	}
+ 	defer dg.Close()
+ 
++	r.Validation.Runtime, err = captureRuntime(o, "startup", zero, alpha, httpBase)
++	if err != nil {
++		return fmt.Errorf("startup runtime identity: %w", err)
++	}
+ 	r.SetupStarted = time.Now().UTC()
+ 	dataset, err := setup(ctx, dg, o.dataset)
+ 	if err != nil {
+@@ -152,6 +171,13 @@
+ 		return fmt.Errorf("warmup: %w", err)
+ 	}
+ 	r.SetupFinished = time.Now().UTC()
++	if o.memoryDiagnostic != "" {
++		profiles, memoryErr := captureMemoryDiagnostic(o.memoryDiagnostic, memoryDiagnosticBoundaries[0], filepath.Join(runDir, "p"), httpBase, alpha.cmd.Process.Pid, r)
++		r.Context.Profiles = append(r.Context.Profiles, profiles...)
++		if memoryErr != nil {
++			return fmt.Errorf("after warmup memory diagnostic: %w", memoryErr)
++		}
++	}
+ 	var diagnostic *operationDiagnostic
+ 	var beforeStore, beforeProm, afterStore, afterProm *operationRequest
+ 	if o.operationDiagnostic != "" {
+@@ -249,7 +275,14 @@
+ 	if err != nil {
+ 		return fmt.Errorf("collect posting-store status: %w", err)
+ 	}
+-	r.Metrics = metrics(o.backend, cpuAfter-cpuBefore, hwm, diskLogical, diskAllocated, promBefore, promAfter, storeBefore, storeAfter)
++	r.Metrics = metrics(o.backend, config.TreeDBPolicy, cpuAfter-cpuBefore, hwm, diskLogical, diskAllocated, promBefore, promAfter, storeBefore, storeAfter)
++	if o.memoryDiagnostic != "" {
++		profiles, memoryErr := captureMemoryDiagnostic(o.memoryDiagnostic, memoryDiagnosticBoundaries[1], filepath.Join(runDir, "p"), httpBase, alpha.cmd.Process.Pid, r)
++		r.Context.Profiles = append(r.Context.Profiles, profiles...)
++		if memoryErr != nil {
++			return fmt.Errorf("after native metrics memory diagnostic: %w", memoryErr)
++		}
++	}
+ 	if diagnostic != nil {
+ 		diagnosticWriteAttempted = true
+ 		if err := writeOperationDiagnostic(o.operationDiagnostic, diagnostic, filepath.Join(runDir, "p")); err != nil {
+@@ -291,6 +324,11 @@
+ 		return fmt.Errorf("alpha restart: %w", err)
+ 	}
+ 	recoverySeconds := time.Since(recoveryStart).Seconds()
++	runtimeAfter, runtimeErr := captureRuntime(o, "after_alpha_restart", zero, alpha, httpBase)
++	if runtimeErr != nil {
++		return fmt.Errorf("restart runtime identity: %w", runtimeErr)
++	}
++	r.Validation.Runtime = append(r.Validation.Runtime, runtimeAfter...)
+ 	r.Metrics["recovery_seconds"] = livebench.Metric{Available: true, Value: recoverySeconds, Unit: "seconds", Source: "alpha process restart to healthy"}
+ 	dg, err = client(fmt.Sprintf("localhost:%d", 9080+o.alphaOffset))
+ 	if err != nil {
+@@ -302,6 +340,11 @@
+ 	if err != nil {
+ 		return fmt.Errorf("restart validation: %w", err)
+ 	}
++	r.Metrics["recovery_read_seconds"] = livebench.Metric{Available: true, Value: time.Since(recoveryStart).Seconds(), Unit: "seconds", Source: "alpha restart through runtime witness and fresh full posting validation"}
++	if err := validateRecoveryWrite(ctx, dg); err != nil {
++		return fmt.Errorf("restart write readiness: %w", err)
++	}
++	r.Metrics["recovery_read_write_seconds"] = livebench.Metric{Available: true, Value: time.Since(recoveryStart).Seconds(), Unit: "seconds", Source: "alpha restart through full posting validation, new CommitNow ACK and fresh read of committed probe"}
+ 	for _, contaminant := range contaminants(o.maxLoad) {
+ 		if !contains(r.Context.Contaminants, contaminant) {
+ 			r.Context.Contaminants = append(r.Context.Contaminants, contaminant)
+@@ -311,8 +354,14 @@
+ 		r.Context.Excluded = true
+ 		r.Context.ExclusionReason = strings.Join(r.Context.Contaminants, "; ")
+ 	}
++	if err := verifyMeasuredBinary(o.dgraphBin, r.Context.BinarySHA256); err != nil {
++		return err
++	}
+ 	if err := r.Validate(); err != nil {
+ 		return fmt.Errorf("result validation: %w", err)
++	}
++	if err := r.VerifyRuntimeArtifacts(o.artifactDir); err != nil {
++		return fmt.Errorf("result runtime artifacts: %w", err)
+ 	}
+ 	return livebench.WriteImmutable(r.Context.RawPath, r)
+ }
+@@ -449,6 +498,30 @@
+ 	return withDgraphRPCTimeout(ctx, dgraphRPCTimeout, func(rpcCtx context.Context) (*api.Response, error) {
+ 		return dg.NewReadOnlyTxn().QueryWithVars(rpcCtx, query, vars)
+ 	})
++}
++
++// validateRecoveryWrite runs after the measured workload and restart checksum.
++// A new node ensures readiness includes a real write, even if the fixture's
++// existing values would make an overwrite redundant. It never enters throughput,
++// posting disk/RSS counters, or the unchanged pre/post-restart checksum.
++func validateRecoveryWrite(ctx context.Context, dg *dgo.Dgraph) error {
++	const probeValue = "recovery-probe-v1"
++	resp, err := dgraphMutate(ctx, dg, &api.Mutation{SetNquads: []byte("_:recovery <bench.value> \"" + probeValue + "\" ."), CommitNow: true})
++	if err != nil {
++		return err
++	}
++	if resp == nil || resp.Txn == nil || resp.Txn.CommitTs == 0 || resp.Uids["recovery"] == "" {
++		return errors.New("recovery probe lacks committed timestamp or allocated UID")
++	}
++	uid := resp.Uids["recovery"]
++	read, err := dgraphQueryWithVars(ctx, dg, "query q($id: string) { q(func: uid($id)) { uid bench.value } }", map[string]string{"$id": uid})
++	if err != nil {
++		return err
++	}
++	if read == nil || read.Txn == nil || read.Txn.StartTs < resp.Txn.CommitTs {
++		return errors.New("recovery probe read precedes committed timestamp")
++	}
++	return validateReadResponse(read.Json, uid, expectedNode{Value: probeValue}, false)
+ }
+ 
+ func setup(ctx context.Context, dg *dgo.Dgraph, n int) (map[string]expectedNode, error) {
+@@ -948,17 +1021,18 @@
+ 	return a - b, aok && bok
+ }
+ 
+-func metrics(backend string, cpu, hwm, diskLogical, diskAllocated float64, pb, pa, sb, sa map[string]float64) map[string]livebench.Metric {
++func metrics(backend, policy string, cpu, hwm, diskLogical, diskAllocated float64, pb, pa, sb, sa map[string]float64) map[string]livebench.Metric {
+ 	m := map[string]livebench.Metric{
+ 		"cpu_seconds": {Available: true, Value: cpu, Unit: "seconds", Source: "/proc alpha utime+stime"}, "rss_peak_bytes": {Available: true, Value: hwm, Unit: "bytes", Source: "/proc alpha VmHWM"}, "disk_logical_bytes": {Available: true, Value: diskLogical, Unit: "bytes", Source: "posting directory walk"}, "disk_allocated_bytes": {Available: true, Value: diskAllocated, Unit: "bytes", Source: "posting directory stat blocks"},
+ 		"recovery_seconds": {Available: false, Unit: "seconds", Source: "alpha restart", Reason: "populated after restart"},
+ 	}
+ 	writeBytes, writeAvail := delta(pa, pb, "badger_write_bytes_user")
+ 	writeSource := "Badger Prometheus badger_write_bytes_user"
+-	writeReason := ""
++	writeReason := "logical user-byte counter unavailable for selected backend"
+ 	if backend == "treedb" {
+ 		writeBytes, writeAvail = delta(sa, sb, "treedb.command_wal.public_batch.set.bytes_total")
+ 		writeSource = "TreeDB /debug/store public batch set bytes"
++		writeReason = "TreeDB public-batch logical-byte counter unavailable"
+ 		pointAppends, pointAppendOK := delta(sa, sb, "treedb.command_wal.append.point.count_total")
+ 		switch {
+ 		case !pointAppendOK:
+@@ -969,7 +1043,7 @@
+ 			writeReason = "TreeDB direct-point appends bypass the public-batch logical-byte counter"
+ 		}
+ 	}
+-	m["write_bytes"] = livebench.Metric{Available: writeAvail, Value: writeBytes, Unit: "bytes", Source: writeSource, Reason: writeReason}
++	m["write_bytes"] = availability(writeBytes, writeAvail, "bytes", writeSource, writeReason)
+ 	physical := 0.0
+ 	physicalOK := backend == "badger"
+ 	for _, name := range []string{"badger_write_bytes_l0", "badger_write_bytes_vlog", "badger_write_bytes_compaction"} {
+@@ -1002,7 +1076,7 @@
+ 	m["gc_cycles"] = availability(gc, gcOK, "count", gcSource, "counter unavailable")
+ 	m["flushes"] = availability(flush, flushOK, "count", flushSource, flushReason)
+ 	m["checkpoints"] = availability(check, checkOK, "count", checkSource, "counter unavailable for selected backend")
+-	addTreeDBDiagnostics(m, backend, sb, sa)
++	addTreeDBDiagnostics(m, backend, policy, sb, sa)
+ 	return m
+ }
+ 
+@@ -1031,11 +1105,15 @@
+ 	{metric: "treedb_leaf_log_segment_rotations", stat: "treedb.cache.leaf_log_lanes.segment_rotations_total"},
+ }
+ 
+-func addTreeDBDiagnostics(out map[string]livebench.Metric, backend string, before, after map[string]float64) {
++func addTreeDBDiagnostics(out map[string]livebench.Metric, backend, policy string, before, after map[string]float64) {
+ 	for _, diagnostic := range treeDBDiagnostics {
+ 		source := "TreeDB /debug/store timed-phase delta: " + diagnostic.stat
+ 		if backend != "treedb" {
+ 			out[diagnostic.metric] = availability(0, false, "count", source, "TreeDB-only diagnostic")
++			continue
++		}
++		if policy == "raft_checkpoint" && strings.HasPrefix(diagnostic.metric, "treedb_group_commit_") {
++			out[diagnostic.metric] = availability(0, false, "count", source, livebench.RaftCheckpointNoCommandWAL)
+ 			continue
+ 		}
+ 		value, ok := delta(after, before, diagnostic.stat)
+@@ -1147,10 +1225,14 @@
+ 	if err != nil {
+ 		return livebench.Context{}, err
+ 	}
+-	gomapVersion, err := commandRequired("go", "list", "-m", "-f", "{{.Version}}", "github.com/snissn/gomap")
++	binaryRevision, gomapVersion, binaryGoVersion, binaryDirty, err := measuredSources(o.dgraphBin)
+ 	if err != nil {
+ 		return livebench.Context{}, err
+ 	}
++	if binaryRevision != dgraphSHA {
++		return livebench.Context{}, fmt.Errorf("measured binary source %s differs from worktree %s", binaryRevision, dgraphSHA)
++	}
++
+ 	host, err := commandRequired("hostname")
+ 	if err != nil {
+ 		return livebench.Context{}, err
+@@ -1175,7 +1257,11 @@
+ 	for _, name := range []string{"GOWORK", "TMPDIR", "GOMAXPROCS", "GOFLAGS"} {
+ 		environment[name] = os.Getenv(name)
+ 	}
+-	return livebench.Context{DgraphSHA: dgraphSHA, GomapVersion: gomapVersion, Dirty: command("git", "status", "--porcelain") != "", GoVersion: runtime.Version(), Host: host, Kernel: kernel, CPU: cpu, TotalRAMBytes: ram, Storage: storage, Environment: environment, ExactCommand: cmd, RawPath: filepath.Join(o.artifactDir, "result.json")}, nil
++	binarySHA, buildInfo, err := measuredBinary(o.dgraphBin)
++	if err != nil {
++		return livebench.Context{}, err
++	}
++	return livebench.Context{BinarySHA256: binarySHA, BinaryBuildInfo: buildInfo, DgraphSHA: dgraphSHA, GomapVersion: gomapVersion, Dirty: binaryDirty || command("git", "status", "--porcelain") != "", GoVersion: binaryGoVersion, Host: host, Kernel: kernel, CPU: cpu, TotalRAMBytes: ram, Storage: storage, Environment: environment, ExactCommand: cmd, RawPath: filepath.Join(o.artifactDir, "result.json")}, nil
+ }
+ func command(name string, args ...string) string {
+ 	b, _ := exec.Command(name, args...).Output()
+@@ -1493,6 +1579,9 @@
+ 
+ // Mark all diagnostics at run setup; CPU profiling alone keeps its existing behavior.
+ func markDiagnostics(r *livebench.Result, o options) {
++	if o.memoryDiagnostic != "" {
++		r.Context.Contaminants = append(r.Context.Contaminants, memoryDiagnosticReason)
++	}
+ 	if o.storageDiagnostic != "" {
+ 		r.Context.Contaminants = append(r.Context.Contaminants, storageDiagnosticReason)
+ 	}
+diff --git a/worker/treedb/livebench/cmd/main_test.go b/worker/treedb/livebench/cmd/main_test.go
+--- a/worker/treedb/livebench/cmd/main_test.go
++++ b/worker/treedb/livebench/cmd/main_test.go
+@@ -168,7 +168,7 @@
+ }
+ 
+ func TestBadgerFlushMetricIsUnavailable(t *testing.T) {
+-	m := metrics("badger", 1, 2, 3, 4,
++	m := metrics("badger", "", 1, 2, 3, 4,
+ 		map[string]float64{"badger_write_num_vlog": 1},
+ 		map[string]float64{"badger_write_num_vlog": 10}, nil, nil)["flushes"]
+ 	if m.Available || !strings.Contains(m.Reason, "not a semantic flush counter") {
+@@ -187,7 +187,7 @@
+ 		"treedb.command_wal.group_commit.group_size_max": 4,
+ 		"treedb.cache.point_successor.calls_total":       25,
+ 	}
+-	got := metrics("treedb", 1, 2, 3, 4, nil, nil, before, after)
++	got := metrics("treedb", "store_wal", 1, 2, 3, 4, nil, nil, before, after)
+ 	if metric := got["treedb_group_commit_commits"]; !metric.Available || metric.Value != 7 || !strings.Contains(metric.Source, "timed-phase delta") {
+ 		t.Fatalf("group commits = %+v", metric)
+ 	}
+@@ -211,7 +211,7 @@
+ 		"treedb.command_wal.public_batch.set.bytes_total": 20,
+ 		"treedb.command_wal.append.point.count_total":     6,
+ 	}
+-	got := metrics("treedb", 1, 2, 3, 4, nil, nil, before, after)
++	got := metrics("treedb", "store_wal", 1, 2, 3, 4, nil, nil, before, after)
+ 	if metric := got["write_bytes"]; metric.Available || !strings.Contains(metric.Reason, "direct-point") {
+ 		t.Fatalf("logical write bytes = %+v", metric)
+ 	}
+@@ -221,7 +221,7 @@
+ }
+ 
+ func TestBadgerTreeDBDiagnosticsAreExplicitlyUnavailable(t *testing.T) {
+-	got := metrics("badger", 1, 2, 3, 4, nil, nil, nil, nil)
++	got := metrics("badger", "", 1, 2, 3, 4, nil, nil, nil, nil)
+ 	for _, diagnostic := range treeDBDiagnostics {
+ 		metric := got[diagnostic.metric]
+ 		if metric.Available || metric.Reason != "TreeDB-only diagnostic" {
+@@ -499,6 +499,48 @@
+ 	}
+ 	t.Cleanup(dg.Close)
+ 	return dg
++}
++
++func TestRecoveryProbeRequiresCommittedWriteAndFreshVerifiedRead(t *testing.T) {
++	for _, outcome := range []string{"ok", "uncommitted", "missing uid", "old read", "wrong value", "write error"} {
++		t.Run(outcome, func(t *testing.T) {
++			calls := 0
++			dg := operationClient(t, func(_ context.Context, req *api.Request) (*api.Response, error) {
++				calls++
++				if len(req.Mutations) != 0 {
++					if !req.CommitNow || len(req.Mutations) != 1 || !strings.Contains(string(req.Mutations[0].SetNquads), "_:recovery") {
++						t.Errorf("probe is not a new CommitNow mutation: %+v", req)
++					}
++					if outcome == "write error" {
++						return nil, status.Error(codes.Unavailable, "not writable")
++					}
++					resp := &api.Response{Txn: &api.TxnContext{StartTs: 11, CommitTs: 12}, Uids: map[string]string{"recovery": "0x42"}}
++					if outcome == "uncommitted" {
++						resp.Txn.CommitTs = 0
++					}
++					if outcome == "missing uid" {
++						resp.Uids = nil
++					}
++					return resp, nil
++				}
++				if calls != 2 || !req.ReadOnly || req.Vars["$id"] != "0x42" {
++					t.Errorf("expected fresh read after committed probe: %+v", req)
++				}
++				resp := &api.Response{Txn: &api.TxnContext{StartTs: 13}, Json: []byte(`{"q":[{"uid":"0x42","bench.value":"recovery-probe-v1"}]}`)}
++				if outcome == "old read" {
++					resp.Txn.StartTs = 11
++				}
++				if outcome == "wrong value" {
++					resp.Json = []byte(`{"q":[{"uid":"0x42","bench.value":"wrong"}]}`)
++				}
++				return resp, nil
++			})
++			err := validateRecoveryWrite(context.Background(), dg)
++			if (err == nil) != (outcome == "ok") {
++				t.Fatalf("outcome=%s err=%v", outcome, err)
++			}
++		})
++	}
+ }
+ 
+ func TestOperationDiagnosticRecordsIdentityPhasesAndFullWall(t *testing.T) {
+@@ -757,7 +799,7 @@
+ 	}
+ 	r := storageTestResult(root)
+ 	r.TimedFinished = d.TimedFinished
+-	r.Metrics = metrics("treedb", 0, 0, logical, allocated, nil, nil, nil, nil)
++	r.Metrics = metrics("treedb", "store_wal", 0, 0, logical, allocated, nil, nil, nil, nil)
+ 	sidecar := filepath.Join(filepath.Dir(filepath.Dir(root)), "storage.json")
+ 	if err := writeStorageDiagnostic(sidecar, d, r); err != nil {
+ 		t.Fatal(err)
+@@ -802,7 +844,7 @@
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
+-	r.Metrics = metrics("treedb", 0, 0, l, a, nil, nil, nil, nil)
++	r.Metrics = metrics("treedb", "store_wal", 0, 0, l, a, nil, nil, nil, nil)
+ 	d.WriteStartedAt = time.Now().UTC()
+ 	raw, _ := json.Marshal(d)
+ 	for name, mutate := range map[string]func(*storageDiagnostic){
+@@ -844,7 +886,7 @@
+ 		t.Fatal("acceptance result accepted")
+ 	}
+ 	wrong = r
+-	wrong.Metrics = metrics("treedb", 0, 0, l+1, a, nil, nil, nil, nil)
++	wrong.Metrics = metrics("treedb", "store_wal", 0, 0, l+1, a, nil, nil, nil, nil)
+ 	if err := validateStorageDiagnostic(d, wrong); err == nil {
+ 		t.Fatal("native total mismatch accepted")
+ 	}
+@@ -1083,7 +1125,7 @@
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
+-	r.Metrics = metrics("treedb", 0, 0, logical, allocated, nil, nil, nil, nil)
++	r.Metrics = metrics("treedb", "store_wal", 0, 0, logical, allocated, nil, nil, nil, nil)
+ 	path := filepath.Join(alias, "storage.json")
+ 	if err := writeStorageDiagnostic(path, d, r); err != nil {
+ 		t.Fatal(err)
+@@ -1261,3 +1303,24 @@
+ 		t.Fatalf("lost existing contamination: %+v", r.Context)
+ 	}
+ }
++
++func TestTreeDBMissingLogicalCounterHasUnavailableReason(t *testing.T) {
++	stats := map[string]float64{"treedb.command_wal.append.point.count_total": 0}
++	m := metrics("treedb", "store_wal", 1, 2, 3, 4, nil, nil, stats, stats)["write_bytes"]
++	if m.Available || m.Reason == "" {
++		t.Fatalf("absent logical byte counter must remain explicitly unavailable: %+v", m)
++	}
++}
++
++func TestRaftCheckpointReportsAbsentPostingWALGroups(t *testing.T) {
++	got := metrics("treedb", "raft_checkpoint", 1, 2, 3, 4, nil, nil, nil, nil)
++	for _, name := range []string{"treedb_group_commit_groups", "treedb_group_commit_commits", "treedb_group_commit_participants", "treedb_group_commit_syncs", "treedb_group_commit_group_size_max"} {
++		m := got[name]
++		if m.Available || m.Reason != livebench.RaftCheckpointNoCommandWAL || m.Source == "" || m.Unit != "count" {
++			t.Fatalf("%s must be explicitly absent for posting-WAL-disabled policy: %+v", name, m)
++		}
++	}
++	if got["treedb_value_log_file_syncs"].Reason == livebench.RaftCheckpointNoCommandWAL {
++		t.Fatal("persistent value-log syncs were incorrectly classified as posting WAL")
++	}
++}
+diff --git a/worker/treedb/livebench/cmd/memory_diagnostic.go b/worker/treedb/livebench/cmd/memory_diagnostic.go
+new file mode 100644
+--- /dev/null
++++ b/worker/treedb/livebench/cmd/memory_diagnostic.go
+@@ -0,0 +1,155 @@
++// SPDX-FileCopyrightText: © 2026 Istari Digital, Inc.
++// SPDX-License-Identifier: Apache-2.0
++
++package main
++
++import (
++	"crypto/sha256"
++	"encoding/hex"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"os"
++	"path/filepath"
++	"strings"
++	"time"
++
++	"github.com/dgraph-io/dgraph/v25/worker/treedb/livebench"
++)
++
++const memoryDiagnosticReason = "paired memory observations and forced GC; excluded from performance acceptance"
++
++var memoryDiagnosticBoundaries = []string{"after_warmup_before_counters", "after_native_metrics_before_validation"}
++var memoryDiagnosticNames = []string{
++	"pre_gc.status.txt", "pre_gc.smaps_rollup.txt", "pre_gc.vars.json", "heap.gc1.pprof",
++	"post_gc.status.txt", "post_gc.smaps_rollup.txt", "post_gc.vars.json", "manifest.json",
++}
++
++type memoryArtifact struct {
++	Name       string    `json:"name"`
++	Source     string    `json:"source"`
++	Path       string    `json:"path"`
++	SHA256     string    `json:"sha256"`
++	Bytes      int       `json:"bytes"`
++	StartedAt  time.Time `json:"started_at"`
++	FinishedAt time.Time `json:"finished_at"`
++}
++
++type memoryObservation struct {
++	Version           int              `json:"version"`
++	DiagnosticOnly    bool             `json:"diagnostic_only"`
++	RunID             string           `json:"run_id"`
++	Backend           string           `json:"backend"`
++	Durability        string           `json:"durability_class"`
++	BinarySHA256      string           `json:"server_binary_sha256"`
++	PID               int              `json:"alpha_pid"`
++	Boundary          string           `json:"boundary"`
++	ForcedGCRequested bool             `json:"forced_gc_request_attempted"`
++	StartedAt         time.Time        `json:"started_at"`
++	FinishedAt        time.Time        `json:"finished_at"`
++	TimedFinished     time.Time        `json:"timed_finished"`
++	Complete          bool             `json:"complete"`
++	Error             string           `json:"error,omitempty"`
++	Artifacts         []memoryArtifact `json:"artifacts"`
++}
++
++func memoryDiagnosticPath(prefix, boundary, name string) string {
++	return prefix + "." + boundary + "." + name
++}
++
++func validateMemoryDiagnosticOption(o options) error {
++	if o.memoryDiagnostic == "" {
++		return nil
++	}
++	if o.cpuProfile != "" || o.endpointDiagnostic != "" || o.operationDiagnostic != "" || o.storageDiagnostic != "" {
++		return errors.New("--memory-diagnostic requires a separate run without CPU/endpoint/operation/storage diagnostics")
++	}
++	for _, boundary := range memoryDiagnosticBoundaries {
++		for _, name := range memoryDiagnosticNames {
++			if _, err := diagnosticOutputPath(memoryDiagnosticPath(o.memoryDiagnostic, boundary, name),
++				filepath.Join(o.artifactDir, "cluster", "p"), nil); err != nil {
++				return err
++			}
++		}
++	}
++	return nil
++}
++
++// The two raw-state envelopes bracket a GC-assisted heap sample, not an atomic
++// process snapshot. Pre-GC state is captured before requesting GC; post-GC state
++// also includes the cost of serving/serializing the heap profile. No forced-GC
++// measurement is used as an unperturbed RSS or workload acceptance result.
++func captureMemoryDiagnostic(prefix, boundary, postings, base string, pid int, r livebench.Result) (profiles []string, err error) {
++	d := memoryObservation{Version: 1, DiagnosticOnly: true, RunID: r.RunID,
++		Backend: r.Config.Backend, Durability: r.Config.DurabilityClass, BinarySHA256: r.Context.BinarySHA256,
++		PID: pid, Boundary: boundary, StartedAt: time.Now().UTC(), TimedFinished: r.TimedFinished}
++	if pid <= 0 || r.RunID == "" || r.Context.BinarySHA256 == "" || !r.Context.Excluded ||
++		!strings.Contains(r.Context.ExclusionReason, memoryDiagnosticReason) ||
++		(boundary != memoryDiagnosticBoundaries[0] && boundary != memoryDiagnosticBoundaries[1]) {
++		return nil, errors.New("invalid memory diagnostic process/boundary")
++	}
++	defer func() {
++		d.FinishedAt = time.Now().UTC()
++		d.Complete = err == nil
++		if err != nil {
++			d.Error = err.Error()
++		}
++		output, pathErr := diagnosticOutputPath(memoryDiagnosticPath(prefix, boundary, "manifest.json"), postings, nil)
++		if pathErr != nil {
++			err = errors.Join(err, pathErr)
++			return
++		}
++		err = errors.Join(err, livebench.WriteImmutable(output, d))
++	}()
++	read := func(name, source string, get func() ([]byte, error)) error {
++		output, err := diagnosticOutputPath(memoryDiagnosticPath(prefix, boundary, name), postings, nil)
++		if err != nil {
++			return err
++		}
++		a := memoryArtifact{Name: name, Source: source, Path: output, StartedAt: time.Now().UTC()}
++		raw, err := get()
++		a.FinishedAt = time.Now().UTC()
++		if err != nil {
++			return fmt.Errorf("memory observation %s: %w", name, err)
++		}
++		if len(raw) == 0 {
++			return fmt.Errorf("empty memory observation %s", name)
++		}
++		if err := livebench.WriteImmutableBytes(output, raw); err != nil {
++			return err
++		}
++		h := sha256.Sum256(raw)
++		a.SHA256, a.Bytes = hex.EncodeToString(h[:]), len(raw)
++		d.Artifacts = append(d.Artifacts, a)
++		if name == "heap.gc1.pprof" {
++			profiles = append(profiles, output)
++		}
++		if strings.HasSuffix(name, ".vars.json") && !json.Valid(raw) {
++			return errors.New("retained /debug/vars response is not valid JSON")
++		}
++		return nil
++	}
++	state := func(phase string) error {
++		for _, name := range []string{"status", "smaps_rollup"} {
++			path := fmt.Sprintf("/proc/%d/%s", pid, name)
++			if err := read(phase+"."+name+".txt", path, func() ([]byte, error) { return os.ReadFile(path) }); err != nil {
++				return err
++			}
++		}
++		return read(phase+".vars.json", base+"/debug/vars", func() ([]byte, error) {
++			return fetch(base+"/debug/vars", 30*time.Second)
++		})
++	}
++	if err = state("pre_gc"); err != nil {
++		return profiles, err
++	}
++	url := base + "/debug/pprof/heap?gc=1"
++	if err = read("heap.gc1.pprof", url, func() ([]byte, error) {
++		d.ForcedGCRequested = true
++		return fetch(url, 30*time.Second)
++	}); err != nil {
++		return profiles, err
++	}
++	err = state("post_gc")
++	return profiles, err
++}
+diff --git a/worker/treedb/livebench/cmd/memory_diagnostic_test.go b/worker/treedb/livebench/cmd/memory_diagnostic_test.go
+new file mode 100644
+--- /dev/null
++++ b/worker/treedb/livebench/cmd/memory_diagnostic_test.go
+@@ -0,0 +1,201 @@
++// SPDX-FileCopyrightText: © 2026 Istari Digital, Inc.
++// SPDX-License-Identifier: Apache-2.0
++
++package main
++
++import (
++	"crypto/sha256"
++	"encoding/hex"
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"reflect"
++	"runtime"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/dgraph-io/dgraph/v25/worker/treedb/livebench"
++)
++
++func memoryTestResult() livebench.Result {
++	r := livebench.Result{RunID: "treedb-durable-r1", Config: livebench.Config{Backend: "treedb", DurabilityClass: "durable"},
++		Context: livebench.Context{BinarySHA256: strings.Repeat("a", 64)}, TimedFinished: time.Now().UTC()}
++	markDiagnostics(&r, options{memoryDiagnostic: "memory"})
++	return r
++}
++
++func TestMemoryDiagnosticPairsRawStateWithGCHeapAndRetainsHashes(t *testing.T) {
++	if runtime.GOOS != "linux" {
++		t.Skip("Linux /proc observer")
++	}
++	requests := make(chan string, 16)
++	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		requests <- r.URL.RequestURI()
++		if r.URL.Path == "/debug/vars" {
++			_, _ = w.Write([]byte(`{"memstats":{"HeapAlloc":42}}`))
++		} else {
++			_, _ = w.Write([]byte("retained heap profile bytes"))
++		}
++	}))
++	defer server.Close()
++	dir := t.TempDir()
++	prefix, postings := filepath.Join(dir, "memory"), filepath.Join(dir, "run", "cluster", "p")
++	for _, backend := range []string{"treedb", "badger"} {
++		r := memoryTestResult()
++		r.Config.Backend = backend
++		boundary := memoryDiagnosticBoundaries[1]
++		prefix := prefix + backend
++		profiles, err := captureMemoryDiagnostic(prefix, boundary, postings, server.URL, os.Getpid(), r)
++		if err != nil {
++			t.Fatal(err)
++		}
++		var observed []string
++		for len(requests) != 0 {
++			observed = append(observed, <-requests)
++		}
++		if !reflect.DeepEqual(observed, []string{"/debug/vars", "/debug/pprof/heap?gc=1", "/debug/vars"}) {
++			t.Fatalf("unexpected observation/GC order: %v", observed)
++		}
++		if len(profiles) != 1 || profiles[0] != memoryDiagnosticPath(prefix, boundary, "heap.gc1.pprof") {
++			t.Fatalf("heap profile not forwarded: %v", profiles)
++		}
++		raw, err := os.ReadFile(memoryDiagnosticPath(prefix, boundary, "manifest.json"))
++		if err != nil {
++			t.Fatal(err)
++		}
++		var manifest memoryObservation
++		if err := json.Unmarshal(raw, &manifest); err != nil {
++			t.Fatal(err)
++		}
++		if !manifest.Complete || !manifest.DiagnosticOnly || !manifest.ForcedGCRequested || manifest.PID != os.Getpid() ||
++			manifest.Backend != backend || manifest.BinarySHA256 != r.Context.BinarySHA256 || len(manifest.Artifacts) != 7 ||
++			manifest.StartedAt.Before(r.TimedFinished) || manifest.FinishedAt.Before(manifest.StartedAt) {
++			t.Fatalf("incomplete memory manifest: %+v", manifest)
++		}
++		previous := manifest.StartedAt
++		for _, a := range manifest.Artifacts {
++			bytes, err := os.ReadFile(a.Path)
++			if err != nil {
++				t.Fatal(err)
++			}
++			hash := sha256.Sum256(bytes)
++			if len(bytes) != a.Bytes || hex.EncodeToString(hash[:]) != a.SHA256 || a.Source == "" ||
++				a.StartedAt.Before(previous) || a.FinishedAt.Before(a.StartedAt) || a.FinishedAt.After(manifest.FinishedAt) {
++				t.Fatalf("invalid retained observation: %+v", a)
++			}
++			previous = a.FinishedAt
++		}
++		if _, err := captureMemoryDiagnostic(prefix, boundary, postings, server.URL, os.Getpid(), r); err == nil {
++			t.Fatal("existing observations overwritten")
++		}
++	}
++}
++
++func TestMemoryDiagnosticFailureRetainsPartialEnvelopeWithoutGCClaim(t *testing.T) {
++	if runtime.GOOS != "linux" {
++		t.Skip("Linux /proc observer")
++	}
++	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		http.Error(w, "unavailable", http.StatusServiceUnavailable)
++	}))
++	defer server.Close()
++	dir := t.TempDir()
++	prefix, boundary := filepath.Join(dir, "memory"), memoryDiagnosticBoundaries[0]
++	profiles, err := captureMemoryDiagnostic(prefix, boundary, filepath.Join(dir, "run", "cluster", "p"), server.URL, os.Getpid(), memoryTestResult())
++	if err == nil || len(profiles) != 0 {
++		t.Fatal("failed raw state was accepted")
++	}
++	raw, err := os.ReadFile(memoryDiagnosticPath(prefix, boundary, "manifest.json"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	var manifest memoryObservation
++	if err := json.Unmarshal(raw, &manifest); err != nil {
++		t.Fatal(err)
++	}
++	if manifest.Complete || manifest.ForcedGCRequested || manifest.Error == "" || len(manifest.Artifacts) != 2 {
++		t.Fatalf("failure envelope lost: %+v", manifest)
++	}
++}
++
++func TestMemoryDiagnosticPostGCFailureKeepsHeapForInspection(t *testing.T) {
++	if runtime.GOOS != "linux" {
++		t.Skip("Linux /proc observer")
++	}
++	vars := 0
++	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		if r.URL.Path == "/debug/vars" {
++			vars++
++			if vars == 2 {
++				_, _ = w.Write([]byte("malformed post-GC runtime state"))
++				return
++			}
++			_, _ = w.Write([]byte(`{"memstats":{}}`))
++			return
++		}
++		_, _ = w.Write([]byte("heap bytes retained before later failure"))
++	}))
++	defer server.Close()
++	dir := t.TempDir()
++	prefix, boundary := filepath.Join(dir, "memory"), memoryDiagnosticBoundaries[1]
++	profiles, err := captureMemoryDiagnostic(prefix, boundary, filepath.Join(dir, "run", "cluster", "p"), server.URL, os.Getpid(), memoryTestResult())
++	if err == nil || len(profiles) != 1 {
++		t.Fatalf("later failure lost completed heap: profiles=%v err=%v", profiles, err)
++	}
++	raw, err := os.ReadFile(memoryDiagnosticPath(prefix, boundary, "manifest.json"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	var manifest memoryObservation
++	if err := json.Unmarshal(raw, &manifest); err != nil {
++		t.Fatal(err)
++	}
++	if manifest.Complete || !manifest.ForcedGCRequested || manifest.Error == "" || len(manifest.Artifacts) != 7 {
++		t.Fatalf("later failure envelope lost: %+v", manifest)
++	}
++}
++
++func TestMemoryDiagnosticPreflightAndNativeBoundaryPlacement(t *testing.T) {
++	dir := t.TempDir()
++	o := options{artifactDir: filepath.Join(dir, "run"), memoryDiagnostic: filepath.Join(dir, "memory")}
++	if err := validateMemoryDiagnosticOption(o); err != nil {
++		t.Fatal(err)
++	}
++	for _, mutate := range []func(*options){
++		func(o *options) { o.cpuProfile = "profile" }, func(o *options) { o.operationDiagnostic = "operations" },
++		func(o *options) { o.endpointDiagnostic = "endpoints" }, func(o *options) { o.storageDiagnostic = "storage" },
++		func(o *options) { o.memoryDiagnostic = filepath.Join(o.artifactDir, "cluster", "w", "memory") },
++	} {
++		bad := o
++		mutate(&bad)
++		if err := validateMemoryDiagnosticOption(bad); err == nil {
++			t.Fatalf("unsafe/confounded memory observation accepted: %+v", bad)
++		}
++	}
++	if err := os.WriteFile(memoryDiagnosticPath(o.memoryDiagnostic, memoryDiagnosticBoundaries[1], "manifest.json"), []byte("preserve"), 0o600); err != nil {
++		t.Fatal(err)
++	}
++	if err := validateMemoryDiagnosticOption(o); err == nil {
++		t.Fatal("existing second boundary artifact accepted before process launch")
++	}
++	raw, err := os.ReadFile("main.go")
++	if err != nil {
++		t.Fatal(err)
++	}
++	s := string(raw)
++	ordered := []string{"r.SetupFinished =", "captureMemoryDiagnostic(o.memoryDiagnostic, memoryDiagnosticBoundaries[0]", "cpuBefore, err := procCPU(",
++		"r.TimedStarted =", "r.TimedFinished =", "cpuAfter, err := procCPU(", "hwm, err := procHWM(",
++		"diskUsageObserved(filepath.Join(runDir, \"p\"), storage)", "r.Metrics = metrics(",
++		"captureMemoryDiagnostic(o.memoryDiagnostic, memoryDiagnosticBoundaries[1]", "validateSchema(ctx, dg)"}
++	previous := -1
++	for _, needle := range ordered {
++		index := strings.Index(s, needle)
++		if index <= previous {
++			t.Fatalf("memory hook/native counter order violated at %q", needle)
++		}
++		previous = index
++	}
++}
+diff --git a/worker/treedb/livebench/cmd/runtime.go b/worker/treedb/livebench/cmd/runtime.go
+new file mode 100644
+--- /dev/null
++++ b/worker/treedb/livebench/cmd/runtime.go
+@@ -0,0 +1,174 @@
++// SPDX-License-Identifier: Apache-2.0
++package main
++
++import (
++	"crypto/sha256"
++	"debug/buildinfo"
++	"encoding/hex"
++	"errors"
++	"fmt"
++	"io"
++	"os"
++	"path/filepath"
++	"time"
++
++	"github.com/dgraph-io/dgraph/v25/worker/treedb/livebench"
++)
++
++func normalizeRuntimeOptions(o *options) error {
++	if o.survival == "" {
++		o.survival = "process"
++	}
++	if o.treeDBPolicy == "" {
++		o.treeDBPolicy = "store_wal"
++	}
++	if o.survival != "process" && o.survival != "filesystem" {
++		return errors.New("--survive must be process or filesystem")
++	}
++	if o.treeDBPolicy != "store_wal" && o.treeDBPolicy != "raft_checkpoint" {
++		return errors.New("invalid --treedb-durable-policy")
++	}
++	if o.treeDBPolicy == "raft_checkpoint" && (o.survival != "filesystem" || o.treeDBMemtable != "cow_ordered") {
++		return errors.New("raft_checkpoint requires explicit filesystem survival and cow_ordered verification")
++	}
++	return nil
++}
++
++func runtimeSelectors(o options) (string, string) {
++	if o.backend == "treedb" && o.class == "durable" && o.treeDBPolicy == "raft_checkpoint" {
++		return "backend=treedb; tier=benchmark_minimal; durability=raft_checkpoint; events=true", "syncwrites=false"
++	}
++	return selectors(o.backend, o.class)
++}
++
++func runtimeConfig(o options) livebench.Config {
++	posting, badger := runtimeSelectors(o)
++	c := livebench.Config{SurvivalMode: o.survival, Backend: o.backend, DurabilityClass: o.class,
++		PostingStore: posting, Badger: badger, DatasetNodes: o.dataset, Concurrency: o.concurrency,
++		WarmupOps: o.warmup, TimedOps: o.timed, QueryMix: map[string]int{"point_read": 60, "one_hop_read": 20, "write": 20},
++		Topology: "single-zero-single-alpha", Seed: o.seed}
++	if o.backend == "treedb" {
++		c.TreeDBPolicy, c.TreeDBMemtable = "store_wal", o.treeDBMemtable
++		if o.class == "durable" {
++			c.TreeDBPolicy = o.treeDBPolicy
++		}
++	}
++	return c
++}
++
++func measuredBinary(path string) (string, string, error) {
++	f, err := os.Open(path)
++	if err != nil {
++		return "", "", err
++	}
++	h := sha256.New()
++	_, copyErr := io.Copy(h, f)
++	if err := errors.Join(copyErr, f.Close()); err != nil {
++		return "", "", err
++	}
++	info, err := buildinfo.ReadFile(path)
++	if err != nil {
++		return "", "", fmt.Errorf("read measured Go binary identity: %w", err)
++	}
++	return hex.EncodeToString(h.Sum(nil)), info.String(), nil
++}
++
++// Source identity comes from the executed binary, not go list in an unrelated
++// checkout. A local replacement remains explicit in this record and build info;
++// final qualification additionally pins that replacement's exact source tree.
++func measuredSources(path string) (revision, gomap, goVersion string, dirty bool, err error) {
++	info, err := buildinfo.ReadFile(path)
++	if err != nil {
++		return "", "", "", false, err
++	}
++	if info.Path != "github.com/dgraph-io/dgraph/v25/dgraph" {
++		return "", "", "", false, fmt.Errorf("unexpected measured main package %q", info.Path)
++	}
++	for _, setting := range info.Settings {
++		switch setting.Key {
++		case "vcs.revision":
++			revision = setting.Value
++		case "vcs.modified":
++			dirty = setting.Value == "true"
++		}
++	}
++	for _, dependency := range info.Deps {
++		if dependency.Path == "github.com/snissn/gomap" {
++			gomap = dependency.Version
++			if dependency.Replace != nil {
++				gomap += " => " + dependency.Replace.Path + "@" + dependency.Replace.Version
++			}
++		}
++	}
++	if len(revision) != 40 || gomap == "" {
++		return "", "", "", false, errors.New("measured binary lacks VCS revision or Gomap module identity; build with VCS metadata")
++	}
++	return revision, gomap, info.GoVersion, dirty, nil
++}
++
++func verifyMeasuredBinary(path, expected string) error {
++	actual, _, err := measuredBinary(path)
++	if err != nil {
++		return err
++	}
++	if actual != expected {
++		return errors.New("measured binary changed during run")
++	}
++	return nil
++}
++
++func captureRuntime(o options, phase string, zero, alpha *process, base string) ([]livebench.RuntimeIdentity, error) {
++	var result []livebench.RuntimeIdentity
++	for _, entry := range []struct {
++		role    string
++		process *process
++	}{{"zero", zero}, {"alpha", alpha}} {
++		p := entry.process
++		if p == nil || p.cmd == nil || p.cmd.Process == nil {
++			return nil, errors.New("runtime process missing")
++		}
++		raw, err := os.ReadFile(p.log.Name())
++		if err != nil {
++			return nil, err
++		}
++		witness, hardSync, err := livebench.ResolvedConfig(raw)
++		if err != nil {
++			return nil, fmt.Errorf("%s resolved configuration: %w", entry.role, err)
++		}
++		if hardSync != (o.survival == "filesystem") {
++			return nil, fmt.Errorf("%s resolved survival mismatch", entry.role)
++		}
++		prefix := filepath.Join(o.artifactDir, "runtime-"+phase+"-"+entry.role)
++		if err := livebench.WriteImmutableBytes(prefix+".config.log", raw); err != nil {
++			return nil, err
++		}
++		sum := sha256.Sum256(raw)
++		identity := livebench.RuntimeIdentity{Process: entry.role, Phase: phase, PID: p.cmd.Process.Pid,
++			Command: append([]string(nil), p.cmd.Args...), SurvivalMode: o.survival, HardSync: hardSync,
++			ConfigWitness: witness, ConfigLogSHA256: hex.EncodeToString(sum[:])}
++		if entry.role == "alpha" {
++			store, err := fetch(base+"/debug/store", 30*time.Second)
++			if err != nil {
++				return nil, err
++			}
++			if err := livebench.WriteImmutableBytes(prefix+".store.txt", store); err != nil {
++				return nil, err
++			}
++			identity.Backend, identity.Durability, identity.Memtable, err = livebench.ResolvedStore(store)
++			if err != nil {
++				return nil, err
++			}
++			sum := sha256.Sum256(store)
++			identity.StoreWitnessSHA256 = hex.EncodeToString(sum[:])
++			backend, profile, err := livebench.ExpectedObserved(runtimeConfig(o))
++			if err != nil {
++				return nil, err
++			}
++			if identity.Backend != backend || identity.Durability != profile || (o.backend == "treedb" && (identity.Memtable == "" || (o.treeDBMemtable != "" && identity.Memtable != o.treeDBMemtable))) {
++				return nil, errors.New("observed posting backend/profile/memtable mismatch")
++			}
++		}
++		result = append(result, identity)
++	}
++	return result, nil
++}
+diff --git a/worker/treedb/livebench/cmd/runtime_test.go b/worker/treedb/livebench/cmd/runtime_test.go
+new file mode 100644
+--- /dev/null
++++ b/worker/treedb/livebench/cmd/runtime_test.go
+@@ -0,0 +1,89 @@
++// SPDX-License-Identifier: Apache-2.0
++package main
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"strings"
++	"testing"
++)
++
++func TestRuntimeCaptureRefusesWrongResolvedConfigurationAndRoute(t *testing.T) {
++	for _, tc := range []struct {
++		name, config, profile, memtable string
++		fail                            bool
++	}{
++		{"valid", "x.WorkerConfig: {HardSync:true}", "raft_checkpoint", "cow_ordered", false},
++		{"wrong sync", "x.WorkerConfig: {HardSync:false}", "raft_checkpoint", "cow_ordered", true},
++		{"missing config", "flags survive=filesystem", "raft_checkpoint", "cow_ordered", true},
++		{"wrong profile", "x.WorkerConfig: {HardSync:true}", "wal_on_sync", "cow_ordered", true},
++		{"wrong memtable", "x.WorkerConfig: {HardSync:true}", "raft_checkpoint", "btree", true},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			dir := t.TempDir()
++			process := func(role string) *process {
++				f, err := os.Create(filepath.Join(dir, role+".log"))
++				if err != nil {
++					t.Fatal(err)
++				}
++				t.Cleanup(func() { _ = f.Close() })
++				if _, err := f.WriteString(tc.config + "\n"); err != nil {
++					t.Fatal(err)
++				}
++				return &process{cmd: &exec.Cmd{Args: []string{"dgraph", role, "--survive=filesystem"}, Process: &os.Process{Pid: os.Getpid()}}, log: f}
++			}
++			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++				_, _ = w.Write([]byte("status=map[backend:treedb profile:" + tc.profile + "] stats=map[treedb.cache.memtable_mode:" + tc.memtable + "]"))
++			}))
++			defer server.Close()
++			o := options{artifactDir: dir, backend: "treedb", class: "durable", survival: "filesystem", treeDBPolicy: "raft_checkpoint", treeDBMemtable: "cow_ordered"}
++			identities, err := captureRuntime(o, "startup", process("zero"), process("alpha"), server.URL)
++			if (err != nil) != tc.fail {
++				t.Fatalf("identities=%v err=%v", identities, err)
++			}
++			if !tc.fail {
++				if len(identities) != 2 || !identities[0].HardSync {
++					t.Fatal(identities)
++				}
++				if _, err := os.Stat(filepath.Join(dir, "runtime-startup-alpha.store.txt")); err != nil {
++					t.Fatal(err)
++				}
++			}
++		})
++	}
++}
++
++func TestRuntimeOptionsRejectWeakCheckpointBeforeCreatingArtifacts(t *testing.T) {
++	dir := filepath.Join(t.TempDir(), "must-not-exist")
++	err := run(options{artifactDir: dir, survival: "process", treeDBPolicy: "raft_checkpoint", treeDBMemtable: "cow_ordered"})
++	if err == nil || !strings.Contains(err.Error(), "filesystem") {
++		t.Fatal(err)
++	}
++	if _, err := os.Stat(dir); !os.IsNotExist(err) {
++		t.Fatalf("artifacts created: %v", err)
++	}
++}
++
++func TestBinaryBindingRefusesChangedOrNonGoBinary(t *testing.T) {
++	executable, err := os.Executable()
++	if err != nil {
++		t.Fatal(err)
++	}
++	hash, info, err := measuredBinary(executable)
++	if err != nil || len(hash) != 64 || info == "" {
++		t.Fatalf("%q %q %v", hash, info, err)
++	}
++	if err := verifyMeasuredBinary(executable, strings.Repeat("0", 64)); err == nil {
++		t.Fatal("binary drift accepted")
++	}
++	path := filepath.Join(t.TempDir(), "fake")
++	if err := os.WriteFile(path, []byte("not a Go binary"), 0600); err != nil {
++		t.Fatal(err)
++	}
++	if _, _, err := measuredBinary(path); err == nil {
++		t.Fatal("unbound executable accepted")
++	}
++}
+diff --git a/worker/treedb/livebench/report.go b/worker/treedb/livebench/report.go
+--- a/worker/treedb/livebench/report.go
++++ b/worker/treedb/livebench/report.go
+@@ -13,6 +13,8 @@
+ 	"strings"
+ )
+ 
++const legacySurvivalErratum = "Legacy schema-v3/v4 durability labels describe posting-store synchronization. The harness omitted --survive and used the process-survival default; these rows do not prove filesystem or full RPC power-loss durability. Original measurements remain unchanged.\n\n"
++
+ func LoadResults(paths []string) ([]Result, error) {
+ 	results := make([]Result, 0, len(paths))
+ 	for _, path := range paths {
+@@ -22,6 +24,9 @@
+ 		}
+ 		var r Result
+ 		if err := json.Unmarshal(b, &r); err != nil {
++			return nil, fmt.Errorf("%s: %w", path, err)
++		}
++		if err := r.VerifyRuntimeArtifacts(filepath.Dir(path)); err != nil {
+ 			return nil, fmt.Errorf("%s: %w", path, err)
+ 		}
+ 		results = append(results, r)
+@@ -113,6 +118,7 @@
+ 		return "", err
+ 	}
+ 	legacyPointCoverageGap := hasLegacyPointAppendCoverageGap(results)
++	alignedRecovery := results[0].Config.RecoveryProbe == RecoveryReadCommitRead
+ 	results = normalizeLegacyPointAppendCoverage(results)
+ 	sort.SliceStable(results, func(i, j int) bool {
+ 		left, right := results[i], results[j]
+@@ -129,7 +135,15 @@
+ 	}
+ 	var b strings.Builder
+ 	b.WriteString("# Dgraph Badger vs TreeDB live durability A/B\n\n")
++	if results[0].SchemaVersion < 5 {
++		b.WriteString(legacySurvivalErratum)
++	} else {
++		fmt.Fprintf(&b, "Resolved Zero/Alpha survival profile: **%s**. Startup and Alpha-restart configuration and posting-route witnesses are retained with each row. The recovery timer measures a clean Alpha restart while Zero stays running; this is not abrupt-crash or power-loss certification.\n\n", results[0].Config.SurvivalMode)
++	}
+ 	fmt.Fprintf(&b, "- Repeats per cell: %d\n- Workload fingerprint: `%s`\n- Logical parity and restart gate: **PASS**\n- Comparisons never mix durability classes.\n\n", repeats, results[0].Config.Fingerprint())
++	if alignedRecovery {
++		b.WriteString("The restart column retains `recovery_seconds`, the legacy HTTP-health boundary, which is not equivalent across backends. The additive read-ready and read/write-ready columns report `recovery_read_seconds` and `recovery_read_write_seconds`: elapsed time from the same Alpha exec boundary through full posting validation, then a new CommitNow ACK and verified fresh read. These are clean Alpha restart measurements with Zero alive, not abrupt-crash or power-loss certification.\n\n")
++	}
+ 	context := results[0].Context
+ 	fmt.Fprintf(&b, "- Host: `%s`; CPU: `%s`; RAM: `%.1f GiB`\n- Artifact/posting storage: `%s` (`%s`, %.1f GB), `%s` mounted at `%s`\n- Environment: `GOWORK=%s TMPDIR=%s GOMAXPROCS=%s GOFLAGS=%s`\n\n",
+ 		context.Host, context.CPU, float64(context.TotalRAMBytes)/(1024*1024*1024), context.Storage.Source,
+@@ -141,14 +155,26 @@
+ 		title := class[:1]
+ 		title = strings.ToUpper(title) + class[1:]
+ 		fmt.Fprintf(&b, "## %s durability\n\n", title)
+-		b.WriteString("| Backend | Throughput median (ops/s) | min-max | CV | p50 median (ms) | p95 median (ms) | p99 median (ms) | restart median (s) |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
++		b.WriteString("| Backend | Throughput median (ops/s) | min-max | CV | p50 median (ms) | p95 median (ms) | p99 median (ms) | restart median (s) |")
++		if alignedRecovery {
++			b.WriteString(" read-ready median (s) | read/write-ready median (s) |")
++		}
++		b.WriteString("\n| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
++		if alignedRecovery {
++			b.WriteString(" ---: | ---: |")
++		}
++		b.WriteString("\n")
+ 		med := map[string]float64{}
+ 		for _, backend := range []string{"badger", "treedb"} {
+ 			rs := by[backend+"/"+class]
+ 			through, p50, p95, p99, recovery := vectors(rs)
+ 			d := summarize(through)
+ 			med[backend] = d.median
+-			fmt.Fprintf(&b, "| %s | %.2f | %.2f-%.2f | %.2f%% | %.3f | %.3f | %.3f | %.3f |\n", backend, d.median, d.min, d.max, d.cv, summarize(p50).median, summarize(p95).median, summarize(p99).median, summarize(recovery).median)
++			fmt.Fprintf(&b, "| %s | %.2f | %.2f-%.2f | %.2f%% | %.3f | %.3f | %.3f | %.3f |", backend, d.median, d.min, d.max, d.cv, summarize(p50).median, summarize(p95).median, summarize(p99).median, summarize(recovery).median)
++			if alignedRecovery {
++				fmt.Fprintf(&b, " %s | %s |", metricSummary(rs, "recovery_read_seconds", 3), metricSummary(rs, "recovery_read_write_seconds", 3))
++			}
++			b.WriteString("\n")
+ 		}
+ 		b.WriteString("\n| Backend | Alpha CPU median (s) | RSS/HWM median (MiB) | disk logical median (MiB) | disk allocated median (MiB) | logical write median (KiB) | write amp | GC cycles | flushes | checkpoints |\n| --- | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- |\n")
+ 		for _, backend := range []string{"badger", "treedb"} {
+diff --git a/worker/treedb/livebench/report_test.go b/worker/treedb/livebench/report_test.go
+--- a/worker/treedb/livebench/report_test.go
++++ b/worker/treedb/livebench/report_test.go
+@@ -2,12 +2,74 @@
+ package livebench
+ 
+ import (
++	"math"
+ 	"os"
+ 	"path/filepath"
+ 	"strings"
+ 	"testing"
+ )
+ 
++func TestRenderReportAddsAlignedRecoveryWithoutChangingLegacyColumn(t *testing.T) {
++	set := validSet(t, 2)
++	for i := range set {
++		r := &set[i]
++		r.Config.RecoveryProbe = RecoveryReadCommitRead
++		r.Metrics["recovery_read_seconds"] = Metric{Available: true, Value: float64(r.Repeat * 2), Unit: "seconds", Source: "full posting validation"}
++		r.Metrics["recovery_read_write_seconds"] = Metric{Available: true, Value: float64(r.Repeat * 4), Unit: "seconds", Source: "CommitNow ACK then fresh read"}
++	}
++	report, err := RenderReport(set, 2)
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, want := range []string{"restart median (s) | read-ready median (s) | read/write-ready median (s)",
++		"1.000 | 3.000 (2/2) | 6.000 (2/2) |", "legacy HTTP-health boundary", "not equivalent across backends",
++		"`recovery_read_seconds`", "`recovery_read_write_seconds`", "not abrupt-crash or power-loss certification"} {
++		if !strings.Contains(report, want) {
++			t.Fatalf("aligned recovery report missing %q:\n%s", want, report)
++		}
++	}
++	legacy, err := RenderReport(validSet(t, 1), 1)
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, absent := range []string{"read-ready median", "read/write-ready median", "0.000 (0/1)"} {
++		if strings.Contains(legacy, absent) {
++			t.Fatalf("health-only results manufactured aligned readiness: %q", absent)
++		}
++	}
++}
++
++func TestRenderReportRejectsMixedOrInvalidAlignedRecovery(t *testing.T) {
++	for _, bad := range []string{"mixed probe", "missing read", "missing write", "nonfinite", "excluded"} {
++		t.Run(bad, func(t *testing.T) {
++			set := validSet(t, 1)
++			for i := range set {
++				set[i].Config.RecoveryProbe = RecoveryReadCommitRead
++				set[i].Metrics["recovery_read_seconds"] = Metric{Available: true, Value: 2, Unit: "seconds", Source: "validated read"}
++				set[i].Metrics["recovery_read_write_seconds"] = Metric{Available: true, Value: 3, Unit: "seconds", Source: "committed write then read"}
++			}
++			switch bad {
++			case "mixed probe":
++				set[0].Config.RecoveryProbe = ""
++			case "missing read":
++				delete(set[0].Metrics, "recovery_read_seconds")
++			case "missing write":
++				delete(set[0].Metrics, "recovery_read_write_seconds")
++			case "nonfinite":
++				m := set[0].Metrics["recovery_read_seconds"]
++				m.Value = math.NaN()
++				set[0].Metrics["recovery_read_seconds"] = m
++			case "excluded":
++				set[0].Context.Excluded = true
++				set[0].Context.ExclusionReason = "diagnostic only"
++			}
++			if _, err := RenderReport(set, 1); err == nil {
++				t.Fatalf("invalid recovery matrix %q rendered", bad)
++			}
++		})
++	}
++}
++
+ func TestDiscoverProfileArtifactsRequiresCompleteNonEmptyFiles(t *testing.T) {
+ 	dir := t.TempDir()
+ 	if _, err := DiscoverProfileArtifacts(dir); err == nil {
+@@ -34,7 +96,7 @@
+ }
+ 
+ func TestRenderReportSeparatesDurabilityClassesAndMakesDecision(t *testing.T) {
+-	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
++	set := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
+ 	for i := range set {
+ 		set[i].Context.RawPath = "/raw/" + set[i].RunID
+ 		set[i].Throughput = 100
+@@ -57,7 +119,7 @@
+ }
+ 
+ func TestRenderReportIncludesTreeDBDurabilityAndPointSourceDiagnostics(t *testing.T) {
+-	set := validSet(1)
++	set := validSet(t, 1)
+ 	for i := range set {
+ 		if set[i].Config.Backend != "treedb" {
+ 			continue
+@@ -79,7 +141,7 @@
+ }
+ 
+ func TestRenderReportIncludesOnlySuppliedProfileArtifactsWithoutFindings(t *testing.T) {
+-	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
++	set := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
+ 	dir := t.TempDir()
+ 	for _, name := range []string{"treedb-relaxed.pprof", "treedb-relaxed-top.txt", "treedb-durable.pprof", "treedb-durable-top.txt"} {
+ 		if err := os.WriteFile(filepath.Join(dir, name), []byte("evidence"), 0o644); err != nil {
+@@ -107,7 +169,7 @@
+ }
+ 
+ func TestRenderReportUsesExplicitStopOutcome(t *testing.T) {
+-	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
++	set := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
+ 	for i := range set {
+ 		set[i].Throughput = 100
+ 	}
+@@ -145,7 +207,12 @@
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
+-	if report != string(want) {
+-		t.Fatal("schema-v3 JSON and retained profiles did not reproduce the committed report byte for byte")
+-	}
+-}
++	if strings.Count(report, legacySurvivalErratum) != 1 {
++		t.Fatal("legacy survival erratum must appear exactly once")
++	}
++	// Preserve every original measured value, gate and counter-coverage note.
++	// Only the explicit later survival clarification is added by the new reader.
++	if strings.Replace(report, legacySurvivalErratum, "", 1) != string(want) {
++		t.Fatal("schema-v3 report changed beyond the explicit survival erratum")
++	}
++}
+diff --git a/worker/treedb/livebench/result.go b/worker/treedb/livebench/result.go
+--- a/worker/treedb/livebench/result.go
++++ b/worker/treedb/livebench/result.go
+@@ -20,12 +20,21 @@
+ 
+ const (
+ 	legacySchemaVersion = 3
+-	SchemaVersion       = 4
++	SchemaVersion       = 5
+ 
+ 	pointAppendCoverageMetric = "treedb_command_wal_append_point_calls"
++
++	// RaftCheckpointNoCommandWAL explains absent posting-WAL grouping metrics.
++	// Raft durability is measured separately; unavailable does not mean zero syncs.
++	RaftCheckpointNoCommandWAL = "raft_checkpoint disables the posting-store command WAL; durability authority is Raft"
++	RecoveryReadCommitRead     = "read-commit-read-v1"
+ )
+ 
+ type Config struct {
++	RecoveryProbe   string         `json:"recovery_probe,omitempty"`
++	SurvivalMode    string         `json:"survival_mode,omitempty"`
++	TreeDBPolicy    string         `json:"treedb_durable_policy,omitempty"`
++	TreeDBMemtable  string         `json:"required_treedb_memtable,omitempty"`
+ 	Backend         string         `json:"backend"`
+ 	DurabilityClass string         `json:"durability_class"`
+ 	PostingStore    string         `json:"posting_store"`
+@@ -57,6 +66,8 @@
+ }
+ 
+ type Context struct {
++	BinarySHA256    string            `json:"binary_sha256,omitempty"`
++	BinaryBuildInfo string            `json:"binary_build_info,omitempty"`
+ 	DgraphSHA       string            `json:"dgraph_sha"`
+ 	GomapVersion    string            `json:"gomap_version"`
+ 	Dirty           bool              `json:"dirty"`
+@@ -76,13 +87,14 @@
+ }
+ 
+ type Validation struct {
+-	BackendObserved    string `json:"backend_observed"`
+-	DurabilityObserved string `json:"durability_observed"`
+-	SchemaOK           bool   `json:"schema_ok"`
+-	PostingChecksum    string `json:"posting_checksum"`
+-	NodeCount          int    `json:"node_count"`
+-	RestartOK          bool   `json:"restart_ok"`
+-	UnsupportedOK      bool   `json:"unsupported_ok"`
++	Runtime            []RuntimeIdentity `json:"runtime,omitempty"`
++	BackendObserved    string            `json:"backend_observed"`
++	DurabilityObserved string            `json:"durability_observed"`
++	SchemaOK           bool              `json:"schema_ok"`
++	PostingChecksum    string            `json:"posting_checksum"`
++	NodeCount          int               `json:"node_count"`
++	RestartOK          bool              `json:"restart_ok"`
++	UnsupportedOK      bool              `json:"unsupported_ok"`
+ }
+ 
+ type Result struct {
+@@ -99,6 +111,8 @@
+ 	LatencyMS     map[string]float64 `json:"latency_ms"`
+ 	Metrics       map[string]Metric  `json:"metrics"`
+ 	Validation    Validation         `json:"validation"`
++
++	runtimeArtifactDir string // Set only by disk verification; never supplied by JSON.
+ }
+ 
+ var requiredTreeDBMetrics = []string{
+@@ -119,6 +133,7 @@
+ func (c Config) Fingerprint() string {
+ 	copy := c
+ 	copy.Backend, copy.DurabilityClass, copy.PostingStore, copy.Badger = "", "", "", ""
++	copy.TreeDBPolicy, copy.TreeDBMemtable = "", ""
+ 	b, _ := json.Marshal(copy)
+ 	h := sha256.Sum256(b)
+ 	return hex.EncodeToString(h[:])
+@@ -126,8 +141,11 @@
+ 
+ func (r Result) Validate() error {
+ 	var errs []error
+-	if r.SchemaVersion != SchemaVersion && r.SchemaVersion != legacySchemaVersion {
+-		errs = append(errs, fmt.Errorf("schema_version=%d, want %d or legacy %d", r.SchemaVersion, SchemaVersion, legacySchemaVersion))
++	if r.SchemaVersion != SchemaVersion && r.SchemaVersion != 4 && r.SchemaVersion != legacySchemaVersion {
++		errs = append(errs, fmt.Errorf("unsupported schema_version=%d", r.SchemaVersion))
++	}
++	if r.SchemaVersion == SchemaVersion {
++		errs = append(errs, validateRuntime(r))
+ 	}
+ 	if r.RunID == "" || r.Repeat < 1 {
+ 		errs = append(errs, errors.New("run_id and positive repeat are required"))
+@@ -189,8 +207,10 @@
+ 	for _, name := range requiredTreeDBMetrics {
+ 		m, ok := r.Metrics[name]
+ 		legacyOptional := r.SchemaVersion == legacySchemaVersion && name == pointAppendCoverageMetric
++		disabledCommandWAL := r.SchemaVersion == SchemaVersion && r.Config.TreeDBPolicy == "raft_checkpoint" &&
++			strings.HasPrefix(name, "treedb_group_commit_") && ok && !m.Available && m.Reason == RaftCheckpointNoCommandWAL
+ 		if r.Config.Backend == "treedb" && (!ok || !m.Available) {
+-			if !legacyOptional {
++			if !legacyOptional && !disabledCommandWAL {
+ 				errs = append(errs, fmt.Errorf("TreeDB diagnostic %q must be available", name))
+ 			}
+ 		}
+@@ -215,6 +235,19 @@
+ 			errs = append(errs, fmt.Errorf("core metric %q must be available and valid", name))
+ 		}
+ 	}
++	if r.Config.RecoveryProbe != "" {
++		if r.Config.RecoveryProbe != RecoveryReadCommitRead {
++			errs = append(errs, fmt.Errorf("unknown recovery probe %q", r.Config.RecoveryProbe))
++		}
++		previous := r.Metrics["recovery_seconds"].Value
++		for _, name := range []string{"recovery_read_seconds", "recovery_read_write_seconds"} {
++			m, ok := r.Metrics[name]
++			if !ok || !m.Available || m.Unit != "seconds" || m.Source == "" || math.IsNaN(m.Value) || math.IsInf(m.Value, 0) || m.Value <= 0 || m.Value < previous {
++				errs = append(errs, fmt.Errorf("aligned recovery metric %q missing, invalid or out of order", name))
++			}
++			previous = m.Value
++		}
++	}
+ 	if r.Context.DgraphSHA == "" || r.Context.GomapVersion == "" || r.Context.GoVersion == "" || r.Context.Host == "" || r.Context.Kernel == "" || r.Context.CPU == "" || r.Context.TotalRAMBytes == 0 || len(r.Context.ExactCommand) == 0 || r.Context.RawPath == "" {
+ 		errs = append(errs, errors.New("reproduction context incomplete"))
+ 	}
+@@ -232,7 +265,11 @@
+ 	return errors.Join(errs...)
+ }
+ 
+-func expectedObserved(c Config) (string, string, error) {
++func expectedObserved(c Config) (string, string, error) { return ExpectedObserved(c) }
++
++// ExpectedObserved resolves the exact posting route required by a run. The
++// driver uses the same contract before timing and the reader verifies it again.
++func ExpectedObserved(c Config) (string, string, error) {
+ 	if c.DurabilityClass != "relaxed" && c.DurabilityClass != "durable" {
+ 		return "", "", fmt.Errorf("unknown durability class %q", c.DurabilityClass)
+ 	}
+@@ -250,8 +287,20 @@
+ 		}
+ 		return "badger", "syncwrites=" + badgerSync, nil
+ 	case "treedb":
+-		if err := requireExactSelector(c.PostingStore, map[string]string{"backend": "treedb", "tier": "benchmark_minimal", "durability": c.DurabilityClass, "events": "true"}); err != nil {
++		selected := c.DurabilityClass
++		if c.TreeDBPolicy == "raft_checkpoint" {
++			if c.DurabilityClass != "durable" || c.SurvivalMode != "filesystem" || c.TreeDBMemtable != "cow_ordered" {
++				return "", "", errors.New("raft_checkpoint requires durable/filesystem/cow_ordered")
++			}
++			selected = "raft_checkpoint"
++		} else if c.TreeDBPolicy != "" && c.TreeDBPolicy != "store_wal" {
++			return "", "", fmt.Errorf("unknown TreeDB policy %q", c.TreeDBPolicy)
++		}
++		if err := requireExactSelector(c.PostingStore, map[string]string{"backend": "treedb", "tier": "benchmark_minimal", "durability": selected, "events": "true"}); err != nil {
+ 			return "", "", fmt.Errorf("posting-store selector: %w", err)
++		}
++		if selected == "raft_checkpoint" {
++			return "treedb", "raft_checkpoint", nil
+ 		}
+ 		if c.DurabilityClass == "relaxed" {
+ 			return "treedb", "wal_on_relaxed_sync", nil
+@@ -326,9 +375,13 @@
+ 	nodeCount := 0
+ 	seenRunIDs := make(map[string]struct{}, len(results))
+ 	seenRepeats := make(map[string]map[int]string, 4)
++	selections := make(map[string][2]string, 4)
+ 	var contextIdentity *Context
+ 	for _, r := range results {
+ 		if err := r.Validate(); err != nil {
++			return fmt.Errorf("%s: %w", r.RunID, err)
++		}
++		if err := r.VerifyRuntimeArtifacts(r.runtimeArtifactDir); err != nil {
+ 			return fmt.Errorf("%s: %w", r.RunID, err)
+ 		}
+ 		if r.Context.Dirty {
+@@ -348,6 +401,11 @@
+ 			return fmt.Errorf("reproduction context mismatch for %s: %w", r.RunID, err)
+ 		}
+ 		key := r.Config.Backend + "/" + r.Config.DurabilityClass
++		selection := [2]string{r.Config.TreeDBPolicy, r.Config.TreeDBMemtable}
++		if previous, ok := selections[key]; ok && previous != selection {
++			return fmt.Errorf("posting policy/memtable changed between repeats for %s", key)
++		}
++		selections[key] = selection
+ 		if r.Repeat < 1 || r.Repeat > repeats {
+ 			return fmt.Errorf("repeat ordinal %d for %s is outside 1..%d", r.Repeat, key, repeats)
+ 		}
+@@ -395,6 +453,8 @@
+ 	}{
+ 		{"DgraphSHA", want.DgraphSHA, got.DgraphSHA},
+ 		{"GomapVersion", want.GomapVersion, got.GomapVersion},
++		{"BinarySHA256", want.BinarySHA256, got.BinarySHA256},
++		{"BinaryBuildInfo", want.BinaryBuildInfo, got.BinaryBuildInfo},
+ 		{"GoVersion", want.GoVersion, got.GoVersion},
+ 		{"Host", want.Host, got.Host},
+ 		{"Kernel", want.Kernel, got.Kernel},
+diff --git a/worker/treedb/livebench/result_test.go b/worker/treedb/livebench/result_test.go
+--- a/worker/treedb/livebench/result_test.go
++++ b/worker/treedb/livebench/result_test.go
+@@ -2,22 +2,25 @@
+ package livebench
+ 
+ import (
++	"crypto/sha256"
++	"encoding/hex"
+ 	"encoding/json"
+ 	"fmt"
+ 	"math"
+ 	"os"
+ 	"path/filepath"
++	"strconv"
+ 	"strings"
+ 	"testing"
+ 	"time"
+ )
+ 
+-func validSet(repeats int) []Result {
++func validSet(t *testing.T, repeats int) []Result {
+ 	set := make([]Result, 0, repeats*4)
+ 	for _, class := range []string{"relaxed", "durable"} {
+ 		for _, backend := range []string{"badger", "treedb"} {
+ 			for repeat := 1; repeat <= repeats; repeat++ {
+-				r := validResult(backend, class)
++				r := validResult(t, backend, class)
+ 				r.Repeat = repeat
+ 				r.RunID = fmt.Sprintf("%s-%s-r%d", backend, class, repeat)
+ 				set = append(set, r)
+@@ -27,7 +30,7 @@
+ 	return set
+ }
+ 
+-func validResult(backend, class string) Result {
++func validResult(t *testing.T, backend, class string) Result {
+ 	now := time.Now()
+ 	posting := "backend=badger; tier=production; durability=durable; events=false"
+ 	badger := "syncwrites=false"
+@@ -56,21 +59,66 @@
+ 			metrics[name] = Metric{Unit: "count", Source: "TreeDB test diagnostic", Reason: "TreeDB-only diagnostic"}
+ 		}
+ 	}
+-	return Result{SchemaVersion: SchemaVersion, RunID: backend + "-" + class, Repeat: 1,
+-		Config:       Config{Backend: backend, DurabilityClass: class, PostingStore: posting, Badger: badger, DatasetNodes: 10, Concurrency: 1, WarmupOps: 1, TimedOps: 10, QueryMix: map[string]int{"read": 80, "write": 20}, Topology: "single-zero-single-alpha", Seed: 42},
+-		Context:      Context{DgraphSHA: "abc", GomapVersion: "v1", GoVersion: "go1", Host: "host", Kernel: "kernel", CPU: "cpu", TotalRAMBytes: 1024, Storage: StorageContext{Scope: "artifact_and_posting", Source: "/dev/test", Model: "test", SizeBytes: 2048, Filesystem: "ext4", Mountpoint: "/mnt"}, Environment: map[string]string{"GOWORK": "off", "TMPDIR": "/tmp", "GOMAXPROCS": "", "GOFLAGS": ""}, ExactCommand: []string{"bench"}, RawPath: "/raw"},
++	r := Result{SchemaVersion: SchemaVersion, RunID: backend + "-" + class, Repeat: 1,
++		Config:       Config{SurvivalMode: "process", Backend: backend, DurabilityClass: class, PostingStore: posting, Badger: badger, DatasetNodes: 10, Concurrency: 1, WarmupOps: 1, TimedOps: 10, QueryMix: map[string]int{"read": 80, "write": 20}, Topology: "single-zero-single-alpha", Seed: 42},
++		Context:      Context{BinarySHA256: strings.Repeat("a", 64), BinaryBuildInfo: "test build identity", DgraphSHA: "abc", GomapVersion: "v1", GoVersion: "go1", Host: "host", Kernel: "kernel", CPU: "cpu", TotalRAMBytes: 1024, Storage: StorageContext{Scope: "artifact_and_posting", Source: "/dev/test", Model: "test", SizeBytes: 2048, Filesystem: "ext4", Mountpoint: "/mnt"}, Environment: map[string]string{"GOWORK": "off", "TMPDIR": "/tmp", "GOMAXPROCS": "", "GOFLAGS": ""}, ExactCommand: []string{"bench"}, RawPath: "/raw"},
+ 		SetupStarted: now, SetupFinished: now.Add(time.Second), TimedStarted: now.Add(2 * time.Second), TimedFinished: now.Add(3 * time.Second), Throughput: 10, LatencyMS: map[string]float64{"p50": 1, "p95": 2, "p99": 3}, Metrics: metrics,
+ 		Validation: Validation{BackendObserved: backend, DurabilityObserved: observed, SchemaOK: true, PostingChecksum: "same", NodeCount: 12, RestartOK: true, UnsupportedOK: true}}
++	if backend == "treedb" {
++		r.Config.TreeDBPolicy = "store_wal"
++	}
++	r.Validation.Runtime = runtimeFixture(r.Config)
++	writeRuntimeFixture(t, &r)
++	return r
++
+ }
+ 
+ func TestExpectedObservedUsesCanonicalTreeDBProfileIntegrity(t *testing.T) {
+-	config := validResult("treedb", "relaxed").Config
++	config := validResult(t, "treedb", "relaxed").Config
+ 	backend, durability, err := expectedObserved(config)
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
+ 	if backend != "treedb" || durability != "wal_on_relaxed_sync" {
+ 		t.Fatalf("observed contract=(%q, %q), want (treedb, wal_on_relaxed_sync)", backend, durability)
++	}
++}
++
++func TestAlignedRecoveryProtocolRejectsMissingOrReversedReadiness(t *testing.T) {
++	for _, bad := range []string{"", "missing read", "missing write", "before health", "before read", "nan", "unknown"} {
++		t.Run(bad, func(t *testing.T) {
++			r := validResult(t, "badger", "durable")
++			legacyFingerprint := r.Config.Fingerprint()
++			r.Config.RecoveryProbe = RecoveryReadCommitRead
++			r.Metrics["recovery_read_seconds"] = Metric{Available: true, Value: 2, Unit: "seconds", Source: "validated read"}
++			r.Metrics["recovery_read_write_seconds"] = Metric{Available: true, Value: 3, Unit: "seconds", Source: "committed write then read"}
++			switch bad {
++			case "missing read":
++				delete(r.Metrics, "recovery_read_seconds")
++			case "missing write":
++				delete(r.Metrics, "recovery_read_write_seconds")
++			case "before health":
++				m := r.Metrics["recovery_read_seconds"]
++				m.Value = 0.5
++				r.Metrics["recovery_read_seconds"] = m
++			case "before read":
++				m := r.Metrics["recovery_read_write_seconds"]
++				m.Value = 1.5
++				r.Metrics["recovery_read_write_seconds"] = m
++			case "nan":
++				m := r.Metrics["recovery_read_seconds"]
++				m.Value = math.NaN()
++				r.Metrics["recovery_read_seconds"] = m
++			case "unknown":
++				r.Config.RecoveryProbe = "unknown"
++			}
++			if legacyFingerprint == r.Config.Fingerprint() {
++				t.Fatal("new recovery protocol must not pool with health-only results")
++			}
++			if err := r.Validate(); (err == nil) != (bad == "") {
++				t.Fatalf("invalid result disposition for %q: %v", bad, err)
++			}
++		})
+ 	}
+ }
+ 
+@@ -86,7 +134,7 @@
+ 	}
+ 	for _, tc := range tests {
+ 		t.Run(tc.name, func(t *testing.T) {
+-			r := validResult("treedb", "relaxed")
++			r := validResult(t, "treedb", "relaxed")
+ 			tc.mutate(&r)
+ 			if err := r.Validate(); err == nil || !strings.Contains(err.Error(), tc.want) {
+ 				t.Fatalf("got %v, want %q", err, tc.want)
+@@ -122,7 +170,7 @@
+ 	}
+ 	for _, tc := range tests {
+ 		t.Run(tc.name, func(t *testing.T) {
+-			r := validResult("treedb", "relaxed")
++			r := validResult(t, "treedb", "relaxed")
+ 			tc.mutate(&r)
+ 			if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "core metric") {
+ 				t.Fatalf("got %v, want core metric failure", err)
+@@ -132,7 +180,7 @@
+ }
+ 
+ func TestResultFailsClosedOnTreeDBDiagnosticAvailability(t *testing.T) {
+-	tree := validResult("treedb", "relaxed")
++	tree := validResult(t, "treedb", "relaxed")
+ 	metric := tree.Metrics["treedb_group_commit_commits"]
+ 	metric.Available = false
+ 	metric.Reason = "debug sample failed"
+@@ -141,7 +189,7 @@
+ 		t.Fatalf("TreeDB unavailable diagnostic got %v", err)
+ 	}
+ 
+-	badger := validResult("badger", "relaxed")
++	badger := validResult(t, "badger", "relaxed")
+ 	badger.Metrics["treedb_group_commit_commits"] = Metric{Available: true, Value: 1, Unit: "count", Source: "fabricated"}
+ 	if err := badger.Validate(); err == nil || !strings.Contains(err.Error(), "must be unavailable for Badger") {
+ 		t.Fatalf("Badger fabricated TreeDB diagnostic got %v", err)
+@@ -149,7 +197,7 @@
+ }
+ 
+ func TestResultRequiresPointAppendCoverageDiagnostic(t *testing.T) {
+-	tree := validResult("treedb", "relaxed")
++	tree := validResult(t, "treedb", "relaxed")
+ 	delete(tree.Metrics, pointAppendCoverageMetric)
+ 	if err := tree.Validate(); err == nil || !strings.Contains(err.Error(), pointAppendCoverageMetric) {
+ 		t.Fatalf("missing point-append coverage diagnostic got %v", err)
+@@ -157,7 +205,7 @@
+ }
+ 
+ func TestResultAllowsLegacySchemaWithoutPointAppendCoverageDiagnostic(t *testing.T) {
+-	tree := validResult("treedb", "relaxed")
++	tree := validResult(t, "treedb", "relaxed")
+ 	tree.SchemaVersion = legacySchemaVersion
+ 	delete(tree.Metrics, pointAppendCoverageMetric)
+ 	if err := tree.Validate(); err != nil {
+@@ -171,7 +219,7 @@
+ }
+ 
+ func TestResultRejectsLogicalBytesWhenPointAppendsArePresent(t *testing.T) {
+-	tree := validResult("treedb", "relaxed")
++	tree := validResult(t, "treedb", "relaxed")
+ 	pointAppends := tree.Metrics[pointAppendCoverageMetric]
+ 	pointAppends.Value = 1
+ 	tree.Metrics[pointAppendCoverageMetric] = pointAppends
+@@ -200,13 +248,13 @@
+ 
+ func TestResultRejectsSubstringAndContradictorySelectors(t *testing.T) {
+ 	for _, badger := range []string{"notsyncwrites=false", "syncwrites=false; syncwrites=true"} {
+-		r := validResult("badger", "relaxed")
++		r := validResult(t, "badger", "relaxed")
+ 		r.Config.Badger = badger
+ 		if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "invalid config") {
+ 			t.Fatalf("badger=%q got %v, want invalid config", badger, err)
+ 		}
+ 	}
+-	r := validResult("treedb", "durable")
++	r := validResult(t, "treedb", "durable")
+ 	r.Config.PostingStore += "; durability=relaxed"
+ 	if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "invalid config") {
+ 		t.Fatalf("got %v, want invalid config", err)
+@@ -223,7 +271,7 @@
+ 		{"environment", func(r *Result) { delete(r.Context.Environment, "TMPDIR") }},
+ 	} {
+ 		t.Run(tc.name, func(t *testing.T) {
+-			r := validResult("badger", "relaxed")
++			r := validResult(t, "badger", "relaxed")
+ 			tc.mutate(&r)
+ 			if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "reproduction") {
+ 				t.Fatalf("got %v, want reproduction context failure", err)
+@@ -233,10 +281,10 @@
+ }
+ 
+ func TestValidateSetRejectsIncompleteAndLogicalMismatch(t *testing.T) {
+-	if err := ValidateSet([]Result{validResult("badger", "relaxed")}, 1); err == nil || !strings.Contains(err.Error(), "incomplete") {
++	if err := ValidateSet([]Result{validResult(t, "badger", "relaxed")}, 1); err == nil || !strings.Contains(err.Error(), "incomplete") {
+ 		t.Fatalf("got %v", err)
+ 	}
+-	set := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
++	set := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
+ 	set[1].Validation.PostingChecksum = "different"
+ 	if err := ValidateSet(set, 1); err == nil || !strings.Contains(err.Error(), "parity mismatch") {
+ 		t.Fatalf("got %v", err)
+@@ -244,7 +292,7 @@
+ }
+ 
+ func TestValidateSetRejectsCrossDurabilityChecksumAndCountMismatch(t *testing.T) {
+-	base := []Result{validResult("badger", "relaxed"), validResult("treedb", "relaxed"), validResult("badger", "durable"), validResult("treedb", "durable")}
++	base := []Result{validResult(t, "badger", "relaxed"), validResult(t, "treedb", "relaxed"), validResult(t, "badger", "durable"), validResult(t, "treedb", "durable")}
+ 
+ 	checksum := append([]Result(nil), base...)
+ 	checksum[2].Validation.PostingChecksum = "durable-only"
+@@ -280,7 +328,7 @@
+ 	}
+ 	for _, tc := range tests {
+ 		t.Run(tc.name, func(t *testing.T) {
+-			set := validSet(1)
++			set := validSet(t, 1)
+ 			tc.mutate(&set[1])
+ 			if err := ValidateSet(set, 1); err == nil || !strings.Contains(err.Error(), tc.want) {
+ 				t.Fatalf("got %v, want context failure containing %q", err, tc.want)
+@@ -290,7 +338,7 @@
+ }
+ 
+ func TestValidateSetAllowsPerRunReproductionDetailsToVary(t *testing.T) {
+-	set := validSet(1)
++	set := validSet(t, 1)
+ 	set[1].Context.ExactCommand = []string{"different", "command"}
+ 	set[1].Context.RawPath = "/different/result.json"
+ 	set[1].Context.Profiles = []string{"/different/cpu.pprof"}
+@@ -316,7 +364,7 @@
+ 			if tc.name == "repeat above range" {
+ 				repeats = 1
+ 			}
+-			set := validSet(repeats)
++			set := validSet(t, repeats)
+ 			tc.mutate(set)
+ 			if err := ValidateSet(set, repeats); err == nil || !strings.Contains(err.Error(), tc.want) {
+ 				t.Fatalf("got %v, want repeat/run ID failure containing %q", err, tc.want)
+@@ -336,7 +384,7 @@
+ }
+ 
+ func TestValidateSetRejectsEndpointDiagnosticEvenWithOnlyCPUProfile(t *testing.T) {
+-	set := validSet(1)
++	set := validSet(t, 1)
+ 	set[0].Context.Profiles = []string{"cpu.pprof"}
+ 	if err := ValidateSet(set, 1); err != nil {
+ 		t.Fatalf("ordinary profile changed matrix acceptance: %v", err)
+@@ -351,3 +399,46 @@
+ 		t.Fatalf("CPU-only endpoint result admitted to matrix: %v", err)
+ 	}
+ }
++
++func runtimeFixture(c Config) []RuntimeIdentity {
++	var result []RuntimeIdentity
++	for _, phase := range []string{"startup", "after_alpha_restart"} {
++		for _, role := range []string{"zero", "alpha"} {
++			hardSync := c.SurvivalMode == "filesystem"
++			r := RuntimeIdentity{Process: role, Phase: phase, PID: 1, Command: []string{"dgraph", role, "--survive=" + c.SurvivalMode}, SurvivalMode: c.SurvivalMode, HardSync: hardSync, ConfigWitness: "x.WorkerConfig: {HardSync:" + strconv.FormatBool(hardSync) + "}", ConfigLogSHA256: strings.Repeat("a", 64)}
++			if role == "alpha" {
++				r.Backend, r.Durability, _ = expectedObserved(c)
++				if c.Backend == "treedb" {
++					r.Memtable = "cow_ordered"
++				}
++				r.StoreWitnessSHA256 = strings.Repeat("b", 64)
++			}
++			result = append(result, r)
++		}
++	}
++	return result
++}
++
++func writeRuntimeFixture(t *testing.T, r *Result) {
++	t.Helper()
++	dir := t.TempDir()
++	for i := range r.Validation.Runtime {
++		identity := &r.Validation.Runtime[i]
++		prefix := filepath.Join(dir, "runtime-"+identity.Phase+"-"+identity.Process)
++		write := func(suffix, body string) string {
++			t.Helper()
++			if err := os.WriteFile(prefix+suffix, []byte(body), 0o644); err != nil {
++				t.Fatal(err)
++			}
++			sum := sha256.Sum256([]byte(body))
++			return hex.EncodeToString(sum[:])
++		}
++		identity.ConfigLogSHA256 = write(".config.log", identity.ConfigWitness+"\n")
++		if identity.Process == "alpha" {
++			identity.StoreWitnessSHA256 = write(".store.txt", fmt.Sprintf("status=map[backend:%s profile:%s]\nstats=map[treedb.cache.memtable_mode:%s]\n", identity.Backend, identity.Durability, identity.Memtable))
++		}
++	}
++	if err := r.VerifyRuntimeArtifacts(dir); err != nil {
++		t.Fatal(err)
++	}
++}
+diff --git a/worker/treedb/livebench/runtime.go b/worker/treedb/livebench/runtime.go
+new file mode 100644
+--- /dev/null
++++ b/worker/treedb/livebench/runtime.go
+@@ -0,0 +1,234 @@
++// SPDX-License-Identifier: Apache-2.0
++package livebench
++
++import (
++	"crypto/sha256"
++	"encoding/hex"
++	"errors"
++	"fmt"
++	"os"
++	"path/filepath"
++	"regexp"
++	"strings"
++)
++
++// ResolvedConfig extracts the single resolved configuration from a retained log.
++func ResolvedConfig(raw []byte) (string, bool, error) {
++	witness := ""
++	for _, line := range strings.Split(string(raw), "\n") {
++		if strings.Contains(line, "x.WorkerConfig:") {
++			if witness != "" {
++				return "", false, errors.New("ambiguous resolved configuration")
++			}
++			witness = line
++		}
++	}
++	hardSync, err := ResolvedHardSync(witness)
++	return witness, hardSync, err
++}
++
++// ResolvedStore extracts the route from the retained /debug/store response.
++// Duplicate sections or keys are refused rather than choosing one witness.
++func ResolvedStore(raw []byte) (backend, profile, memtable string, err error) {
++	section := func(prefix string) (map[string]string, error) {
++		s := string(raw)
++		if strings.Count(s, prefix) != 1 {
++			return nil, fmt.Errorf("missing or ambiguous %s witness", prefix)
++		}
++		_, tail, _ := strings.Cut(s, prefix)
++		body, _, ok := strings.Cut(tail, "]")
++		if !ok {
++			return nil, errors.New("truncated store witness")
++		}
++		fields := make(map[string]string)
++		for _, field := range strings.Fields(body) {
++			key, value, ok := strings.Cut(field, ":")
++			if !ok {
++				continue // Other diagnostic values may contain spaces.
++			}
++			if _, duplicate := fields[key]; duplicate {
++				return nil, fmt.Errorf("duplicate store witness key %q", key)
++			}
++			fields[key] = value
++		}
++		return fields, nil
++	}
++	status, err := section("status=map[")
++	if err != nil {
++		return "", "", "", err
++	}
++	stats, err := section("stats=map[")
++	if err != nil {
++		return "", "", "", err
++	}
++	backend, profile, memtable = status["backend"], status["profile"], stats["treedb.cache.memtable_mode"]
++	if backend == "" || profile == "" || (backend == "treedb" && memtable == "") {
++		return "", "", "", errors.New("incomplete resolved store witness")
++	}
++	return backend, profile, memtable, nil
++}
++
++// VerifyRuntimeArtifacts binds schema-v5 claims to their retained sidecars. The
++// directory comes from the result's loaded path, never its JSON raw_path field.
++// ValidateSet rechecks these files so deletion or replacement after load fails.
++func (r *Result) VerifyRuntimeArtifacts(dir string) error {
++	if r.SchemaVersion != SchemaVersion {
++		return nil
++	}
++	if err := validateRuntime(*r); err != nil {
++		return err
++	}
++	if dir == "" {
++		return errors.New("runtime artifacts were not verified on disk")
++	}
++	dir, err := filepath.Abs(dir)
++	if err != nil {
++		return err
++	}
++	read := func(name, expected string) ([]byte, error) {
++		path := filepath.Join(dir, name)
++		info, err := os.Lstat(path)
++		if err != nil {
++			return nil, fmt.Errorf("runtime artifact %s: %w", path, err)
++		}
++		if !info.Mode().IsRegular() {
++			return nil, fmt.Errorf("runtime artifact %s is not regular", path)
++		}
++		raw, err := os.ReadFile(path)
++		if err != nil {
++			return nil, err
++		}
++		sum := sha256.Sum256(raw)
++		if hex.EncodeToString(sum[:]) != expected {
++			return nil, fmt.Errorf("runtime artifact %s checksum mismatch", path)
++		}
++		return raw, nil
++	}
++	for _, identity := range r.Validation.Runtime {
++		prefix := "runtime-" + identity.Phase + "-" + identity.Process
++		raw, err := read(prefix+".config.log", identity.ConfigLogSHA256)
++		if err != nil {
++			return err
++		}
++		witness, hardSync, err := ResolvedConfig(raw)
++		if err != nil {
++			return fmt.Errorf("runtime artifact %s configuration mismatch: %w", prefix, err)
++		}
++		if witness != identity.ConfigWitness || hardSync != identity.HardSync {
++			return fmt.Errorf("runtime artifact %s configuration mismatch", prefix)
++		}
++		if identity.Process == "alpha" {
++			raw, err := read(prefix+".store.txt", identity.StoreWitnessSHA256)
++			if err != nil {
++				return err
++			}
++			backend, profile, memtable, err := ResolvedStore(raw)
++			if err != nil {
++				return fmt.Errorf("runtime artifact %s posting route mismatch: %w", prefix, err)
++			}
++			if backend != identity.Backend || profile != identity.Durability || memtable != identity.Memtable {
++				return fmt.Errorf("runtime artifact %s posting route mismatch", prefix)
++			}
++		}
++	}
++	r.runtimeArtifactDir = dir
++	return nil
++}
++
++// RuntimeIdentity binds the actual process configuration and posting route to
++// retained raw artifacts. The restart phase restarts Alpha only; Zero is
++// observed again, not implicitly claimed to have restarted or lost power.
++type RuntimeIdentity struct {
++	Process            string   `json:"process"`
++	Phase              string   `json:"phase"`
++	PID                int      `json:"pid"`
++	Command            []string `json:"command"`
++	SurvivalMode       string   `json:"survival_mode"`
++	HardSync           bool     `json:"hard_sync"`
++	ConfigWitness      string   `json:"config_witness"`
++	ConfigLogSHA256    string   `json:"config_log_sha256"`
++	StoreWitnessSHA256 string   `json:"store_witness_sha256,omitempty"`
++	Backend            string   `json:"backend,omitempty"`
++	Durability         string   `json:"durability,omitempty"`
++	Memtable           string   `json:"memtable,omitempty"`
++}
++
++var hardSyncField = regexp.MustCompile(`(?:^|[ {])HardSync:(true|false)(?:[ }]|$)`)
++
++// ResolvedHardSync accepts the redacted resolved worker configuration, never a
++// command-line mode name or an unrelated occurrence of a sync option.
++func ResolvedHardSync(line string) (bool, error) {
++	if !strings.Contains(line, "x.WorkerConfig:") {
++		return false, errors.New("missing resolved x.WorkerConfig witness")
++	}
++	fields := hardSyncField.FindAllStringSubmatch(line, -1)
++	if len(fields) != 1 {
++		return false, errors.New("missing or ambiguous resolved HardSync witness")
++	}
++	return fields[0][1] == "true", nil
++}
++
++func isSHA256(s string) bool {
++	b, err := hex.DecodeString(s)
++	return err == nil && len(b) == 32 && s == strings.ToLower(s)
++}
++
++func validateRuntime(r Result) error {
++	c := r.Config
++	if c.SurvivalMode != "process" && c.SurvivalMode != "filesystem" {
++		return errors.New("explicit valid survival_mode is required")
++	}
++	if !isSHA256(r.Context.BinarySHA256) || r.Context.BinaryBuildInfo == "" {
++		return errors.New("measured binary hash/build identity missing")
++	}
++	if c.Backend == "badger" && (c.TreeDBPolicy != "" || c.TreeDBMemtable != "") {
++		return errors.New("badger config contains TreeDB selection")
++	}
++	if c.Backend == "treedb" && c.TreeDBPolicy != "store_wal" && c.TreeDBPolicy != "raft_checkpoint" {
++		return errors.New("explicit TreeDB recovery policy is required")
++	}
++	backend, profile, err := expectedObserved(c)
++	if err != nil {
++		return err
++	}
++	seen := map[string]bool{}
++	for _, runtime := range r.Validation.Runtime {
++		key := runtime.Process + "/" + runtime.Phase
++		if (runtime.Process != "zero" && runtime.Process != "alpha") ||
++			(runtime.Phase != "startup" && runtime.Phase != "after_alpha_restart") || seen[key] {
++			return fmt.Errorf("unexpected/duplicate runtime identity %q", key)
++		}
++		seen[key] = true
++		hardSync, err := ResolvedHardSync(runtime.ConfigWitness)
++		if err != nil || runtime.HardSync != hardSync || hardSync != (c.SurvivalMode == "filesystem") || runtime.SurvivalMode != c.SurvivalMode {
++			return fmt.Errorf("runtime survival/HardSync mismatch for %s", key)
++		}
++		if runtime.PID <= 0 || !isSHA256(runtime.ConfigLogSHA256) || len(runtime.Command) < 3 || runtime.Command[1] != runtime.Process {
++			return fmt.Errorf("runtime process/command binding incomplete for %s", key)
++		}
++		flags := 0
++		for _, arg := range runtime.Command {
++			if strings.HasPrefix(arg, "--survive") {
++				if arg != "--survive="+c.SurvivalMode {
++					return fmt.Errorf("runtime survival argument mismatch for %s", key)
++				}
++				flags++
++			}
++		}
++		if flags != 1 {
++			return fmt.Errorf("one explicit survival argument required for %s", key)
++		}
++		if runtime.Process == "alpha" {
++			if !isSHA256(runtime.StoreWitnessSHA256) || runtime.Backend != backend || runtime.Durability != profile {
++				return fmt.Errorf("runtime posting route mismatch for %s", key)
++			}
++			if c.Backend == "treedb" && (runtime.Memtable == "" || (c.TreeDBMemtable != "" && runtime.Memtable != c.TreeDBMemtable)) {
++				return fmt.Errorf("runtime TreeDB memtable mismatch for %s", key)
++			}
++		}
++	}
++	if len(seen) != 4 {
++		return errors.New("startup/restart identity required for Zero and Alpha")
++	}
++	return nil
++}
+diff --git a/worker/treedb/livebench/runtime_test.go b/worker/treedb/livebench/runtime_test.go
+new file mode 100644
+--- /dev/null
++++ b/worker/treedb/livebench/runtime_test.go
+@@ -0,0 +1,175 @@
++// SPDX-License-Identifier: Apache-2.0
++package livebench
++
++import (
++	"crypto/sha256"
++	"encoding/hex"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++)
++
++func TestLoadedRuntimeRequiresEveryUnmodifiedSidecar(t *testing.T) {
++	for _, phase := range []string{"startup", "after_alpha_restart"} {
++		for _, role := range []string{"zero", "alpha"} {
++			suffixes := []string{".config.log"}
++			if role == "alpha" {
++				suffixes = append(suffixes, ".store.txt")
++			}
++			for _, suffix := range suffixes {
++				for _, damage := range []string{"missing", "truncated", "replaced"} {
++					t.Run(phase+"/"+role+suffix+"/"+damage, func(t *testing.T) {
++						set := validSet(t, 1)
++						r := &set[0]
++						path := filepath.Join(r.runtimeArtifactDir, "result.json")
++						r.Context.RawPath = "/untrusted/json/path/result.json"
++						if err := WriteImmutable(path, *r); err != nil {
++							t.Fatal(err)
++						}
++						loaded, err := LoadResults([]string{path})
++						if err != nil {
++							t.Fatal(err)
++						}
++						set[0] = loaded[0]
++						artifact := filepath.Join(r.runtimeArtifactDir, "runtime-"+phase+"-"+role+suffix)
++						if damage == "missing" {
++							if err := os.Remove(artifact); err != nil {
++								t.Fatal(err)
++							}
++						} else {
++							body := []byte{}
++							if damage == "replaced" {
++								body = []byte("replacement witness\n")
++							}
++							if err := os.WriteFile(artifact, body, 0o644); err != nil {
++								t.Fatal(err)
++							}
++						}
++						if _, err := LoadResults([]string{path}); err == nil {
++							t.Fatal("damaged runtime artifact accepted on load")
++						}
++						if err := ValidateSet(set, 1); err == nil {
++							t.Fatal("artifact changed after load accepted by matrix")
++						}
++					})
++				}
++			}
++		}
++	}
++}
++
++func TestRuntimeChecksWitnessMeaningEvenWithMatchingHash(t *testing.T) {
++	for name, body := range map[string]string{
++		"wrong config":     "x.WorkerConfig: {HardSync:true}\n",
++		"duplicate config": "x.WorkerConfig: {HardSync:false}\nx.WorkerConfig: {HardSync:false}\n",
++		"wrong backend":    "status=map[backend:badger profile:wal_on_sync]\nstats=map[treedb.cache.memtable_mode:cow_ordered]\n",
++		"wrong memtable":   "status=map[backend:treedb profile:wal_on_sync]\nstats=map[treedb.cache.memtable_mode:btree]\n",
++		"duplicate route":  "status=map[backend:treedb backend:badger profile:wal_on_sync]\nstats=map[treedb.cache.memtable_mode:cow_ordered]\n",
++	} {
++		t.Run(name, func(t *testing.T) {
++			r := validResult(t, "treedb", "durable")
++			identity := &r.Validation.Runtime[1]
++			suffix := ".store.txt"
++			sum := sha256.Sum256([]byte(body))
++			if strings.Contains(name, "config") {
++				suffix = ".config.log"
++				identity.ConfigLogSHA256 = hex.EncodeToString(sum[:])
++			} else {
++				identity.StoreWitnessSHA256 = hex.EncodeToString(sum[:])
++			}
++			path := filepath.Join(r.runtimeArtifactDir, "runtime-startup-alpha"+suffix)
++			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
++				t.Fatal(err)
++			}
++			if err := r.VerifyRuntimeArtifacts(r.runtimeArtifactDir); err == nil {
++				t.Fatal("contradictory hashed witness accepted")
++			}
++		})
++	}
++}
++
++func TestMatrixRejectsRuntimeIdentitiesWithoutDiskProvenance(t *testing.T) {
++	set := validSet(t, 1)
++	set[0].runtimeArtifactDir = ""
++	if err := ValidateSet(set, 1); err == nil || !strings.Contains(err.Error(), "not verified on disk") {
++		t.Fatalf("unverified in-memory result accepted: %v", err)
++	}
++}
++
++func TestRuntimeIdentityRequiresActualStartupAndRestartRoutes(t *testing.T) {
++	for name, mutate := range map[string]func(*Result){
++		"missing Zero":         func(r *Result) { r.Validation.Runtime = r.Validation.Runtime[1:] },
++		"missing restart":      func(r *Result) { r.Validation.Runtime = r.Validation.Runtime[:2] },
++		"duplicate process":    func(r *Result) { r.Validation.Runtime[1] = r.Validation.Runtime[0] },
++		"wrong resolved sync":  func(r *Result) { r.Validation.Runtime[0].ConfigWitness = "x.WorkerConfig: {HardSync:true}" },
++		"unresolved flag only": func(r *Result) { r.Validation.Runtime[0].ConfigWitness = "--survive=process HardSync:false" },
++		"duplicate survival flags": func(r *Result) {
++			r.Validation.Runtime[0].Command = append(r.Validation.Runtime[0].Command, "--survive=process")
++		},
++		"restart wrong posting route": func(r *Result) { r.Validation.Runtime[3].Durability = "wal_on_sync" },
++		"missing binary identity":     func(r *Result) { r.Context.BinarySHA256 = "" },
++		"missing memtable":            func(r *Result) { r.Validation.Runtime[1].Memtable = "" },
++	} {
++		t.Run(name, func(t *testing.T) {
++			r := validResult(t, "treedb", "relaxed")
++			mutate(&r)
++			if err := r.Validate(); err == nil {
++				t.Fatal("incomplete or mismatched runtime accepted")
++			}
++		})
++	}
++}
++
++func TestCheckpointPolicyRequiresFilesystemAndCOWBeforeAcceptance(t *testing.T) {
++	r := validResult(t, "treedb", "durable")
++	r.Config.SurvivalMode, r.Config.TreeDBPolicy, r.Config.TreeDBMemtable = "filesystem", "raft_checkpoint", "cow_ordered"
++	r.Config.PostingStore = strings.Replace(r.Config.PostingStore, "durability=durable", "durability=raft_checkpoint", 1)
++	r.Validation.DurabilityObserved = "raft_checkpoint"
++	r.Validation.Runtime = runtimeFixture(r.Config)
++	if err := r.Validate(); err != nil {
++		t.Fatal(err)
++	}
++	for _, name := range requiredTreeDBMetrics {
++		if strings.HasPrefix(name, "treedb_group_commit_") {
++			r.Metrics[name] = Metric{Available: false, Unit: "count", Source: "TreeDB /debug/store", Reason: RaftCheckpointNoCommandWAL}
++		}
++	}
++	if err := r.Validate(); err != nil {
++		t.Fatalf("explicit posting-WAL absence for checkpoint profile rejected: %v", err)
++	}
++	required := r.Metrics["treedb_value_log_file_syncs"]
++	r.Metrics["treedb_value_log_file_syncs"] = Metric{Available: false, Unit: "count", Source: "TreeDB /debug/store", Reason: RaftCheckpointNoCommandWAL}
++	if err := r.Validate(); err == nil {
++		t.Fatal("unavailable persistent value-log syncs accepted as posting WAL")
++	}
++	r.Metrics["treedb_value_log_file_syncs"] = required
++	group := r.Metrics["treedb_group_commit_commits"]
++	group.Reason = "debug sample failed"
++	r.Metrics["treedb_group_commit_commits"] = group
++	if err := r.Validate(); err == nil {
++		t.Fatal("arbitrary missing group counter accepted for checkpoint profile")
++	}
++	group.Reason = RaftCheckpointNoCommandWAL
++	r.Metrics["treedb_group_commit_commits"] = group
++	for _, mode := range []string{"process", ""} {
++		bad := r
++		bad.Config.SurvivalMode = mode
++		if err := bad.Validate(); err == nil {
++			t.Fatal("checkpoint with weak/missing survival accepted")
++		}
++	}
++	r.Validation.Runtime[3].Memtable = "btree"
++	if err := r.Validate(); err == nil {
++		t.Fatal("restart COW mismatch accepted")
++	}
++}
++
++func TestSurvivalProfilesHaveDifferentWorkloadFingerprints(t *testing.T) {
++	c := validResult(t, "treedb", "durable").Config
++	process := c.Fingerprint()
++	c.SurvivalMode = "filesystem"
++	if c.Fingerprint() == process {
++		t.Fatal("different survival profiles can be pooled")
++	}
++}
+diff --git a/worker/treedb/run_durability_ab.sh b/worker/treedb/run_durability_ab.sh
+--- a/worker/treedb/run_durability_ab.sh
++++ b/worker/treedb/run_durability_ab.sh
+@@ -6,7 +6,7 @@
+ 	printf '%s\n' 'usage: worker/treedb/run_durability_ab.sh [--smoke] --artifact-dir OUTSIDE_REPOSITORY_DIR' \
+ 		'Runs adapter microbenchmarks and the four-cell live durability matrix.' \
+ 		'Decision runs also collect separate relaxed/durable TreeDB CPU profiles.' \
+-		'Environment overrides: REPEATS DATASET_NODES WARMUP_OPS TIMED_OPS CONCURRENCY COUNT BENCHTIME PROFILE_RELAXED_OPS PROFILE_DURABLE_OPS PROFILE_SECONDS.'
++		'Environment overrides: SURVIVE TREEDB_DURABLE_POLICY REQUIRE_TREEDB_MEMTABLE REPEATS DATASET_NODES WARMUP_OPS TIMED_OPS CONCURRENCY COUNT BENCHTIME PROFILE_RELAXED_OPS PROFILE_DURABLE_OPS PROFILE_SECONDS.'
+ }
+ 
+ smoke=0
+@@ -48,6 +48,22 @@
+ }
+ 
+ cd "${repo_root}"
++survive=${SURVIVE:-process}
++treedb_policy=${TREEDB_DURABLE_POLICY:-store_wal}
++required_memtable=${REQUIRE_TREEDB_MEMTABLE-}
++[[ ${survive} == process || ${survive} == filesystem ]] || {
++	echo 'SURVIVE must be process or filesystem' >&2
++	exit 2
++}
++[[ ${treedb_policy} == store_wal || ${treedb_policy} == raft_checkpoint ]] || {
++	echo 'invalid TREEDB_DURABLE_POLICY' >&2
++	exit 2
++}
++if [[ ${treedb_policy} == raft_checkpoint && (${survive} != filesystem || ${required_memtable} != cow_ordered) ]]; then
++	echo 'raft_checkpoint requires SURVIVE=filesystem REQUIRE_TREEDB_MEMTABLE=cow_ordered' >&2
++	exit 2
++fi
++runtime_args=(--survive "${survive}" --treedb-durable-policy "${treedb_policy}" --require-treedb-memtable "${required_memtable}")
+ mkdir -p "${artifact_dir}/bin" "${artifact_dir}/microbench"
+ 
+ repeats=${REPEATS:-3}
+@@ -72,7 +88,14 @@
+ GOWORK=off go build -o "${artifact_dir}/bin/report" ./worker/treedb/livebench/reportcmd
+ 
+ micro_cmd=(go test ./posting -run '^$' -bench 'Benchmark(BadgerStoreSeam|TreeDBStoreAdapterOverhead|CommitEventDisabledAndUnsubscribed)$' -benchmem -benchtime "${benchtime}" -count "${count}")
+-GOWORK=off "${micro_cmd[@]}" 2>&1 | tee "${artifact_dir}/microbench/raw.txt"
++micro_status=0
++GOWORK=off "${micro_cmd[@]}" >"${artifact_dir}/microbench/raw.stdout" 2>"${artifact_dir}/microbench/raw.stderr" || micro_status=$?
++cat "${artifact_dir}/microbench/raw.stdout" "${artifact_dir}/microbench/raw.stderr" >"${artifact_dir}/microbench/raw.txt"
++if ((micro_status != 0)); then
++	cat "${artifact_dir}/microbench/raw.txt" >&2
++	exit "${micro_status}"
++fi
++cat "${artifact_dir}/microbench/raw.stdout"
+ 
+ storage_source=$(findmnt -no SOURCE -T "${artifact_dir}")
+ storage_filesystem=$(findmnt -no FSTYPE -T "${artifact_dir}")
+@@ -123,6 +146,7 @@
+ 	echo "construction_audit=${construction_audit}"
+ 	echo "loadavg=${loadavg}"
+ 	echo "micro_command=GOWORK=off ${micro_cmd[*]}"
++	echo "survival=${survive} treedb_durable_policy=${treedb_policy} required_treedb_memtable=${required_memtable}"
+ 	echo "live_shape=repeats=${repeats} dataset=${dataset} warmup=${warmup} timed=${timed} concurrency=${concurrency} seed=20260711 topology=single-zero-single-alpha mix=60-point/20-one-hop/20-write"
+ 	echo "measurement_boundary=database creation, schema, load, and warmup precede timed operations; restart recovery is measured separately"
+ } >"${artifact_dir}/context.txt"
+@@ -135,6 +159,7 @@
+ 			run_dir="${artifact_dir}/live/${backend}-${class}-r${repeat}"
+ 			offset=$((23000 + cell * 100 + repeat * 2))
+ 			"${artifact_dir}/bin/livebench" \
++				"${runtime_args[@]}" \
+ 				--dgraph-bin "${artifact_dir}/bin/dgraph" --artifact-dir "${run_dir}" \
+ 				--backend "${backend}" --durability "${class}" --repeat "${repeat}" \
+ 				--dataset-nodes "${dataset}" --warmup-ops "${warmup}" --timed-ops "${timed}" \
+@@ -162,6 +187,7 @@
+ 		profile_run="${profile_dir}/treedb-${profile_class}-run"
+ 		profile_path="${profile_dir}/treedb-${profile_class}.pprof"
+ 		"${artifact_dir}/bin/livebench" \
++			"${runtime_args[@]}" \
+ 			--dgraph-bin "${artifact_dir}/bin/dgraph" --artifact-dir "${profile_run}" \
+ 			--backend treedb --durability "${profile_class}" --repeat 1 \
+ 			--dataset-nodes "${dataset}" --warmup-ops "${warmup}" --timed-ops "${profile_ops}" \

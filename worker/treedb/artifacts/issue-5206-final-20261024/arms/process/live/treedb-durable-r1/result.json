@@ -1,0 +1,372 @@
+{
+  "schema_version": 5,
+  "run_id": "treedb-durable-r1",
+  "repeat": 1,
+  "config": {
+    "recovery_probe": "read-commit-read-v1",
+    "survival_mode": "process",
+    "treedb_durable_policy": "store_wal",
+    "required_treedb_memtable": "cow_ordered",
+    "backend": "treedb",
+    "durability_class": "durable",
+    "posting_store": "backend=treedb; tier=benchmark_minimal; durability=durable; events=true",
+    "badger": "syncwrites=false",
+    "dataset_nodes": 500,
+    "concurrency": 4,
+    "warmup_ops": 100,
+    "timed_ops": 2000,
+    "query_mix_percent": {
+      "one_hop_read": 20,
+      "point_read": 60,
+      "write": 20
+    },
+    "topology": "single-zero-single-alpha",
+    "seed": 20260711
+  },
+  "context": {
+    "binary_sha256": "46763a6bfcd02c37a44fb36e8c866dd7bbf7e2ca9777ad0a0aefb1ada9325175",
+    "binary_build_info": "go\tgo1.26.9\npath\tgithub.com/dgraph-io/dgraph/v25/dgraph\nmod\tgithub.com/dgraph-io/dgraph/v25\tv25.0.0-20261024030343-bad4ced2c88e\t\ndep\tcontrib.go.opencensus.io/exporter/prometheus\tv0.4.2\th1:sqfsYl5GIY/L570iT+l93ehxaWJs2/OwXtiWwew3oAg=\ndep\tfilippo.io/edwards25519\tv1.2.0\th1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=\ndep\tgithub.com/HdrHistogram/hdrhistogram-go\tv1.2.0\th1:XMJkDWuz6bM9Fzy7zORuVFKH7ZJY41G2q8KWhVGkNiY=\ndep\tgithub.com/IBM/sarama\tv1.48.0\th1:9LJS0VNeg/boXxT/GLAMDKX6uSQ1mr/5F/j4v9gSeBQ=\ndep\tgithub.com/agnivade/levenshtein\tv1.2.1\th1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=\ndep\tgithub.com/beorn7/perks\tv1.0.1\th1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=\ndep\tgithub.com/bits-and-blooms/bitset\tv1.24.4\th1:95H15Og1clikBrKr/DuzMXkQzECs1M6hhoGXLwLQOZE=\ndep\tgithub.com/blevesearch/bleve/v2\tv2.5.7\th1:2d9YrL5zrX5EBBW++GOaEKjE+NPWeZGaX77IM26m1Z8=\ndep\tgithub.com/blevesearch/bleve_index_api\tv1.3.11\th1:x29vbV8OjWfLcrDVd7Lr1q+BkLNS0JWNEig0MCVnKH4=\ndep\tgithub.com/blevesearch/geo\tv0.2.5\th1:yJg9FX1oRwLnjXSXF+ECHfXFTF4diF02Ca/qUGVjJhE=\ndep\tgithub.com/blevesearch/go-porterstemmer\tv1.0.3\th1:GtmsqID0aZdCSNiY8SkuPJ12pD4jI+DdXTAn4YRcHCo=\ndep\tgithub.com/blevesearch/segment\tv0.9.1\th1:+dThDy+Lvgj5JMxhmOVlgFfkUtZV2kw49xax4+jTfSU=\ndep\tgithub.com/blevesearch/snowballstem\tv0.9.0\th1:lMQ189YspGP6sXvZQ4WZ+MLawfV8wOmPoD/iWeNXm8s=\ndep\tgithub.com/blevesearch/upsidedown_store_api\tv1.0.2\th1:U53Q6YoWEARVLd1OYNc9kvhBMGZzVrdmaozG2MfoB+A=\ndep\tgithub.com/cenkalti/backoff/v4\tv4.3.0\th1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=\ndep\tgithub.com/cenkalti/backoff/v5\tv5.0.3\th1:ZN+IMa753KfX5hd8vVaMixjnqRZ3y8CuJKRKj1xcsSM=\ndep\tgithub.com/cespare/xxhash/v2\tv2.3.0\th1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=\ndep\tgithub.com/chewxy/math32\tv1.11.1\th1:b7PGHlp8KjylDoU8RrcEsRuGZhJuz8haxnKfuMMRqy8=\ndep\tgithub.com/davecgh/go-spew\tv1.1.2-0.20180830191138-d8f796af33cc\th1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=\ndep\tgithub.com/dgraph-io/badger/v4\tv4.9.4\th1:bcw+waCpzRZ2nmcSPbnPvDVhiEsn98TKmvnAhK7r7LM=\ndep\tgithub.com/dgraph-io/dgo/v250\tv250.0.0\th1:zkVj8EOgNOK3s5XFEK7CJKRdftWqg5K6qGs4HEH5TcY=\ndep\tgithub.com/dgraph-io/gqlgen\tv0.13.2\th1:TNhndk+eHKj5qE7BenKKSYdSIdOGhLqxR1rCiMso9KM=\ndep\tgithub.com/dgraph-io/gqlparser/v2\tv2.2.2\th1:CnxXOKL4EPguKqcGV/z4u4VoW5izUkOTIsNM6xF+0f4=\ndep\tgithub.com/dgraph-io/graphql-transport-ws\tv0.0.0-20210511143556-2cef522f1f15\th1:X2NRsgAtVUAp2nmTPCq+x+wTcRRrj74CEpy7E0Unsl4=\ndep\tgithub.com/dgraph-io/ristretto/v2\tv2.4.2\th1:x0cvjmUKxt764Yxdk2nr94we1AvPPAMh1rh5TQ+Jo80=\ndep\tgithub.com/dgraph-io/simdjson-go\tv0.3.0\th1:h71LO7vR4LHMPUhuoGN8bqGm1VNfGOlAG8BI6iDUKw0=\ndep\tgithub.com/dgryski/go-farm\tv0.0.0-20240924180020-3414d57e47da\th1:aIftn67I1fkbMa512G+w+Pxci9hJPB8oMnkcP3iZF38=\ndep\tgithub.com/dgryski/go-groupvarint\tv0.0.0-20230630160417-2bfb7969fb3c\th1:cHaw4wmusVzAZLEPWOCCGCfu6UvFXx9UboCHQCnjvxY=\ndep\tgithub.com/dustin/go-humanize\tv1.0.1\th1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=\ndep\tgithub.com/eapache/go-resiliency\tv1.7.0\th1:n3NRTnBn5N0Cbi/IeOHuQn9s2UwVUH7Ga0ZWcP+9JTA=\ndep\tgithub.com/eapache/queue\tv1.1.0\th1:YOEu7KNc61ntiQlcEeUIoDTJ2o8mQznoNvUhiigpIqc=\ndep\tgithub.com/felixge/fgprof\tv0.9.5\th1:8+vR6yu2vvSKn08urWyEuxx75NWPEvybbkBirEpsbVY=\ndep\tgithub.com/fsnotify/fsnotify\tv1.10.0\th1:Xx/5Ydg9CeBDX/wi4VJqStNtohYjitZhhlHt4h3St1M=\ndep\tgithub.com/go-ini/ini\tv1.67.0\th1:z6ZrTEZqSWOTyH2FlglNbNgARyHG8oLW9gMELqKr06A=\ndep\tgithub.com/go-jose/go-jose/v4\tv4.1.4\th1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz3kA=\ndep\tgithub.com/go-logr/logr\tv1.4.3\th1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=\ndep\tgithub.com/go-logr/stdr\tv1.2.2\th1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=\ndep\tgithub.com/go-sql-driver/mysql\tv1.10.0\th1:Q+1LV8DkHJvSYAdR83XzuhDaTykuDx0l6fkXxoWCWfw=\ndep\tgithub.com/go-viper/mapstructure/v2\tv2.5.0\th1:vM5IJoUAy3d7zRSVtIwQgBj7BiWtMPfmPEgAXnvj1Ro=\ndep\tgithub.com/gogo/protobuf\tv1.3.2\th1:Ov1cvc58UF3b5XjBnZv7+opcTcQFZebYjWzi34vdm4Q=\ndep\tgithub.com/golang-jwt/jwt/v5\tv5.3.1\th1:kYf81DTWFe7t+1VvL7eS+jKFVWaUnK9cB1qbwn63YCY=\ndep\tgithub.com/golang/geo\tv0.0.0-20260427214057-41a1a8c7eb2a\th1:NCCOtWegL97WMIzurYy2gDuuTQhFj/xd4ILPpvsr0E4=\ndep\tgithub.com/golang/glog\tv1.2.5\th1:DrW6hGnjIhtvhOIiAKT6Psh/Kd/ldepEa81DKeiRJ5I=\ndep\tgithub.com/golang/groupcache\tv0.0.0-20241129210726-2c02b8208cf8\th1:f+oWsMOmNPc8JmEHVZIycC7hBoQxHH9pNKQORJNozsQ=\ndep\tgithub.com/golang/protobuf\tv1.5.4\th1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=\ndep\tgithub.com/golang/snappy\tv1.0.0\th1:Oy607GVXHs7RtbggtPBnr2RmDArIsAefDwvrdWvRhGs=\ndep\tgithub.com/google/codesearch\tv1.2.0\th1:VlyAH+AntnIbGGArOUs6sEBdPVwYvf1e8Uw3/TC77cA=\ndep\tgithub.com/google/flatbuffers\tv25.12.19+incompatible\th1:haMV2JRRJCe1998HeW/p0X9UaMTK6SDo0ffLn2+DbLs=\ndep\tgithub.com/google/jsonschema-go\tv0.4.3\th1:/DBOLZTfDow7pe2GmaJNhltueGTtDKICi8V8p+DQPd0=\ndep\tgithub.com/google/pprof\tv0.0.0-20260402051712-545e8a4df936\th1:EwtI+Al+DeppwYX2oXJCETMO23COyaKGP6fHVpkpWpg=\ndep\tgithub.com/google/uuid\tv1.6.0\th1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=\ndep\tgithub.com/gorilla/websocket\tv1.5.3\th1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=\ndep\tgithub.com/grpc-ecosystem/grpc-gateway/v2\tv2.29.0\th1:5VipnvEpbqr2gA2VbM+nYVbkIF28c5ZQfqCBQ5g2xfk=\ndep\tgithub.com/hashicorp/errwrap\tv1.1.0\th1:OxrOeh75EUXMY8TBjag2fzXGZ40LB6IKw45YeGUDY2I=\ndep\tgithub.com/hashicorp/go-cleanhttp\tv0.5.2\th1:035FKYIWjmULyFRBKPs8TBQoi0x6d9G4xc9neXJWAZQ=\ndep\tgithub.com/hashicorp/go-multierror\tv1.1.1\th1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+lD48awMYo=\ndep\tgithub.com/hashicorp/go-retryablehttp\tv0.7.8\th1:ylXZWnqa7Lhqpk0L1P1LzDtGcCR0rPVUrx/c8Unxc48=\ndep\tgithub.com/hashicorp/go-rootcerts\tv1.0.2\th1:jzhAVGtqPKbwpyCPELlgNWhE1znq+qwJtW5Oi2viEzc=\ndep\tgithub.com/hashicorp/go-secure-stdlib/parseutil\tv0.2.0\th1:U+kC2dOhMFQctRfhK0gRctKAPTloZdMU5ZJxaesJ/VM=\ndep\tgithub.com/hashicorp/go-secure-stdlib/strutil\tv0.1.2\th1:kes8mmyCpxJsI7FTwtzRqEy9CdjCtrXrXGuOpxEA7Ts=\ndep\tgithub.com/hashicorp/go-sockaddr\tv1.0.7\th1:G+pTkSO01HpR5qCxg7lxfsFEZaG+C0VssTy/9dbT+Fw=\ndep\tgithub.com/hashicorp/go-uuid\tv1.0.3\th1:2gKiV6YVmrJ1i2CKKa9obLvRieoRGviZFL26PcT/Co8=\ndep\tgithub.com/hashicorp/hcl\tv1.0.1-vault-7\th1:ag5OxFVy3QYTFTJODRzTKVZ6xvdfLLCA1cy/Y6xGI0I=\ndep\tgithub.com/hashicorp/vault/api\tv1.23.0\th1:gXgluBsSECfRWTSW9niY2jwg2e9mMJc4WoHNv4g3h6A=\ndep\tgithub.com/jcmturner/aescts/v2\tv2.0.0\th1:9YKLH6ey7H4eDBXW8khjYslgyqG2xZikXP0EQFKrle8=\ndep\tgithub.com/jcmturner/dnsutils/v2\tv2.0.0\th1:lltnkeZGL0wILNvrNiVCR6Ro5PGU/SeBvVO/8c/iPbo=\ndep\tgithub.com/jcmturner/gofork\tv1.7.6\th1:QH0l3hzAU1tfT3rZCnW5zXl+orbkNMMRGJfdJjHVETg=\ndep\tgithub.com/jcmturner/gokrb5/v8\tv8.4.4\th1:x1Sv4HaTpepFkXbt2IkL29DXRf8sOfZXo8eRKh687T8=\ndep\tgithub.com/jcmturner/rpc/v2\tv2.0.3\th1:7FXXj8Ti1IaVFpSAziCZWNzbNuZmnvw/i6CqLNdWfZY=\ndep\tgithub.com/json-iterator/go\tv1.1.12\th1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=\ndep\tgithub.com/klauspost/compress\tv1.18.5\th1:/h1gH5Ce+VWNLSWqPzOVn6XBO+vJbCNGvjoaGBFW2IE=\ndep\tgithub.com/klauspost/cpuid/v2\tv2.3.0\th1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=\ndep\tgithub.com/klauspost/crc32\tv1.3.0\th1:sSmTt3gUt81RP655XGZPElI0PelVTZ6YwCRnPSupoFM=\ndep\tgithub.com/mark3labs/mcp-go\tv0.49.0\th1:7Ssx4d7/T86qnWoJIdye7wEEvUzv39UIbnZb/FqUZMY=\ndep\tgithub.com/minio/crc64nvme\tv1.1.1\th1:8dwx/Pz49suywbO+auHCBpCtlW1OfpcLN7wYgVR6wAI=\ndep\tgithub.com/minio/md5-simd\tv1.1.2\th1:Gdi1DZK69+ZVMoNHRXJyNcxrMA4dSxoYHZSQbirFg34=\ndep\tgithub.com/minio/minio-go/v7\tv7.1.0\th1:QEt5IStDpxgGjEdtOgpiZ5QhmSl3ax7qy61vi2SwHO8=\ndep\tgithub.com/mitchellh/mapstructure\tv1.5.1-0.20231216201459-8508981c8b6c\th1:cqn374mizHuIWj+OSJCajGr/phAmuMug9qIX3l9CflE=\ndep\tgithub.com/modern-go/concurrent\tv0.0.0-20180306012644-bacd9c7ef1dd\th1:TRLaZ9cD/w8PVh93nsPXa1VrQ6jlwL5oN8l14QlcNfg=\ndep\tgithub.com/modern-go/reflect2\tv1.0.2\th1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9Gz0M=\ndep\tgithub.com/munnerz/goautoneg\tv0.0.0-20191010083416-a7dc8b61c822\th1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=\ndep\tgithub.com/paulmach/go.geojson\tv1.5.0\th1:7mhpMK89SQdHFcEGomT7/LuJhwhEgfmpWYVlVmLEdQw=\ndep\tgithub.com/pelletier/go-toml/v2\tv2.3.0\th1:k59bC/lIZREW0/iVaQR8nDHxVq8OVlIzYCOJf421CaM=\ndep\tgithub.com/philhofer/fwd\tv1.2.0\th1:e6DnBTl7vGY+Gz322/ASL4Gyp1FspeMvx1RNDoToZuM=\ndep\tgithub.com/pierrec/lz4/v4\tv4.1.26\th1:GrpZw1gZttORinvzBdXPUXATeqlJjqUG/D87TKMnhjY=\ndep\tgithub.com/pkg/errors\tv0.9.1\th1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=\ndep\tgithub.com/pkg/profile\tv1.7.0\th1:hnbDkaNWPCLMO9wGLdBFTIZvzDrDfBM2072E1S9gJkA=\ndep\tgithub.com/prometheus/client_golang\tv1.23.2\th1:Je96obch5RDVy3FDMndoUsjAhG5Edi49h0RJWRi/o0o=\ndep\tgithub.com/prometheus/client_model\tv0.6.2\th1:oBsgwpGs7iVziMvrGhE53c/GrLUsZdHnqNwqPLxwZyk=\ndep\tgithub.com/prometheus/common\tv0.67.5\th1:pIgK94WWlQt1WLwAC5j2ynLaBRDiinoAb86HZHTUGI4=\ndep\tgithub.com/prometheus/procfs\tv0.20.1\th1:XwbrGOIplXW/AU3YhIhLODXMJYyC1isLFfYCsTEycfc=\ndep\tgithub.com/prometheus/statsd_exporter\tv0.29.0\th1:2iaiBLpAg/WcdW4nF0UTQfjCE2DXD+1NVnCM1ulPKd8=\ndep\tgithub.com/rcrowley/go-metrics\tv0.0.0-20250401214520-65e299d6c5c9\th1:bsUq1dX0N8AOIL7EB/X911+m4EHsnWEHeJ0c+3TTBrg=\ndep\tgithub.com/rs/xid\tv1.6.0\th1:fV591PaemRlL6JfRxGDEPl69wICngIQ3shQtzfy2gxU=\ndep\tgithub.com/ryanuber/go-glob\tv1.0.0\th1:iQh3xXAumdQ+4Ufa5b25cRpC5TYKlno6hsv6Cb3pkBk=\ndep\tgithub.com/sagikazarmark/locafero\tv0.12.0\th1:/NQhBAkUb4+fH1jivKHWusDYFjMOOKU88eegjfxfHb4=\ndep\tgithub.com/snissn/compress\tv1.18.2-snissn.0.0.20261014112447-88a027b09341\th1:brG2Yps8frK2s7mVF9Lz+N3ettUty+hcX2y3vAyEMUw=\ndep\tgithub.com/snissn/go-crc32-asm\tv0.0.0-20260522204125-08945951423a\th1:uqSq50AAT36ZzDiRApq8GNsbeJASPaneZ6aKfw3KShc=\ndep\tgithub.com/snissn/gomap\tv0.6.2-0.20261023204715-29a2fdf153ce\th1:Y85xjKKdrqj5UXLCzYCuVzYXbk0oDGf8zVBwqowuxrs=\ndep\tgithub.com/soheilhy/cmux\tv0.1.5\th1:jjzc5WVemNEDTLwv9tlmemhC73tI08BNOIGwBOo10Js=\ndep\tgithub.com/spf13/afero\tv1.15.0\th1:b/YBCLWAJdFWJTN9cLhiXXcD7mzKn9Dm86dNnfyQw1I=\ndep\tgithub.com/spf13/cast\tv1.10.0\th1:h2x0u2shc1QuLHfxi+cTJvs30+ZAHOGRic8uyGTDWxY=\ndep\tgithub.com/spf13/cobra\tv1.10.2\th1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=\ndep\tgithub.com/spf13/pflag\tv1.0.10\th1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=\ndep\tgithub.com/spf13/viper\tv1.21.0\th1:x5S+0EU27Lbphp4UKm1C+1oQO+rKx36vfCoaVebLFSU=\ndep\tgithub.com/subosito/gotenv\tv1.6.0\th1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8=\ndep\tgithub.com/tidwall/btree\tv1.8.1\th1:27ehoXvm5AG/g+1VxLS1SD3vRhp/H7LuEfwNvddEdmA=\ndep\tgithub.com/tinylib/msgp\tv1.6.4\th1:mOwYbyYDLPj35mkA2BjjYejgJk9BuHxDdvRnb6v2ZcQ=\ndep\tgithub.com/twpayne/go-geom\tv1.6.1\th1:iLE+Opv0Ihm/ABIcvQFGIiFBXd76oBIar9drAwHFhR4=\ndep\tgithub.com/viterin/partial\tv1.1.0\th1:iH1l1xqBlapXsYzADS1dcbizg3iQUKTU1rbwkHv/80E=\ndep\tgithub.com/viterin/vek\tv0.4.3\th1:cogdlNjd6EJYtNbmTN0lJCey2htrfSo1AHWpc6DVncQ=\ndep\tgithub.com/xdg/scram\tv1.0.5\th1:TuS0RFmt5Is5qm9Tm2SoD89OPqe4IRiFtyFY4iwWXsw=\ndep\tgithub.com/xdg/stringprep\tv1.0.3\th1:cmL5Enob4W83ti/ZHuZLuKD/xqJfus4fVPwE+/BDm+4=\ndep\tgithub.com/yosida95/uritemplate/v3\tv3.0.2\th1:Ed3Oyj9yrmi9087+NczuL5BwkIc4wvTb5zIM+UJPGz4=\ndep\tgithub.com/zeebo/xxh3\tv1.1.0\th1:s7DLGDK45Dyfg7++yxI0khrfwq9661w9EN78eP/UZVs=\ndep\tgo.etcd.io/etcd/raft/v3\tv3.5.29\th1:QKCFMI5JnDxa+0OQuqnDZcArm3Y1ovmWPXoNym7NjK0=\ndep\tgo.opencensus.io\tv0.24.0\th1:y73uSU6J157QMP2kn2r30vwW1A2W2WFwSCGnAVxeaD0=\ndep\tgo.opentelemetry.io/auto/sdk\tv1.2.1\th1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=\ndep\tgo.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc\tv0.68.0\th1:0Qx7VGBacMm9ZENQ7TnNObTYI4ShC+lHI16seduaxZo=\ndep\tgo.opentelemetry.io/contrib/zpages\tv0.68.0\th1:H5yrUwxPrbvhzdBxjQD+VXMtPjIBfp8NWNVvQT8E30M=\ndep\tgo.opentelemetry.io/otel\tv1.43.0\th1:mYIM03dnh5zfN7HautFE4ieIig9amkNANT+xcVxAj9I=\ndep\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace\tv1.43.0\th1:88Y4s2C8oTui1LGM6bTWkw0ICGcOLCAI5l6zsD1j20k=\ndep\tgo.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp\tv1.43.0\th1:3iZJKlCZufyRzPzlQhUIWVmfltrXuGyfjREgGP3UUjc=\ndep\tgo.opentelemetry.io/otel/metric\tv1.43.0\th1:d7638QeInOnuwOONPp4JAOGfbCEpYb+K6DVWvdxGzgM=\ndep\tgo.opentelemetry.io/otel/sdk\tv1.43.0\th1:pi5mE86i5rTeLXqoF/hhiBtUNcrAGHLKQdhg4h4V9Dg=\ndep\tgo.opentelemetry.io/otel/trace\tv1.43.0\th1:BkNrHpup+4k4w+ZZ86CZoHHEkohws8AY+WTX09nk+3A=\ndep\tgo.opentelemetry.io/proto/otlp\tv1.10.0\th1:IQRWgT5srOCYfiWnpqUYz9CVmbO8bFmKcwYxpuCSL2g=\ndep\tgo.uber.org/multierr\tv1.11.0\th1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=\ndep\tgo.uber.org/zap\tv1.28.0\th1:IZzaP1Fv73/T/pBMLk4VutPl36uNC+OSUh3JLG3FIjo=\ndep\tgo.yaml.in/yaml/v2\tv2.4.4\th1:tuyd0P+2Ont/d6e2rl3be67goVK4R6deVxCUX5vyPaQ=\ndep\tgo.yaml.in/yaml/v3\tv3.0.4\th1:tfq32ie2Jv2UxXFdLJdh3jXuOzWiL1fo0bu/FbuKpbc=\ndep\tgolang.org/x/crypto\tv0.52.0\th1:RMs7fP2rXdep0CftQlK8Uf+kibLm7qkCcradZWYz988=\ndep\tgolang.org/x/exp\tv0.0.0-20260410095643-746e56fc9e2f\th1:W3F4c+6OLc6H2lb//N1q4WpJkhzJCK5J6kUi1NTVXfM=\ndep\tgolang.org/x/net\tv0.55.0\th1:bcvxaJn3e1U6InsFWt1JUq1aSjnRxLzT2rtD2KfkDF8=\ndep\tgolang.org/x/sync\tv0.20.0\th1:e0PTpb7pjO8GAtTs2dQ6jYa5BWYlMuX047Dco/pItO4=\ndep\tgolang.org/x/sys\tv0.45.0\th1:dO4czNzziLiiXplLQgBCEpCvXQ3dnkn0SdaZSYdQ+FY=\ndep\tgolang.org/x/term\tv0.43.0\th1:S4RLU2sB31O/NCl+zFN9Aru9A/Cq2aqKpTZJ6B+DwT4=\ndep\tgolang.org/x/text\tv0.37.0\th1:Cqjiwd9eSg8e0QAkyCaQTNHFIIzWtidPahFWR83rTrc=\ndep\tgolang.org/x/time\tv0.15.0\th1:bbrp8t3bGUeFOx08pvsMYRTCVSMk89u4tKbNOZbp88U=\ndep\tgoogle.golang.org/genproto/googleapis/api\tv0.0.0-20260427160629-7cedc36a6bc4\th1:yOzSCGPx+cp5VO7IxvZ9SBFF7j1tZVcNtlHR2iYKtVo=\ndep\tgoogle.golang.org/genproto/googleapis/rpc\tv0.0.0-20260427160629-7cedc36a6bc4\th1:tEkOQcXgF6dH1G+MVKZrfpYvozGrzb91k6ha7jireSM=\ndep\tgoogle.golang.org/grpc\tv1.80.0\th1:Xr6m2WmWZLETvUNvIUmeD5OAagMw3FiKmMlTdViWsHM=\ndep\tgoogle.golang.org/protobuf\tv1.36.11\th1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=\ndep\tgopkg.in/yaml.v3\tv3.0.1\th1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=\nbuild\t-buildmode=exe\nbuild\t-compiler=gc\nbuild\tCGO_ENABLED=1\nbuild\tCGO_CFLAGS=\nbuild\tCGO_CPPFLAGS=\nbuild\tCGO_CXXFLAGS=\nbuild\tCGO_LDFLAGS=\nbuild\tGOARCH=amd64\nbuild\tGOOS=linux\nbuild\tGOAMD64=v1\nbuild\tvcs=git\nbuild\tvcs.revision=bad4ced2c88e15076f73e3647a72e965f63be2b9\nbuild\tvcs.time=2026-10-24T03:03:43Z\nbuild\tvcs.modified=false\n",
+    "dgraph_sha": "bad4ced2c88e15076f73e3647a72e965f63be2b9",
+    "gomap_version": "v0.6.2-0.20261023204715-29a2fdf153ce",
+    "dirty": false,
+    "go_version": "go1.26.9",
+    "host": "mikers-MS-7E71",
+    "kernel": "Linux 7.0.0-30-generic #30-Ubuntu SMP PREEMPT_DYNAMIC Fri Jul 31 18:22:54 UTC 2026 x86_64 GNU/Linux",
+    "cpu": "AMD Ryzen 7 9700X 8-Core Processor",
+    "total_ram_bytes": 32109105152,
+    "storage": {
+      "scope": "artifact_and_posting",
+      "source": "/dev/nvme1n1p2",
+      "model": "Samsung SSD 990 EVO 2TB",
+      "size_bytes": 2000398934016,
+      "filesystem": "ext4",
+      "mountpoint": "/"
+    },
+    "environment": {
+      "GOFLAGS": "-p=2",
+      "GOMAXPROCS": "2",
+      "GOWORK": "off",
+      "TMPDIR": "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/tmp"
+    },
+    "exact_command": [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/bin/livebench",
+      "--survive",
+      "process",
+      "--treedb-durable-policy",
+      "store_wal",
+      "--require-treedb-memtable",
+      "cow_ordered",
+      "--dgraph-bin",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/bin/dgraph",
+      "--artifact-dir",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/live/treedb-durable-r1",
+      "--backend",
+      "treedb",
+      "--durability",
+      "durable",
+      "--repeat",
+      "1",
+      "--dataset-nodes",
+      "500",
+      "--warmup-ops",
+      "100",
+      "--timed-ops",
+      "2000",
+      "--concurrency",
+      "4",
+      "--zero-port-offset",
+      "23302",
+      "--alpha-port-offset",
+      "23342"
+    ],
+    "raw_path": "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/live/treedb-durable-r1/result.json",
+    "contaminants": null,
+    "excluded": false
+  },
+  "setup_started": "2026-10-24T03:24:11.989038626Z",
+  "setup_finished": "2026-10-24T03:24:13.586215886Z",
+  "timed_started": "2026-10-24T03:24:13.602944906Z",
+  "timed_finished": "2026-10-24T03:24:19.634752152Z",
+  "throughput_ops_s": 331.57558231428936,
+  "latency_ms": {
+    "p50": 11.373,
+    "p95": 29.276,
+    "p99": 39.31
+  },
+  "metrics": {
+    "checkpoints": {
+      "available": true,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store"
+    },
+    "cpu_seconds": {
+      "available": true,
+      "value": 0.6000000000000001,
+      "unit": "seconds",
+      "source": "/proc alpha utime+stime"
+    },
+    "disk_allocated_bytes": {
+      "available": true,
+      "value": 4866048,
+      "unit": "bytes",
+      "source": "posting directory stat blocks"
+    },
+    "disk_logical_bytes": {
+      "available": true,
+      "value": 4821840,
+      "unit": "bytes",
+      "source": "posting directory walk"
+    },
+    "flushes": {
+      "available": true,
+      "value": 38,
+      "unit": "count",
+      "source": "TreeDB /debug/store"
+    },
+    "gc_cycles": {
+      "available": true,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store"
+    },
+    "recovery_read_seconds": {
+      "available": true,
+      "value": 4.351672999,
+      "unit": "seconds",
+      "source": "alpha restart through runtime witness and fresh full posting validation"
+    },
+    "recovery_read_write_seconds": {
+      "available": true,
+      "value": 4.4449319,
+      "unit": "seconds",
+      "source": "alpha restart through full posting validation, new CommitNow ACK and fresh read of committed probe"
+    },
+    "recovery_seconds": {
+      "available": true,
+      "value": 1.5077241,
+      "unit": "seconds",
+      "source": "alpha process restart to healthy"
+    },
+    "rss_peak_bytes": {
+      "available": true,
+      "value": 1076535296,
+      "unit": "bytes",
+      "source": "/proc alpha VmHWM"
+    },
+    "treedb_command_wal_append_point_calls": {
+      "available": true,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.append.point.count_total"
+    },
+    "treedb_command_wal_file_syncs": {
+      "available": true,
+      "value": 1085,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.file_sync.calls_total"
+    },
+    "treedb_group_commit_commits": {
+      "available": true,
+      "value": 38,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.group_commit.commits_total"
+    },
+    "treedb_group_commit_group_size_max": {
+      "available": true,
+      "value": 8,
+      "unit": "count",
+      "source": "TreeDB /debug/store process-lifetime high-water: treedb.command_wal.group_commit.group_size_max"
+    },
+    "treedb_group_commit_groups": {
+      "available": true,
+      "value": 5,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.group_commit.groups_total"
+    },
+    "treedb_group_commit_participants": {
+      "available": true,
+      "value": 38,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.group_commit.participants_total"
+    },
+    "treedb_group_commit_syncs": {
+      "available": true,
+      "value": 4,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.command_wal.group_commit.syncs_total"
+    },
+    "treedb_iterator_snapshot_rotations": {
+      "available": true,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.iterator.snapshot_rotations_total"
+    },
+    "treedb_leaf_log_segment_rotations": {
+      "available": true,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.leaf_log_lanes.segment_rotations_total"
+    },
+    "treedb_point_successor_calls": {
+      "available": true,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.point_successor.calls_total"
+    },
+    "treedb_point_successor_sources": {
+      "available": true,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.point_successor.sources_total"
+    },
+    "treedb_point_successor_sources_max": {
+      "available": true,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store process-lifetime high-water: treedb.cache.point_successor.sources_max"
+    },
+    "treedb_public_batch_write_calls": {
+      "available": true,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.public.batch.write.calls_total"
+    },
+    "treedb_public_batch_write_sync_calls": {
+      "available": true,
+      "value": 1118,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.public.batch.write_sync.calls_total"
+    },
+    "treedb_value_log_file_syncs": {
+      "available": true,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.value_log.file_sync.calls_total"
+    },
+    "treedb_value_log_syncs": {
+      "available": true,
+      "value": 0,
+      "unit": "count",
+      "source": "TreeDB /debug/store timed-phase delta: treedb.cache.value_log.sync.calls_total"
+    },
+    "write_amplification": {
+      "available": false,
+      "value": 0,
+      "unit": "ratio",
+      "source": "backend diagnostics",
+      "reason": "equivalent physical write-byte counter unavailable or logical write bytes zero"
+    },
+    "write_bytes": {
+      "available": true,
+      "value": 167187,
+      "unit": "bytes",
+      "source": "TreeDB /debug/store public batch set bytes"
+    }
+  },
+  "validation": {
+    "runtime": [
+      {
+        "process": "zero",
+        "phase": "startup",
+        "pid": 3279531,
+        "command": [
+          "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/bin/dgraph",
+          "zero",
+          "--wal",
+          "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/live/treedb-durable-r1/cluster/zw",
+          "--replicas=1",
+          "--port_offset=23302",
+          "--survive=process"
+        ],
+        "survival_mode": "process",
+        "hard_sync": false,
+        "config_witness": "I1023 17:24:06.381135 3279531 run.go:234] x.WorkerConfig: {TmpDir: ExportPath: MyAddr: ZeroAddr:[] Raft: WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:\u003cnil\u003e AclPublicKey:**** AbortOlderThan:0s ProposedGroupId:0 StartTime:0001-01-01 00:00:00 +0000 UTC Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:false Audit:false}",
+        "config_log_sha256": "2336104577ff6158e9cda6d8bb4351e147a99072b86fbf1d1b96cef589185f24"
+      },
+      {
+        "process": "alpha",
+        "phase": "startup",
+        "pid": 3279539,
+        "command": [
+          "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/bin/dgraph",
+          "alpha",
+          "--zero",
+          "localhost:28382",
+          "--postings",
+          "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/live/treedb-durable-r1/cluster/p",
+          "--wal",
+          "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/live/treedb-durable-r1/cluster/w",
+          "--port_offset=23342",
+          "--posting-store",
+          "backend=treedb; tier=benchmark_minimal; durability=durable; events=true",
+          "--badger",
+          "syncwrites=false",
+          "--survive=process"
+        ],
+        "survival_mode": "process",
+        "hard_sync": false,
+        "config_witness": "I1023 17:24:06.628927 3279539 run.go:830] x.WorkerConfig: {TmpDir:t ExportPath:export MyAddr: ZeroAddr:[localhost:28382] Raft:learner=false; snapshot-after-entries=10000; snapshot-after-duration=30m; pending-proposals=256; idx=; group= WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:\u003cnil\u003e AclPublicKey:**** AbortOlderThan:5m0s ProposedGroupId:0 StartTime:2026-10-23 17:24:06.519605007 -1000 HST m=+0.062058444 Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:false Audit:false}",
+        "config_log_sha256": "79283ff9bd1cfe9189c24fcfe9160722c1d25adc6138b8e719f6c3202d875310",
+        "store_witness_sha256": "43798fdc98dd4cdc510031467e845a65573c57f6e9bb8bffca573fc8b4fca370",
+        "backend": "treedb",
+        "durability": "wal_on_sync",
+        "memtable": "cow_ordered"
+      },
+      {
+        "process": "zero",
+        "phase": "after_alpha_restart",
+        "pid": 3279531,
+        "command": [
+          "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/bin/dgraph",
+          "zero",
+          "--wal",
+          "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/live/treedb-durable-r1/cluster/zw",
+          "--replicas=1",
+          "--port_offset=23302",
+          "--survive=process"
+        ],
+        "survival_mode": "process",
+        "hard_sync": false,
+        "config_witness": "I1023 17:24:06.381135 3279531 run.go:234] x.WorkerConfig: {TmpDir: ExportPath: MyAddr: ZeroAddr:[] Raft: WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:\u003cnil\u003e AclPublicKey:**** AbortOlderThan:0s ProposedGroupId:0 StartTime:0001-01-01 00:00:00 +0000 UTC Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:false Audit:false}",
+        "config_log_sha256": "d9ee5e17dd47c2d2ec73f9f7b86943e3aaccc2d62096f11b1f0a78fd81094ce0"
+      },
+      {
+        "process": "alpha",
+        "phase": "after_alpha_restart",
+        "pid": 3279886,
+        "command": [
+          "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/bin/dgraph",
+          "alpha",
+          "--zero",
+          "localhost:28382",
+          "--postings",
+          "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/live/treedb-durable-r1/cluster/p",
+          "--wal",
+          "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12/live/treedb-durable-r1/cluster/w",
+          "--port_offset=23342",
+          "--posting-store",
+          "backend=treedb; tier=benchmark_minimal; durability=durable; events=true",
+          "--badger",
+          "syncwrites=false",
+          "--survive=process"
+        ],
+        "survival_mode": "process",
+        "hard_sync": false,
+        "config_witness": "I1023 17:24:20.029189 3279886 run.go:830] x.WorkerConfig: {TmpDir:t ExportPath:export MyAddr: ZeroAddr:[localhost:28382] Raft:learner=false; snapshot-after-entries=10000; snapshot-after-duration=30m; pending-proposals=256; idx=; group= WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:\u003cnil\u003e AclPublicKey:**** AbortOlderThan:5m0s ProposedGroupId:0 StartTime:2026-10-23 17:24:19.913289663 -1000 HST m=+0.061960953 Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:false Audit:false}",
+        "config_log_sha256": "682a69a1ef4d25fa5c095c2b840ca0170e235631259054b431b4e946e73d27b3",
+        "store_witness_sha256": "f7bd83d2d2d81474c553209a9d50b91789ea62a4214a8a0bafd9431fb96032c5",
+        "backend": "treedb",
+        "durability": "wal_on_sync",
+        "memtable": "cow_ordered"
+      }
+    ],
+    "backend_observed": "treedb",
+    "durability_observed": "wal_on_sync",
+    "schema_ok": true,
+    "posting_checksum": "2e08caad769d3f0f221ddeaaa36e528ae1b4764fefdc27df3913a788474074d8",
+    "node_count": 920,
+    "restart_ok": true,
+    "unsupported_ok": true
+  }
+}

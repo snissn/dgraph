@@ -1,0 +1,33 @@
+File: dgraph
+Build ID: ed90a0fb58e86d2febaa35a68749418fb94e3af4
+Type: cpu
+Time: 2026-10-23 17:53:45 HST
+Duration: 5s, Total samples = 600ms (12.00%)
+Showing nodes accounting for 450ms, 75.00% of 600ms total
+Showing top 25 nodes out of 297
+      flat  flat%   sum%        cum   cum%
+     120ms 20.00% 20.00%      120ms 20.00%  internal/runtime/syscall/linux.Syscall6
+      40ms  6.67% 26.67%       40ms  6.67%  runtime.memclrNoHeapPointers
+      30ms  5.00% 31.67%       80ms 13.33%  runtime.newobject
+      20ms  3.33% 35.00%       20ms  3.33%  internal/runtime/atomic.(*Uint32).CompareAndSwap
+      20ms  3.33% 38.33%       90ms 15.00%  runtime.mallocgc
+      20ms  3.33% 41.67%       70ms 11.67%  runtime.mallocgcSmallScanNoHeader
+      20ms  3.33% 45.00%       20ms  3.33%  runtime.nextFreeFast (inline)
+      10ms  1.67% 46.67%       10ms  1.67%  context.(*cancelCtx).propagateCancel
+      10ms  1.67% 48.33%       10ms  1.67%  context.WithValue
+      10ms  1.67% 50.00%       10ms  1.67%  fmt.newPrinter
+      10ms  1.67% 51.67%       20ms  3.33%  github.com/dgraph-io/dgraph/v25/query.newGraph
+      10ms  1.67% 53.33%       10ms  1.67%  github.com/dgraph-io/dgraph/v25/query.treeCopy
+      10ms  1.67% 55.00%       10ms  1.67%  github.com/dgraph-io/dgraph/v25/x.DivideAndRule
+      10ms  1.67% 56.67%       10ms  1.67%  github.com/dgraph-io/dgraph/v25/x.SpanTimer
+      10ms  1.67% 58.33%       10ms  1.67%  github.com/snissn/gomap/TreeDB/caching.(*Batch).admitCOWAccepted
+      10ms  1.67% 60.00%       10ms  1.67%  github.com/snissn/gomap/TreeDB/internal/mvccadmission.LogicalInput.matches
+      10ms  1.67% 61.67%       10ms  1.67%  github.com/snissn/gomap/TreeDB/internal/rootpublication.(*Coordinator).AcceptedError
+      10ms  1.67% 63.33%       10ms  1.67%  go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc.serverAddrAttrs
+      10ms  1.67% 65.00%       10ms  1.67%  go.opentelemetry.io/otel/attribute.newSet
+      10ms  1.67% 66.67%       20ms  3.33%  go.opentelemetry.io/otel/baggage.Baggage.String
+      10ms  1.67% 68.33%       10ms  1.67%  google.golang.org/protobuf/internal/encoding/text.(*Encoder).prepareNext
+      10ms  1.67% 70.00%       10ms  1.67%  internal/poll.(*fdMutex).rwlock
+      10ms  1.67% 71.67%       10ms  1.67%  internal/strconv.formatBits
+      10ms  1.67% 73.33%       20ms  3.33%  runtime.(*mcache).refill
+      10ms  1.67% 75.00%       30ms  5.00%  runtime.findRunnable

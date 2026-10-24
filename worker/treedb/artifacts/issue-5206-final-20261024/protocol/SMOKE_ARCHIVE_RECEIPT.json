@@ -1,0 +1,15 @@
+{
+  "archive": "SMOKE_EVIDENCE.tar",
+  "bytes": 2068480,
+  "sha256": "7c2750f542e631edfb0ab58464107d3bc29ca492982d273871d34fa2afa77199",
+  "files": 89,
+  "scope": "POSTMERGE_SMOKE_AND_SOURCE_BINDING_ONLY",
+  "qualification": null,
+  "actual_server_sha256": "46763a6bfcd02c37a44fb36e8c866dd7bbf7e2ca9777ad0a0aefb1ada9325175",
+  "rows": [
+    "smoke/matrix/live/badger-durable-r1/result.json",
+    "smoke/matrix/live/badger-relaxed-r1/result.json",
+    "smoke/matrix/live/treedb-durable-r1/result.json",
+    "smoke/matrix/live/treedb-relaxed-r1/result.json"
+  ]
+}

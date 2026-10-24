@@ -1,0 +1,12 @@
+{
+  "authority": "user",
+  "instruction": "override the qualification - 111 is fine to test on now",
+  "recorded_utc": "2026-10-24T00:52:36.563043+00:00",
+  "host": "mikers@192.168.0.111",
+  "scope": "physical_host_quiet_admission_and_finalization_only",
+  "physical_host_quiet_is_blocking": false,
+  "original_failed_capture_preserved": true,
+  "guest_observer_and_workloads_unchanged": true,
+  "numeric_and_correctness_thresholds_unchanged": true,
+  "no_unrelated_process_or_service_changes": true
+}

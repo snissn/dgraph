@@ -1,0 +1,82 @@
+{
+  "status": "ACTUAL_FINAL_BASELINE_ARCHIVE_BIND_VERIFIED",
+  "candidate_raw": {
+    "path": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/microbench/raw.stdout",
+    "sha256": "0667f0c5ed6a9284550d675e017adc5c20ca404b27c65de9943216c69508c61a",
+    "cells": 28,
+    "samples": 140
+  },
+  "benchmark_sources": {
+    "original_dgraph": "b87e967bc3c18d4c609e652d79c7ccb8e94ace1b",
+    "merged_candidate": "bad4ced2c88e15076f73e3647a72e965f63be2b9",
+    "identical_file_sha256": {
+      "posting/treedb_store_bench_test.go": "f209b121e0fb49196e4b8df99a628cdf45a07aa7cb619ffd6d77a1e9a3190405",
+      "posting/store_bench_test.go": "e6f4255ebf0d07c3416bc202b9a56b5d9551e2f8a49dfcd9a6a2cc3fef2bfaea",
+      "posting/commit_events_bench_test.go": "2afcdfa6c3f2cc4786b9aee782b374292e8b67c3edc564681d507b02b9991d63",
+      "posting/commit_events_test.go": "b88ced4ccd52e342c4cf7c7db9c3753d957dd3f4d0923b2f8211ac0773d84169"
+    }
+  },
+  "accepted_baseline_patch_sha256": "4aa5b3d0164f02b512877a5c37094ab51da17c7d812575f1c7466d1d99a2ea46",
+  "parser_sha256": "c4475fd7c3865f84c97ca4eede625ebd1e8d1f6470da9994fe443f775d770231",
+  "review_sha256": "698224037386368ed5ad705597232842644dd6838457b2a53cc31efd4b860c13",
+  "validation": "Python AST parse and one completed retained-log parser invocation; 280 samples conserved; no Go/build/workload/SSH/GitHub action",
+  "baseline_preview": {
+    "path": "/mnt/fast4tb/gomap-raft-production-20261023T0744Z/artifacts/final-native111-runtime-01/baseline-micro-preview/raw.txt",
+    "sha256": "aa6be31e723d072e86ec7d5cf746c8ef6571862fda8c302667f1e13d7fd113ca",
+    "cells": 28,
+    "samples": 140,
+    "full_arm_archive_binding": "VERIFIED_BYTE_IDENTICAL"
+  },
+  "parser_execution": "One artifact-only retained-log comparison; no benchmark or Go process",
+  "comparison_outputs": {
+    "final-micro-comparison-01.json": "f8f0801d92b4edb2d81a26ffa71f355b88bf6b8cce07fc8187d4dcb0af0311bf",
+    "final-micro-comparison-01.md": "e19201961b25d51c1a8b350b0b977e374c7f9db993bfc7f359451482e537df18"
+  },
+  "activation_source": {
+    "fc3c3db97ec2954d47a1adf731d501e7b73f181f": {
+      "TreeDB/profiles.go": {
+        "file_sha256": "60e637ca9ad0493f5ebac36bf49ed18bbc2b4fe04c93aadbca25004e675c9742",
+        "first_line": 278,
+        "excerpt": "func OptionsFor(profile Profile, dir string) Options {\n\topts := Options{Dir: dir}\n\tApplyProfile(&opts, profile)\n\treturn opts\n}"
+      },
+      "TreeDB/public.go": {
+        "file_sha256": "a1f2c1f6a98e186d5b9cf7fe37fa39389aed1144eb8ebc1bddf589be60a88549",
+        "first_line": 1130,
+        "excerpt": "\tif opts.MemtableMode == \"\" {\n\t\topts.MemtableMode = \"adaptive\"\n\t}"
+      },
+      "TreeDB/caching/db.go": {
+        "file_sha256": "96d756f469cb775b8dc0a26556902c6459f71ebd53151279f6cab4e2d8af5b0b",
+        "first_line": 12572,
+        "excerpt": "\tmodeStr := opts.MemtableMode\n\tif modeStr == \"\" {\n\t\tmodeStr = \"adaptive\"\n\t}\n\tadaptive := false\n\tif modeStr == \"adaptive\" || modeStr == \"auto\" {\n\t\tadaptive = true\n\t\tmodeStr = \"append_only\"\n\t} else if strings.HasPrefix(modeStr, \"adaptive:\") {\n\t\tadaptive = true\n\t\tmodeStr = strings.TrimPrefix(modeStr, \"adaptive:\")\n\t}"
+      }
+    },
+    "29a2fdf153ce6e214abf9502d7970de727a38967": {
+      "TreeDB/profiles.go": {
+        "file_sha256": "60e637ca9ad0493f5ebac36bf49ed18bbc2b4fe04c93aadbca25004e675c9742",
+        "first_line": 278,
+        "excerpt": "func OptionsFor(profile Profile, dir string) Options {\n\topts := Options{Dir: dir}\n\tApplyProfile(&opts, profile)\n\treturn opts\n}"
+      },
+      "TreeDB/public.go": {
+        "file_sha256": "85c30f169b8e4690bda9c617900fc7e365926369aed94c77ef16719fa0123e3b",
+        "first_line": 1152,
+        "excerpt": "\tif opts.MemtableMode == \"\" {\n\t\topts.MemtableMode = \"adaptive\"\n\t}"
+      },
+      "TreeDB/caching/db.go": {
+        "file_sha256": "b16fb2e89a3746044a18fde3462d1d9aea9d5d26843d0ec5729297d7658e0ad1",
+        "first_line": 12609,
+        "excerpt": "\tmodeStr := opts.MemtableMode\n\tif modeStr == \"\" {\n\t\tmodeStr = \"adaptive\"\n\t}\n\tadaptive := false\n\tif modeStr == \"adaptive\" || modeStr == \"auto\" {\n\t\tadaptive = true\n\t\tmodeStr = \"append_only\"\n\t} else if strings.HasPrefix(modeStr, \"adaptive:\") {\n\t\tadaptive = true\n\t\tmodeStr = strings.TrimPrefix(modeStr, \"adaptive:\")\n\t}"
+      }
+    }
+  },
+  "prior_archive_pending_bindings_sha256": "04e61808f28bdc9fcc5ea8dacb8225673ca6ce5cb5b65b532f6ecdb9f0e1f45a",
+  "final_archive_binding": {
+    "archive_sha256": "8c84c738db0119e90dacef38663222144e80edcf549b81e8049b79dc7da993e9",
+    "members_verified": 161,
+    "selected_hashes_verified": 160,
+    "preview_byte_identical": true,
+    "final_micro_sha256": "aa6be31e723d072e86ec7d5cf746c8ef6571862fda8c302667f1e13d7fd113ca",
+    "source_manifest_sha256": "7dcaa8e87a9b1a772eb7094d675f85dc4211c1aa0e66f67ab502f5538a4ff445",
+    "audit_path": "baseline-evidence/BASELINE_ARM_AUDIT.md",
+    "audit_sha256": "8b48326647a50db6facd9ade6c0b7bc202e757b2ebd1173866f56ab62ce66bfb"
+  }
+}

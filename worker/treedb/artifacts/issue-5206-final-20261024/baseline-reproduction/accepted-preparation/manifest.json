@@ -1,0 +1,208 @@
+{
+  "status": "PREPARED_UNBUILT_UNEXECUTED",
+  "dgraph_base": "b87e967bc3c18d4c609e652d79c7ccb8e94ace1b",
+  "dgraph_base_tree": "2fe1590d92f6236466376988dd6db69004d47c1a",
+  "gomap_base": "fc3c3db97ec2954d47a1adf731d501e7b73f181f",
+  "gomap_base_tree": "c202dbc8cbcfc85b929845433c322cc012168d39",
+  "tooling_source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c",
+  "expected_adapted_tree": "0ba5d97bc1d9c71f37b04c8e4b067ed6aee540e2",
+  "patch_sha256": "4aa5b3d0164f02b512877a5c37094ab51da17c7d812575f1c7466d1d99a2ea46",
+  "files": [
+    {
+      "path": "dgraph/cmd/zero/run.go",
+      "role": "resolved-Zero-witness",
+      "mode": "100644",
+      "base_sha256": "75133ca55da82bc59c20e103e83acf9e08ffd7bfe9b575f68b585eb03b8f0606",
+      "adapted_sha256": "fc6e30b4edbedbbb4997b5067cc22a9dda2293923e0d86fe91adaca434d5000f",
+      "git_blob": "46678d1336e91038acf5d988f2da4486182c7264",
+      "changed": true,
+      "source": "b87e967bc3c18d4c609e652d79c7ccb8e94ace1b plus exact accepted witness"
+    },
+    {
+      "path": "worker/server_state.go",
+      "role": "historical-selector-witness",
+      "mode": "100644",
+      "base_sha256": "edd0f050c6f2ee4cf5f2951180b5beb68be0eebf3bead7dfbcbfee14bc66e1a6",
+      "adapted_sha256": "06060d3ed4ee3247b421cee563795fc81ca63c54cc2751a72a75e17ce41f8d3d",
+      "git_blob": "b502bde56ce6dfdefc0f856b71c2adbf75a21f0d",
+      "changed": true,
+      "source": "b87e967bc3c18d4c609e652d79c7ccb8e94ace1b plus exact accepted witness"
+    },
+    {
+      "path": "worker/treedb/LIVE_DURABILITY_AB.md",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": "dfe49a4ef8772025e261c4f9b87ffbef24ab9f763b3a8b2996712ccbb82ee7e5",
+      "adapted_sha256": "17fc393420e4fb2e9b5bb66695f806c469a06e3bb8d025c49b4140550252b858",
+      "git_blob": "1425701b1f4c1af66dacfa630157f703da1aabed",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/cmd/main.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": "da2059fac5255463b8b08100ce8c38523b1e33ba28c6f1d43eb4fe29125c1f77",
+      "adapted_sha256": "1ab78fba06505a6d984c108bab2d808386895472e0e05c204a9b5e4f084d0459",
+      "git_blob": "03e010a4ebec3905055175ccae3a46bf05265cfc",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/cmd/main_test.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": "6167c52009d8765729cdcd832ade2ad5392cc13ae57daea867785aa9c35a2a83",
+      "adapted_sha256": "c14b615ee05d6c5ea845455b2c93b1a125699bcf39534e248acd6dd442d71478",
+      "git_blob": "303c9243d2e77f1060be7863e1e79e1f312e7aaf",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/cmd/memory_diagnostic.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": null,
+      "adapted_sha256": "60773f7050729ba518be357fabad895c8717996f469904e898814f49724e28ea",
+      "git_blob": "111236aa0382fcc910a7d26679f5fcb41cfc2389",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/cmd/memory_diagnostic_test.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": null,
+      "adapted_sha256": "e3676ae79123bab14f5f138c6207f38af793e06c811198e508e56aca1d2135dc",
+      "git_blob": "3c3c9522e36123c888bceaff1b39ec9de26e73ca",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/cmd/runtime.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": null,
+      "adapted_sha256": "a5aefe631c40c12daf6baf6e2974bf5edcbeafb6da4326eb55fbfd0b4e6f9765",
+      "git_blob": "3ba1f2f16b85dbc8bab567bc868627bdf8206e41",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/cmd/runtime_test.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": null,
+      "adapted_sha256": "75c989de5bd43118fc5fa581b3de39720a9cf309ba22b95d6b8a4c68a34835cf",
+      "git_blob": "3fc4a3e237e994e98eaa2cad6a203d515d172ea4",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/harness_test.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": "810d800e713c83418ae72de2d90ac7386f2d7e956baf65775762b5dcd455fcda",
+      "adapted_sha256": "810d800e713c83418ae72de2d90ac7386f2d7e956baf65775762b5dcd455fcda",
+      "git_blob": "0bbc4d70df641036d35f0871fcab4e4b688ad9c3",
+      "changed": false,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/report.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": "c4d30296efb7e9c7bd656424f20b3d08c79536199b14e1a977cc8aa7664b0450",
+      "adapted_sha256": "1019cb7118add7fed3d610d7c8c174a570912b6192d738800a30c2f3e32f7a13",
+      "git_blob": "dad3aeb213f000b415f138ebb1f8ececdf0e661e",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/report_test.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": "bec0d5fc3f8fdda02700478836d9bbede1e58e3d1933dbc56590a9ae446f9a2f",
+      "adapted_sha256": "38ee3b3e35673702f6cc9d0ae314785ec3b2e7c8a403f4b2daad86e335b2189c",
+      "git_blob": "f7f72c018ca0aad70af79d6132eae05298cc6a7e",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/reportcmd/main.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": "6aa7e8830c14a287ee00470d6c74d672269772e3b9921a23b4e785937f3041e4",
+      "adapted_sha256": "6aa7e8830c14a287ee00470d6c74d672269772e3b9921a23b4e785937f3041e4",
+      "git_blob": "810bd7582fd3c05adb95faad31cf1f0251c52c65",
+      "changed": false,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/result.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": "bdf03fa957ac0de44f1da44ffab655a710b53151920285afc1c1e5c83aa0ee3e",
+      "adapted_sha256": "884e03d6b9d2c86f0b1b67a36463533de09c71931403e6b4a37714122e084961",
+      "git_blob": "4f2181ad0665061d58155c2f89fa041fcea8a6f0",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/result_test.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": "dddabc4d04010decf416ce53ab36598a9b0ed706e5db278c7be226c835fedda5",
+      "adapted_sha256": "5314112f82279d6c84382db5f9c4a862293b5978b806d17e6c8130d75e320ef3",
+      "git_blob": "359d5b88a9c193fc2f9e54e49bd8eddc4ddf92e4",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/runtime.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": null,
+      "adapted_sha256": "a6354b07b8ecff6c3e32e0ec111970155416e3125efc945886905f26982a5b40",
+      "git_blob": "87f64df1a08176de90f520fd95d2d02c596d174b",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/livebench/runtime_test.go",
+      "role": "current-harness-report-launcher",
+      "mode": "100644",
+      "base_sha256": null,
+      "adapted_sha256": "a469f73498ea9ba2418a07188e5d0a3f359683100927761f9db583e5558c56e0",
+      "git_blob": "ed2cecac35c9b4e0ed41d6915b81e0937bd32932",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    },
+    {
+      "path": "worker/treedb/run_durability_ab.sh",
+      "role": "current-harness-report-launcher",
+      "mode": "100755",
+      "base_sha256": "3129962fa6b847e4cfcd1058226116abc6cea23b8d94faba19b5730364d90d48",
+      "adapted_sha256": "e1faba06e36b9916bb71343fbc858c783c9cd5d3dab7a9d338b3485bf183e95b",
+      "git_blob": "3bdab6b7a822e1c858a385e6ebcdcdd6a3582d47",
+      "changed": true,
+      "source": "a8e0ab8d00b313b23ca234a379ee51510e13c41c"
+    }
+  ],
+  "module": {
+    "go_mod_original_sha256": "07d1d807409d53df40c339e921ab5548bbba76221a0a590bd33820d04b23d0be",
+    "go_sum_original_sha256": "08bc9dc32c41a00fe0e69e2e67fdb6b765b4d01c70fe08eaac9ab1ad9347654d",
+    "construction": "external modfile/sum from authentic historical build02 resolved inputs; substitute ONLY exact Gomap absolute replacement path; preserve baseline source go.mod/sum",
+    "observer": "maintained resourcewitness v1 local-replacement path; overlay/adaptation hashes additionally required",
+    "historical_resolved_sha256": {
+      "dgraph.mod": "2451777d5ad782dd95a4710e7a8d88e31746f11516e55a923173720a0c7cc094",
+      "dgraph.sum": "5951dd5a2e63c085a555bf772487031de3ca16dda6e5644e99979e5eae182b04"
+    },
+    "historical_resolution_delta": "compress87fb -> compress88a required by exact fc3c go.mod, plus local replacement; original July Gomap require label retained and is not treated as actual source identity"
+  },
+  "runtime_exceptions": [
+    "worker/server_state.go exact historical selector/witness",
+    "dgraph/cmd/zero/run.go one resolved WorkerConfig log line"
+  ],
+  "eligibility": "source-only conditional; no build, runtime witness, metric completeness or numerical qualification yet"
+}

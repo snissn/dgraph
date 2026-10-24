@@ -1,0 +1,12 @@
+{
+  "status": "PREVIEW_EXACT_BYTES_VERIFIED_AGAINST_FINAL_ARCHIVE",
+  "original_review_unchanged": true,
+  "baseline_preview_and_final_sha256": "aa6be31e723d072e86ec7d5cf746c8ef6571862fda8c302667f1e13d7fd113ca",
+  "paths": {
+    "baseline-micro-preview/raw.txt": "micro/baseline-micro-preview/raw.txt",
+    "baseline-evidence/baseline-filesystem-12/microbench/raw.txt": "arms/baseline/microbench/raw.txt",
+    "filesystem-evidence/filesystem-12/microbench/raw.stdout": "arms/filesystem/microbench/raw.stdout"
+  },
+  "final_selected_inventory_source": "arms/baseline/receipts/baseline-filesystem-12-SELECTED_FILES.json",
+  "note": "Historical review/bindings preserve their then-pending preview status; this appended receipt closes byte-identity binding only, not performance acceptance."
+}

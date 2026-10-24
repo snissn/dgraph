@@ -1,0 +1,33 @@
+File: dgraph
+Build ID: 06cc5c15adba5268572c94cc0482422ea6cb6d22
+Type: cpu
+Time: 2026-10-23 17:43:38 HST
+Duration: 5s, Total samples = 790ms (15.80%)
+Showing nodes accounting for 410ms, 51.90% of 790ms total
+Showing top 25 nodes out of 453
+      flat  flat%   sum%        cum   cum%
+     100ms 12.66% 12.66%      100ms 12.66%  internal/runtime/syscall/linux.Syscall6
+      30ms  3.80% 16.46%       30ms  3.80%  runtime.memmove
+      20ms  2.53% 18.99%       20ms  2.53%  aeshashbody
+      20ms  2.53% 21.52%       20ms  2.53%  google.golang.org/grpc/mem.(*Reader).Peek
+      20ms  2.53% 24.05%       20ms  2.53%  runtime.futex
+      20ms  2.53% 26.58%       20ms  2.53%  runtime.heapSetTypeSmallHeader
+      20ms  2.53% 29.11%       20ms  2.53%  runtime.memclrNoHeapPointers
+      10ms  1.27% 30.38%       10ms  1.27%  encoding/json.newEncodeState
+      10ms  1.27% 31.65%       10ms  1.27%  fmt.(*pp).doPrintf
+      10ms  1.27% 32.91%       10ms  1.27%  github.com/dgraph-io/dgraph/v25/dql.(*GraphQuery).expandFragments
+      10ms  1.27% 34.18%       70ms  8.86%  github.com/dgraph-io/dgraph/v25/posting.(*treeDBReadTxn).Get
+      10ms  1.27% 35.44%       10ms  1.27%  github.com/dgraph-io/dgraph/v25/query.createTaskQuery
+      10ms  1.27% 36.71%       10ms  1.27%  github.com/dgraph-io/dgraph/v25/worker.(*groupi).groupId
+      10ms  1.27% 37.97%       10ms  1.27%  github.com/dgraph-io/dgraph/v25/x.SpanTimer.func2
+      10ms  1.27% 39.24%       10ms  1.27%  github.com/snissn/gomap/TreeDB/caching.(*DB).batchArenaDeferredPressureActive
+      10ms  1.27% 40.51%       10ms  1.27%  github.com/snissn/gomap/TreeDB/caching.(*DB).beginDirectWrite
+      10ms  1.27% 41.77%       10ms  1.27%  github.com/snissn/gomap/TreeDB/db.(*DB).captureDurableRootResourcesFromBaseWithRefCountsV1
+      10ms  1.27% 43.04%       10ms  1.27%  github.com/snissn/gomap/TreeDB/db.(*leafPageReadCache).getToWithRecordPolicy
+      10ms  1.27% 44.30%       20ms  2.53%  github.com/snissn/gomap/TreeDB/internal/cowbtree.(*Map[go.shape.string,go.shape.*uint8]).searchWithWork
+      10ms  1.27% 45.57%       10ms  1.27%  github.com/snissn/gomap/TreeDB/internal/memtable.(*cowOrderedCursor).seekGE
+      10ms  1.27% 46.84%       10ms  1.27%  github.com/snissn/gomap/TreeDB/internal/memtable.(*cowOrderedRouting).prepareMetadata
+      10ms  1.27% 48.10%       10ms  1.27%  github.com/snissn/gomap/TreeDB/internal/retainedalloc.AllocationCharge
+      10ms  1.27% 49.37%       50ms  6.33%  github.com/snissn/gomap/TreeDB/tree.(*Tree).loadReadRefInto
+      10ms  1.27% 50.63%       10ms  1.27%  go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc.(*serverHandler).TagRPC
+      10ms  1.27% 51.90%       10ms  1.27%  golang.org/x/net/http2.PriorityParam.IsZero

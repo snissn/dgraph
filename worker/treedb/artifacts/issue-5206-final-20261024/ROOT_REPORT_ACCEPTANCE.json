@@ -1,0 +1,53 @@
+{
+  "accepted_utc": "2026-10-24T04:09:09.779799+00:00",
+  "owner": "root/coordinator",
+  "node": "snissn/gomap#5206",
+  "deliverable": "Normalized source-bound report, complete original samples and explicit promotion/STOP decision on immutable evidence-only issue branch",
+  "acceptance": "ACCEPTED_COMPLETED_STOP_EVIDENCE_ONLY",
+  "whole_campaign_qualification": "STOP_LOCKED_PRIOR_PROCESS_ARM_NUMERIC_FAILURE",
+  "overall_pass": null,
+  "performance_qualification": null,
+  "source": {
+    "measured_dgraph": "bad4ced2c88e15076f73e3647a72e965f63be2b9",
+    "merged_gomap": "f906b8a2aa1279ed6b6627028cba71d491db04c3",
+    "executed_published_gomap": "29a2fdf153ce6e214abf9502d7970de727a38967",
+    "accepted_baseline_dgraph": "7f2720bf0d7ed90e82b04c52911bff92e9f22726",
+    "accepted_baseline_gomap": "fc3c3db97ec2954d47a1adf731d501e7b73f181f"
+  },
+  "counts": {
+    "decision_rows": 36,
+    "excluded_profile_result_rows": 6,
+    "cpu_profiles": 6,
+    "config_sidecars": 168,
+    "store_sidecars": 84
+  },
+  "integrity": {
+    "inventory_entries_verified": 458,
+    "direct_source_byte_equal": 447,
+    "gzip_source_decoded_byte_equal": 7,
+    "earlier_safe_refusal": "Adhoc root checker initially compared compressed bytes directly to declared uncompressed source tar, before acceptance or mutation. Corrected by honoring recorded gzip transformation and original tar hash. No artifact changed, no runtime retry."
+  },
+  "independent_audits": {
+    "baseline_sha256": "8b48326647a50db6facd9ade6c0b7bc202e757b2ebd1173866f56ab62ce66bfb",
+    "arithmetic_sha256": "90fe6a6c65037890db6156f2a79b68c4b1dafa2385f038d65885fbeec2975c37"
+  },
+  "analysis_json_sha256": "f5b40f19fd2f77fabeaa631850532f362964b088ad6df040f198879567e6d740",
+  "cross_arm_parity": {
+    "node_count": 920,
+    "posting_checksum": "2e08caad769d3f0f221ddeaaa36e528ae1b4764fefdc27df3913a788474074d8"
+  },
+  "live_COW_activation": "Actual TreeDB config/store startup and restart sidecars; separate micros are ordinary adaptive, not COW",
+  "runtime_retry": false,
+  "raw_rows_modified": false,
+  "offline_reproduction": "Exact original gzip archives reconstruct byte-identical normalized JSON/Markdown; see analysis/OFFLINE_REPRODUCTION_ACCEPTANCE.json",
+  "integration_override": "User M0 stability waiver preserves FAIL and physical-host quiet waiver preserves observations; Dgraph numerical performance gates not waived",
+  "remaining_product_owners": [
+    "snissn/gomap#5207",
+    "snissn/dgraph#34",
+    "snissn/gomap#4519"
+  ],
+  "default": "Badger unchanged",
+  "remaining_inquiry": "Source-matched relaxed store_wal throughput/tails, durable recovery cut/replay/posting validation/fresh ACK phases, original process eligible-arrival/ACK boundaries; full capability/equilibrium/power-loss obligations retained",
+  "publication": "Evidence-only branch from measured merged Dgraph, no runtime/main change; containing report commit is not measured runtime",
+  "local_hook_disposition": "Use command-scoped core.hooksPath=/dev/null only for immutable evidence-only commit/push: configured Trunk formatting hooks would mutate original raw artifacts. No repository configuration/source change; exact-byte/hash checks, independent sidecar/source/arithmetic reviews and offline replay complete. No runtime CI or product gate replaced."
+}

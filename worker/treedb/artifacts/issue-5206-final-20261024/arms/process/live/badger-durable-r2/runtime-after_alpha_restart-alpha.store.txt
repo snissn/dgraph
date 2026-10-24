@@ -1,0 +1,1 @@
+<pre>Badger posting-store status=map[backend:badger closed:false durability:durable durable_commits:true post_commit_events:false profile:syncwrites=true tier:production] stats=map[backend:badger]</pre>

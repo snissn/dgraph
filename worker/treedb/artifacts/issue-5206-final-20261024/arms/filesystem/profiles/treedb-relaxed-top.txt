@@ -1,0 +1,33 @@
+File: dgraph
+Build ID: 06cc5c15adba5268572c94cc0482422ea6cb6d22
+Type: cpu
+Time: 2026-10-23 17:37:24 HST
+Duration: 5s, Total samples = 630ms (12.60%)
+Showing nodes accounting for 410ms, 65.08% of 630ms total
+Showing top 25 nodes out of 336
+      flat  flat%   sum%        cum   cum%
+     100ms 15.87% 15.87%      100ms 15.87%  internal/runtime/syscall/linux.Syscall6
+      30ms  4.76% 20.63%       30ms  4.76%  runtime.nextFreeFast (inline)
+      20ms  3.17% 23.81%       20ms  3.17%  google.golang.org/grpc/internal/transport.(*http2Client).createHeaderFields
+      20ms  3.17% 26.98%       20ms  3.17%  runtime.memclrNoHeapPointers
+      20ms  3.17% 30.16%       20ms  3.17%  runtime.memmove
+      20ms  3.17% 33.33%       20ms  3.17%  runtime.nanotime
+      20ms  3.17% 36.51%       20ms  3.17%  time.runtimeNow
+      10ms  1.59% 38.10%       10ms  1.59%  aeshashbody
+      10ms  1.59% 39.68%       10ms  1.59%  encoding/binary.bigEndian.PutUint32
+      10ms  1.59% 41.27%       10ms  1.59%  github.com/dgraph-io/dgraph/v25/conn.(*Pools).Get
+      10ms  1.59% 42.86%       10ms  1.59%  github.com/dgraph-io/dgraph/v25/dql.NQuad.CreateValueEdge
+      10ms  1.59% 44.44%       10ms  1.59%  github.com/dgraph-io/dgraph/v25/posting.(*LocalCache).fillPreds
+      10ms  1.59% 46.03%       10ms  1.59%  github.com/dgraph-io/dgraph/v25/raftwal.(*wal).AddEntries
+      10ms  1.59% 47.62%       20ms  3.17%  github.com/snissn/gomap/TreeDB/internal/commitlog.(*CommandJournal).flushLocked
+      10ms  1.59% 49.21%       10ms  1.59%  github.com/snissn/gomap/TreeDB/internal/commitlog.validateCommandEnvelopePayloadV2
+      10ms  1.59% 50.79%       10ms  1.59%  github.com/snissn/gomap/TreeDB/internal/retainedalloc.AllocationCharge (inline)
+      10ms  1.59% 52.38%       80ms 12.70%  github.com/snissn/gomap/TreeDB/mvcc.(*Store).CommitGroupAt
+      10ms  1.59% 53.97%      130ms 20.63%  google.golang.org/grpc.(*Server).handleStream
+      10ms  1.59% 55.56%       20ms  3.17%  google.golang.org/grpc/internal/transport.(*http2Client).operateHeaders
+      10ms  1.59% 57.14%       10ms  1.59%  google.golang.org/protobuf/internal/impl.(*MessageInfo).marshalAppendPointer
+      10ms  1.59% 58.73%       20ms  3.17%  google.golang.org/protobuf/internal/impl.(*messageState).StoreMessageInfo
+      10ms  1.59% 60.32%       10ms  1.59%  google.golang.org/protobuf/internal/impl.consumeInt64
+      10ms  1.59% 61.90%       10ms  1.59%  indexbytebody
+      10ms  1.59% 63.49%       10ms  1.59%  internal/reflectlite.unpackEface (inline)
+      10ms  1.59% 65.08%       10ms  1.59%  internal/runtime/maps.(*Map).putSlotSmallFastStr

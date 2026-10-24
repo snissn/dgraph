@@ -1,0 +1,10 @@
+{
+  "time": "2026-10-24T04:07:26.247706+00:00",
+  "scope": "offline reconstruction from archived raw gzip only, no Go/runtime/workload/network",
+  "exit_code": 0,
+  "byte_identical_outputs": {
+    "final-matrix-analysis-01.json": "f5b40f19fd2f77fabeaa631850532f362964b088ad6df040f198879567e6d740",
+    "final-matrix-analysis-01.md": "0035a214aa2ad2b728baa1463e3ee0246bd669bd47840c60d40fe0cf3612b971"
+  },
+  "whole_campaign": "STOP_LOCKED_PRIOR_PROCESS_ARM_NUMERIC_FAILURE"
+}

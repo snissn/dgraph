@@ -1,0 +1,28 @@
+{
+  "ports_bindable_at_check": [
+    28082,
+    29082,
+    30122,
+    31122,
+    32122,
+    28182,
+    29182,
+    30222,
+    31222,
+    32222,
+    28282,
+    29282,
+    30322,
+    31322,
+    32322,
+    28382,
+    29382,
+    30422,
+    31422,
+    32422
+  ],
+  "merged_sha": "bad4ced2c88e15076f73e3647a72e965f63be2b9",
+  "server_sha256": "46763a6bfcd02c37a44fb36e8c866dd7bbf7e2ca9777ad0a0aefb1ada9325175",
+  "scope": "POSTMERGE_STARTUP_RESTART_DIAGNOSTIC",
+  "qualification": null
+}

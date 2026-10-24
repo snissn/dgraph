@@ -1,0 +1,29 @@
+--- a/worker/server_state.go
++++ b/worker/server_state.go
+@@ -180,6 +180,7 @@
+ 		}
+ 		treeOpts, err := dgraphtreedb.ResolveOptions(dgraphtreedb.OpenOptions{
+ 			Dir: Config.PostingDir, Profile: profile,
++			MemtableMode: "cow_ordered",
+ 			RequireInMemory: x.WorkerConfig.Badger.InMemory,
+ 		})
+ 		if err != nil {
+@@ -189,6 +190,18 @@
+ 		if err != nil {
+ 			return fmt.Errorf("open TreeDB posting store: %w", err)
+ 		}
++		stats, err := s.TreeDBStore.Stats()
++		if err != nil {
++			_ = s.TreeDBStore.Close()
++			s.TreeDBStore = nil
++			return fmt.Errorf("verify livebench TreeDB memtable mode: %w", err)
++		}
++		if got := stats["treedb.cache.memtable_mode"]; got != "cow_ordered" {
++			_ = s.TreeDBStore.Close()
++			s.TreeDBStore = nil
++			return fmt.Errorf("livebench TreeDB memtable mode = %q, want cow_ordered", got)
++		}
++		glog.Infof("livebench TreeDB verified memtable_mode=cow_ordered")
+ 		s.PostingStore = s.TreeDBStore
+ 	}
+ 	if Config.PostingStoreEvents {

@@ -1,0 +1,2769 @@
+{
+  "README.md": {
+    "bytes": 19991,
+    "sha256": "7f34b29bdc2a155d9913ba347b0e4ced5d212bd3b06db6248d259658fc33d002",
+    "source": "generated evidence-only documentation/receipt"
+  },
+  "ROOT_REPORT_ACCEPTANCE.json": {
+    "bytes": 3306,
+    "sha256": "6e5b3fb90092a4ba64896d2a8db81d94ccc4894631a442521d84548906c8667a",
+    "source": "generated evidence-only report/acceptance receipt"
+  },
+  "analysis/ANALYZER_FINAL_SCHEMA_CORRECTION.json": {
+    "bytes": 892,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e30e5765235d1ce8803b49ed8d8b2fd364d83e30cd35a89d25ce1b7e831cb1b2",
+    "source": "artifacts/final-native111-runtime-01/ANALYZER_FINAL_SCHEMA_CORRECTION.json"
+  },
+  "analysis/ANALYZER_PREBASELINE_REVIEW.md": {
+    "bytes": 2903,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e7c4176a0229094f80ccef4aef9cc186cd2f2ddf328af7cdebc71f63d28e0c97",
+    "source": "artifacts/final-native111-runtime-01/ANALYZER_PREBASELINE_REVIEW.md"
+  },
+  "analysis/FINAL_ANALYSIS_REVIEW.md": {
+    "bytes": 9900,
+    "sha256": "90fe6a6c65037890db6156f2a79b68c4b1dafa2385f038d65885fbeec2975c37",
+    "source": "artifacts/final-native111-runtime-01/FINAL_ANALYSIS_REVIEW.md"
+  },
+  "analysis/OFFLINE_REPRODUCTION_ACCEPTANCE.json": {
+    "bytes": 475,
+    "sha256": "bf4da86bbb21aaa7d839071af10cee0c6bd43836fa6158c1966546a41e382ac1",
+    "source": "generated evidence-only report/acceptance receipt"
+  },
+  "analysis/PIPELINE_INTERPRETATION.md": {
+    "bytes": 10223,
+    "retained_selected_inventory_verified": false,
+    "sha256": "4f8f819fbb8f03740a038b2b1d6fe59aaa19205a56df032510e0c74ce3d2fc7a",
+    "source": "artifacts/final-native111-runtime-01/PIPELINE_INTERPRETATION.md"
+  },
+  "analysis/analyze_final_matrix.py": {
+    "bytes": 22694,
+    "sha256": "d2d103675e1525942d7ffa95454b684c43ff9f8eb0649fac81703217f51a2442",
+    "source": "artifacts/final-native111-runtime-01/analyze_final_matrix.py"
+  },
+  "analysis/analyzer-attempt-01/FAILURE.json": {
+    "bytes": 689,
+    "retained_selected_inventory_verified": false,
+    "sha256": "b965ed42b81f0d061d01b0edd82ec76b74c1070fd206d3265959516c29420630",
+    "source": "artifacts/final-native111-runtime-01/analyzer-attempt-01/FAILURE.json"
+  },
+  "analysis/analyzer-attempt-01/analyze_final_matrix.py": {
+    "bytes": 22299,
+    "retained_selected_inventory_verified": false,
+    "sha256": "0375c0eb19e9f8b3eac258b134e376bfa19dde8f1e2335b247d2e10bd875d892",
+    "source": "artifacts/final-native111-runtime-01/analyzer-attempt-01/analyze_final_matrix.py"
+  },
+  "analysis/analyzer-prepared-v1/ANALYZE_FINAL_MATRIX_USAGE.md": {
+    "bytes": 3041,
+    "retained_selected_inventory_verified": false,
+    "sha256": "1b1b90b2ed62ffcb118b061763b2fdf4fd3238102f570fa688fcb3ee2267c5c8",
+    "source": "artifacts/final-native111-runtime-01/analyzer-prepared-v1/ANALYZE_FINAL_MATRIX_USAGE.md"
+  },
+  "analysis/analyzer-prepared-v1/analyze_final_matrix.py": {
+    "bytes": 22251,
+    "retained_selected_inventory_verified": false,
+    "sha256": "c730650db22f2b6f522ee172f933fd0346dbf3ae84cfab2f34cbe9074f04c3c2",
+    "source": "artifacts/final-native111-runtime-01/analyzer-prepared-v1/analyze_final_matrix.py"
+  },
+  "analysis/final-matrix-analysis-01.json": {
+    "bytes": 1867661,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f5b40f19fd2f77fabeaa631850532f362964b088ad6df040f198879567e6d740",
+    "source": "artifacts/final-native111-runtime-01/final-matrix-analysis-01.json"
+  },
+  "analysis/final-matrix-analysis-01.md": {
+    "bytes": 20793,
+    "retained_selected_inventory_verified": true,
+    "sha256": "0035a214aa2ad2b728baa1463e3ee0246bd669bd47840c60d40fe0cf3612b971",
+    "source": "artifacts/final-native111-runtime-01/final-matrix-analysis-01.md"
+  },
+  "arms/baseline/BASELINE_ARM_AUDIT.md": {
+    "bytes": 6602,
+    "sha256": "8b48326647a50db6facd9ade6c0b7bc202e757b2ebd1173866f56ab62ce66bfb",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/BASELINE_ARM_AUDIT.md"
+  },
+  "arms/baseline/context.txt": {
+    "bytes": 1570,
+    "retained_selected_inventory_verified": true,
+    "sha256": "affb66187e1534af6a42f1960ca9f9c069fab7bee8d213eb99cad73ccde600ee",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/context.txt"
+  },
+  "arms/baseline/live/badger-durable-r1/result.json": {
+    "bytes": 30297,
+    "retained_selected_inventory_verified": true,
+    "sha256": "5c5167ce1476af2c8659686294bf368b1e50dd2d5c53706779718d0eae9d7016",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r1/result.json"
+  },
+  "arms/baseline/live/badger-durable-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8671,
+    "retained_selected_inventory_verified": true,
+    "sha256": "deb5ba9b8eb858858f0adac743dc0425e2a40d81cc9335113d7e156895efddf4",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/badger-durable-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-durable-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5121,
+    "retained_selected_inventory_verified": true,
+    "sha256": "2151e6c3d083ace94529cad1a498ccd15e7927122bc0962510ca6b7a612cbaf5",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/badger-durable-r1/runtime-startup-alpha.config.log": {
+    "bytes": 10063,
+    "retained_selected_inventory_verified": true,
+    "sha256": "de84a42274b0f84aa70ca1b1e99c68e001094575919c9ec27307c039594783a4",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/badger-durable-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-durable-r1/runtime-startup-zero.config.log": {
+    "bytes": 4581,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a79b89164cf8b561f6afa0d84689a126707a926c53185f796db0646c7e6a420e",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r1/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/live/badger-durable-r2/result.json": {
+    "bytes": 30294,
+    "retained_selected_inventory_verified": true,
+    "sha256": "bf9763f06dbf00d808cd79f17cdf2eb3a13ba90de13c1caa7e4ee74700de68be",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r2/result.json"
+  },
+  "arms/baseline/live/badger-durable-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8671,
+    "retained_selected_inventory_verified": true,
+    "sha256": "549b1eedb71b915cecf452720ab92e821e7c061b8ca6f6eeb9cb5772fb05ea50",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/badger-durable-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-durable-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5121,
+    "retained_selected_inventory_verified": true,
+    "sha256": "7e9e9c931fe27dc464e6ae8e84309051a60973b4047e7f31877e2de69b734d24",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/badger-durable-r2/runtime-startup-alpha.config.log": {
+    "bytes": 10063,
+    "retained_selected_inventory_verified": true,
+    "sha256": "1380661b25d8c5f9231e30824a2806296eeb9c7011518023f357ff17d4d8a4c2",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/badger-durable-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-durable-r2/runtime-startup-zero.config.log": {
+    "bytes": 4581,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3191cd03bfd37ff9e940789afef9d31da6c814105d515548667e968b5b07a5fa",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r2/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/live/badger-durable-r3/result.json": {
+    "bytes": 30305,
+    "retained_selected_inventory_verified": true,
+    "sha256": "61f9ca70ea2897909a5816abd7764da9ab7dd69380eb1544207a0941cda51671",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r3/result.json"
+  },
+  "arms/baseline/live/badger-durable-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8672,
+    "retained_selected_inventory_verified": true,
+    "sha256": "8ef8c0ad20439c7ec7ef340cacea3ec0272bd199a2ee3cbc113498c0b7278125",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/badger-durable-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-durable-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 7386,
+    "retained_selected_inventory_verified": true,
+    "sha256": "04051d4e8ed90692e3d94fd4e3aa8e51d1c76fe0cc98270fe488d0b63e7a7df5",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/badger-durable-r3/runtime-startup-alpha.config.log": {
+    "bytes": 9471,
+    "retained_selected_inventory_verified": true,
+    "sha256": "5b7c1ac081409178b873ee668f882f1e95c9bced29b6d8f01bbcfdd37a69a543",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/badger-durable-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-durable-r3/runtime-startup-zero.config.log": {
+    "bytes": 6846,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a5246755fedfa81f03cf9b44550dae44bbc92583ddea5d652bd09761ee02d25b",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-durable-r3/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r1/result.json": {
+    "bytes": 30311,
+    "retained_selected_inventory_verified": true,
+    "sha256": "6090ae53712d78ba712c4ee50b519f015fe56b448c417ef557e48efc8db9e533",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r1/result.json"
+  },
+  "arms/baseline/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8673,
+    "retained_selected_inventory_verified": true,
+    "sha256": "aebcefabfe93f82e1995c602a8452dd447408d6a8299341c5913041a66378d49",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-relaxed-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5126,
+    "retained_selected_inventory_verified": true,
+    "sha256": "1e96a93c79de23164d078922e4c629fe2a35ad5500c573bba9a65cea94d5d6d5",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r1/runtime-startup-alpha.config.log": {
+    "bytes": 10064,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f30120b5c9f4c0f72fb43550b18eba0ad20b6269f3366f6b60f43af3ab7aa7c1",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-relaxed-r1/runtime-startup-zero.config.log": {
+    "bytes": 4586,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3d17e4d2f1e3117d9cf329d846e5e2e2751c6d6e6f6d5aca5a990f18646a6225",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r1/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r2/result.json": {
+    "bytes": 30315,
+    "retained_selected_inventory_verified": true,
+    "sha256": "cbc6dfb2c4830eef568d1a681af8ff6a256b28d4b89d0aa9854bf679232dea6c",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r2/result.json"
+  },
+  "arms/baseline/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8673,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ba6ba24dc6e31c8110e099f0ac4633e1d3da02023710faf361914963d13c27f3",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-relaxed-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5126,
+    "retained_selected_inventory_verified": true,
+    "sha256": "e4ddef8280e67e3804e372ff39ed0d67a5578278fc493699a7a635685dfa359c",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r2/runtime-startup-alpha.config.log": {
+    "bytes": 10063,
+    "retained_selected_inventory_verified": true,
+    "sha256": "23e8f80fc41055c8a03087bf3ee4f938961b056c3830335163ecd3fb948c0850",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-relaxed-r2/runtime-startup-zero.config.log": {
+    "bytes": 4586,
+    "retained_selected_inventory_verified": true,
+    "sha256": "2b645a5bc7af8ee9d43b41af27dfad30fc2fd20cc23f6d6c0ce9c97fb595d101",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r2/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r3/result.json": {
+    "bytes": 30316,
+    "retained_selected_inventory_verified": true,
+    "sha256": "4c1ec0b62575b09d4bd8d704de78ff0b97afe35d76abfb552c9ff1aa13696d68",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r3/result.json"
+  },
+  "arms/baseline/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8673,
+    "retained_selected_inventory_verified": true,
+    "sha256": "257d09aed25687769b6b447fdd77d7afe728a69d3c1f31fc88cdfdfab649dc78",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-relaxed-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5126,
+    "retained_selected_inventory_verified": true,
+    "sha256": "befed62b369daaa1bdeadee5ec94d0a05cefdf90cacb885c4bde2e3ebfa84edf",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r3/runtime-startup-alpha.config.log": {
+    "bytes": 10064,
+    "retained_selected_inventory_verified": true,
+    "sha256": "823222326715e0ec82996453f98056010e6bf59b8d378ecda78efc8b45b4c239",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/badger-relaxed-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/badger-relaxed-r3/runtime-startup-zero.config.log": {
+    "bytes": 4586,
+    "retained_selected_inventory_verified": true,
+    "sha256": "7343943d278e8f2b3b08bc11cacffd3f05300a01b97156ae20341de2d5700ce2",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/badger-relaxed-r3/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r1/result.json": {
+    "bytes": 29653,
+    "retained_selected_inventory_verified": true,
+    "sha256": "b21f5f79dcf34f13c6251b80e1362b4d142f1c0552119721f967c0dbd69ab8ce",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r1/result.json"
+  },
+  "arms/baseline/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7302,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f5d899d66be5fce3534f8c92b57aa4debaf3c4653371756372ccd4d38dc64597",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327251,
+    "retained_selected_inventory_verified": true,
+    "sha256": "9e658631ab48b0c5d5b1f4131ad1605f54ad84a76dd8e6f8cd99406eedf5d8a9",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-durable-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5126,
+    "retained_selected_inventory_verified": true,
+    "sha256": "8708993aafa6addc1456b98feeacc05dbeafa209805462647743d1671cc69b5d",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r1/runtime-startup-alpha.config.log": {
+    "bytes": 8696,
+    "retained_selected_inventory_verified": true,
+    "sha256": "1d5dd3eb2ac7fe27608485339d03c54a017c5e972fcc4406f82e205401cb20dc",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 327332,
+    "retained_selected_inventory_verified": true,
+    "sha256": "172a82d7d35b5c284217c9164d4e00cd78f8450c5bc2c093a84317daa47e15df",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-durable-r1/runtime-startup-zero.config.log": {
+    "bytes": 4586,
+    "retained_selected_inventory_verified": true,
+    "sha256": "40de910039c8168f6989e3dbd06a2c58c97015985faa84862f65b18515562d76",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r1/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r2/result.json": {
+    "bytes": 29651,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d7187661b10281ecd1c0762091cb3518d76f7350eb10f222afda18f71a6877fe",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r2/result.json"
+  },
+  "arms/baseline/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7301,
+    "retained_selected_inventory_verified": true,
+    "sha256": "b95de8ac9663dc98f44e9104cbb063cb0070332394a2e8d2d4eb2f358cde92ff",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327251,
+    "retained_selected_inventory_verified": true,
+    "sha256": "1efbf1c960ef28ec41616650fcf535e530db740d153218d3fb3f885a8f3225bc",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-durable-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5126,
+    "retained_selected_inventory_verified": true,
+    "sha256": "7a44f8907c2bc4734f0b5905481cd36ce5c70a32ebdebf8f817654ba57d3ba5b",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r2/runtime-startup-alpha.config.log": {
+    "bytes": 8696,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f095278b0407eb42e43e863f88999b79e6d49792b0b7a0c789f04c4e829396b0",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 327327,
+    "retained_selected_inventory_verified": true,
+    "sha256": "830385a3e9a2118bd0d5eb7e57037cebcee2f4b20a67e5f30c828fc28c869b00",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-durable-r2/runtime-startup-zero.config.log": {
+    "bytes": 4586,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3d21c6955269be38d93c24be57c4446409ccb49007ed8495012303d23934e543",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r2/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r3/result.json": {
+    "bytes": 29655,
+    "retained_selected_inventory_verified": true,
+    "sha256": "6c824f1304b51066b4c7d11b37c364fb6c608ee94ce8f06b0589c4a229c62071",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r3/result.json"
+  },
+  "arms/baseline/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7302,
+    "retained_selected_inventory_verified": true,
+    "sha256": "939b742a8e3e28f67d94d80c39f8e4a208c2530d486a842abf1f1cce207abfc1",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327251,
+    "retained_selected_inventory_verified": true,
+    "sha256": "1fcaa779ad95023bb2b01cb9c9fa621f67306a3781810957424e98aa9b2aa781",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-durable-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 7034,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a2d065bd73b3a3f0a015a826b7b376d5b20173cbe7ff0dc575186140041faa50",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r3/runtime-startup-alpha.config.log": {
+    "bytes": 8104,
+    "retained_selected_inventory_verified": true,
+    "sha256": "2dbae09d71c549e80cbdbe00c50ffe65c269722bac73957cfa79cd003407f6c1",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-durable-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 327291,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f3911ee49b2f2dd5e0ff382735012bf572473cc694ea8c1dea5d1153b87f9c41",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-durable-r3/runtime-startup-zero.config.log": {
+    "bytes": 6494,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c617761ac4c67c323d8c27df6e7e4f2139c392c243258bdc84e4b9301fc278b7",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-durable-r3/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r1/result.json": {
+    "bytes": 29666,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d2c33eed8d9ea2d91ff6a9027b524f98bbad55f0c9ce23b61ea47251c53cd76b",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r1/result.json"
+  },
+  "arms/baseline/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7302,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a8ecf2a87b1af309e866e061e7e4a0a9ac9c9285161f6a437a3ab0c0ad41d5bf",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327260,
+    "retained_selected_inventory_verified": true,
+    "sha256": "478426b172ceddfd050232a68d12ce209cd40c7f7ffd1ecf2f980b4cd2452e58",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-relaxed-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 7039,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ede15039f969eae5cd9cac237c98e6db7b8c62d9ac3a8a6d503a19e92f9ede0a",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r1/runtime-startup-alpha.config.log": {
+    "bytes": 8104,
+    "retained_selected_inventory_verified": true,
+    "sha256": "43089fcd7dc13eef7a400e87d0c204ea4814198d659054056a586476d2eeded2",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 327278,
+    "retained_selected_inventory_verified": true,
+    "sha256": "634784e33a765a51ea27d0b2bac2b539bbf90ecde57e3291c2f462710d4b83d6",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-relaxed-r1/runtime-startup-zero.config.log": {
+    "bytes": 6499,
+    "retained_selected_inventory_verified": true,
+    "sha256": "8e2d2f9923a883ca9b2cf4e703eece59712d3a3392959c0e3dd0d0ff71c68376",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r1/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r2/result.json": {
+    "bytes": 29671,
+    "retained_selected_inventory_verified": true,
+    "sha256": "34ce809b4f5296dd90669a454d784e0f9f6443be7783de3baa8e0d2e0d4c0647",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r2/result.json"
+  },
+  "arms/baseline/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7302,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ae156020cf8c660f1f7be29d32a9bcfb0fa539a6cd5be41d5ccdcc3088c14ec2",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327256,
+    "retained_selected_inventory_verified": true,
+    "sha256": "52b61b220947bdc62ed8335add7a213919b9eca1cb72a6abeb6a3ecd90cf6af0",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-relaxed-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5126,
+    "retained_selected_inventory_verified": true,
+    "sha256": "7f6296a70b1dc11a9f3b488c3c2192094d553a3327863abbac34573c18d5c6e9",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r2/runtime-startup-alpha.config.log": {
+    "bytes": 8696,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f32c00ed7d2d0e18e1ecb2cf3ff5a893aa37bb56a2b805b2510d30bef430e3f7",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 327327,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d788e8024df50a19ad0dc60f8fb13fb50383c566641de7fd94a8cc7ffc7bc783",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-relaxed-r2/runtime-startup-zero.config.log": {
+    "bytes": 4586,
+    "retained_selected_inventory_verified": true,
+    "sha256": "993006de372206388ebe735361c9f5b5578e996590a013e49b5bcb0f183a8325",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r2/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r3/result.json": {
+    "bytes": 29662,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f94038b3a4e26e7baf5ce32a7c9614efd0cd4410019edc0b066a883b84e4df23",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r3/result.json"
+  },
+  "arms/baseline/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7301,
+    "retained_selected_inventory_verified": true,
+    "sha256": "62dec07024d14ea2e432409197bc1c5f799478498d6a789b571c86443016e99f",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327257,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f37593bbb9ab87452fd7b490996c258343a06c6b875797c3670d686536acb161",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-relaxed-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5126,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ee56cf6261959c55be3808e6bc774190a4c3897dc2e0ee5744084d81cff3900a",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r3/runtime-startup-alpha.config.log": {
+    "bytes": 8696,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ca9a9ff9104af37a3309f42e76a00bce0919dd3d49d511d690de50359d788667",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/live/treedb-relaxed-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 327322,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ef20e896860d7fecb78e2c2ab360c014fca7028acfef32da35392f5ebe94cdfc",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/live/treedb-relaxed-r3/runtime-startup-zero.config.log": {
+    "bytes": 4586,
+    "retained_selected_inventory_verified": true,
+    "sha256": "b45ec75e6337cd42d5f5b62d39dc97ae2025a12e80b0ec07b75072aa252931ef",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/live/treedb-relaxed-r3/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/microbench/raw.stderr": {
+    "bytes": 0,
+    "retained_selected_inventory_verified": true,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/microbench/raw.stderr"
+  },
+  "arms/baseline/microbench/raw.stdout": {
+    "bytes": 19929,
+    "retained_selected_inventory_verified": true,
+    "sha256": "aa6be31e723d072e86ec7d5cf746c8ef6571862fda8c302667f1e13d7fd113ca",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/microbench/raw.stdout"
+  },
+  "arms/baseline/microbench/raw.txt": {
+    "bytes": 19929,
+    "retained_selected_inventory_verified": true,
+    "sha256": "aa6be31e723d072e86ec7d5cf746c8ef6571862fda8c302667f1e13d7fd113ca",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/microbench/raw.txt"
+  },
+  "arms/baseline/profiles/treedb-durable-run/result.json": {
+    "bytes": 30073,
+    "retained_selected_inventory_verified": true,
+    "sha256": "1b18d595fca8a435c8c450abbfc2410831e2fe9c3f41b301f10b078f26facba4",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-durable-run/result.json"
+  },
+  "arms/baseline/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7313,
+    "retained_selected_inventory_verified": true,
+    "sha256": "74b5292e2b02a949062946b4f821176aa6236cfe2cca81c46700ea3b7aebdbf8",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327258,
+    "retained_selected_inventory_verified": true,
+    "sha256": "7111a8f1116c1eb7149c118d1932d282b689f7538e0fe207ec4fac11ef854d53",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/profiles/treedb-durable-run/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 7044,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a598f4f10c605090054ed4a681d00675a7c64451a61a6f0a54528fe36e387505",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/profiles/treedb-durable-run/runtime-startup-alpha.config.log": {
+    "bytes": 8113,
+    "retained_selected_inventory_verified": true,
+    "sha256": "8c52e07e41c9cb2229838420fb7de978e3fdd5ac227b9b497acff6ad53abb4f4",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-durable-run/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/profiles/treedb-durable-run/runtime-startup-alpha.store.txt": {
+    "bytes": 327290,
+    "retained_selected_inventory_verified": true,
+    "sha256": "982c335b1ed794439e3866e9ca0ea8edd40cabe01ed98e2926c2d1f32945ee32",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-durable-run/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/profiles/treedb-durable-run/runtime-startup-zero.config.log": {
+    "bytes": 6504,
+    "retained_selected_inventory_verified": true,
+    "sha256": "080050fc67f80b6246c2aae62bed2b8854e602d85368af19e996f1f1eca9805c",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-durable-run/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/profiles/treedb-durable-top.txt": {
+    "bytes": 2521,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c8d47d3c8ea7f38b44b54a7de2081f5a0587dd4a744faa43cb2e9f23f73040cc",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-durable-top.txt"
+  },
+  "arms/baseline/profiles/treedb-durable.pprof": {
+    "bytes": 12243,
+    "retained_selected_inventory_verified": true,
+    "sha256": "2932fa5c026f36689ba3d0f248df5c3e613779451577e0dc3604caa89c632a44",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-durable.pprof"
+  },
+  "arms/baseline/profiles/treedb-relaxed-run/result.json": {
+    "bytes": 30120,
+    "retained_selected_inventory_verified": true,
+    "sha256": "52f09e31e184a2906f4936e81071ed1b6e0708e0811c5c459749ed6b51fb3648",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-relaxed-run/result.json"
+  },
+  "arms/baseline/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7602,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ac1c4b73a15a92d7192e43849bac0fed4291d5dcd8e0564808218a8260af4d36",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/baseline/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327316,
+    "retained_selected_inventory_verified": true,
+    "sha256": "25f24fa23074fb5faed143cafe9010617c0afc6e20a2f98dd8dbfb9120d699bc",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/baseline/profiles/treedb-relaxed-run/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5323,
+    "retained_selected_inventory_verified": true,
+    "sha256": "35fac22c9ee42ede2bb7be296050b29da49b47aab7013222a757cd3487208ea8",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/baseline/profiles/treedb-relaxed-run/runtime-startup-alpha.config.log": {
+    "bytes": 8705,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3e4b9074977053c38949b5d2442ed5d3e24bf5ba31ce388e8cd98dc37cfcd596",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-startup-alpha.config.log"
+  },
+  "arms/baseline/profiles/treedb-relaxed-run/runtime-startup-alpha.store.txt": {
+    "bytes": 327332,
+    "retained_selected_inventory_verified": true,
+    "sha256": "61c58d7d9ee5d459d53ec211962a736066a752ec6817911fad3db78584c5d544",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-startup-alpha.store.txt"
+  },
+  "arms/baseline/profiles/treedb-relaxed-run/runtime-startup-zero.config.log": {
+    "bytes": 4586,
+    "retained_selected_inventory_verified": true,
+    "sha256": "10312118139e90129cb043da674de33729a80ea70cef0dc425b090d5b3de013f",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-startup-zero.config.log"
+  },
+  "arms/baseline/profiles/treedb-relaxed-top.txt": {
+    "bytes": 2441,
+    "retained_selected_inventory_verified": true,
+    "sha256": "13bae174da4bb6a66d3400335368cc972241b52f1386cf04fd71547bbdb96b1f",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-relaxed-top.txt"
+  },
+  "arms/baseline/profiles/treedb-relaxed.pprof": {
+    "bytes": 15284,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a263ba2fad9bf54477cbad3fc79e685fef7f9fc2d5d1225c5e5dff93b18152aa",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/profiles/treedb-relaxed.pprof"
+  },
+  "arms/baseline/receipts/BASELINE_AUDIT_DATA.json": {
+    "bytes": 16770,
+    "retained_selected_inventory_verified": false,
+    "sha256": "c8e7456343df9a8e9a54e7cc9c187d506002d0e3078ac10613c48da14b88ac9e",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/BASELINE_AUDIT_DATA.json"
+  },
+  "arms/baseline/receipts/BASELINE_ROOT_ARCHIVE_ACCEPTANCE.json": {
+    "bytes": 521,
+    "retained_selected_inventory_verified": false,
+    "sha256": "19cc14d11d998da6136cfe17e082192ff1019fa9e5fc9c0e7a5997f387267289",
+    "source": "artifacts/final-native111-runtime-01/BASELINE_ROOT_ARCHIVE_ACCEPTANCE.json"
+  },
+  "arms/baseline/receipts/FINAL_TASK_PROCESS_ABSENCE.json": {
+    "bytes": 208,
+    "retained_selected_inventory_verified": false,
+    "sha256": "6d18020e178f591b81cca1d530ba90d4a759edc9f9b2da651d591c842bc89cee",
+    "source": "artifacts/final-native111-runtime-01/FINAL_TASK_PROCESS_ABSENCE.json"
+  },
+  "arms/baseline/receipts/audit_baseline_artifacts.py": {
+    "bytes": 10073,
+    "retained_selected_inventory_verified": false,
+    "sha256": "3a29cee8bb7b0c9ce8c3bf4f13095d09ecbcf4f2756d1c2426cf05e73f5cfdba",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/audit_baseline_artifacts.py"
+  },
+  "arms/baseline/receipts/baseline-filesystem-12-ARCHIVE_RECEIPT.json": {
+    "bytes": 283,
+    "retained_selected_inventory_verified": false,
+    "sha256": "bde650aa1e437b5c9a593464b94dbe18e7772d5238c29260159421435710607b",
+    "source": "artifacts/final-native111-runtime-01/baseline-filesystem-12-ARCHIVE_RECEIPT.json"
+  },
+  "arms/baseline/receipts/baseline-filesystem-12-SELECTED_FILES.json": {
+    "bytes": 22995,
+    "retained_selected_inventory_verified": false,
+    "sha256": "f79b9212fc3b6882bde8f9a79a68207e50f075c01a8380aff42b4d0d46e059ef",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12-SELECTED_FILES.json"
+  },
+  "arms/baseline/receipts/baseline-filesystem-12-invocation.json": {
+    "bytes": 1767,
+    "retained_selected_inventory_verified": false,
+    "sha256": "6651a82356c352a171a239ae2c9ea1eed55a0eeebb4c168f56e8db1a86934873",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12-invocation.json"
+  },
+  "arms/baseline/receipts/baseline-filesystem-12-manifest.stderr": {
+    "bytes": 0,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12-manifest.stderr"
+  },
+  "arms/baseline/receipts/baseline-filesystem-12-manifest.stdout": {
+    "bytes": 15438,
+    "retained_selected_inventory_verified": false,
+    "sha256": "161c8414c5b905b882b8b9469d6cfbb5981a8623f60608ab1e043e1d0818a3cc",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12-manifest.stdout"
+  },
+  "arms/baseline/receipts/baseline-filesystem-12-source-manifest.json": {
+    "bytes": 15533,
+    "retained_selected_inventory_verified": false,
+    "sha256": "7dcaa8e87a9b1a772eb7094d675f85dc4211c1aa0e66f67ab502f5538a4ff445",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12-source-manifest.json"
+  },
+  "arms/baseline/receipts/baseline-filesystem-12-verify.stderr": {
+    "bytes": 0,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12-verify.stderr"
+  },
+  "arms/baseline/receipts/baseline-filesystem-12-verify.stdout": {
+    "bytes": 15438,
+    "retained_selected_inventory_verified": false,
+    "sha256": "161c8414c5b905b882b8b9469d6cfbb5981a8623f60608ab1e043e1d0818a3cc",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12-verify.stdout"
+  },
+  "arms/baseline/receipts/baseline-filesystem-12.stderr": {
+    "bytes": 0,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12.stderr"
+  },
+  "arms/baseline/receipts/baseline-filesystem-12.stdout": {
+    "bytes": 25432,
+    "retained_selected_inventory_verified": false,
+    "sha256": "6a51025109f0347ffca03019d8d44831effa8e633b219f5b48f876109892e1af",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12.stdout"
+  },
+  "arms/baseline/receipts/quiet/preflight-acquisition.json": {
+    "bytes": 76532,
+    "retained_selected_inventory_verified": false,
+    "sha256": "c91651e88ced76112040d9e6579230ba65c39032faddfc4a96f41a9fe5af8e82",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/quiet-baseline-filesystem-12/preflight-acquisition.json"
+  },
+  "arms/baseline/receipts/quiet/preflight.json": {
+    "bytes": 57981,
+    "retained_selected_inventory_verified": false,
+    "sha256": "0f63530e31b30075bf73fd185c2d9ec5768de97b47b6be4d68f4c2b1982ad709",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/quiet-baseline-filesystem-12/preflight.json"
+  },
+  "arms/baseline/report.md": {
+    "bytes": 10813,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c01ccc04b4d766041676817517db9410c2566a642744c58f2ac878398acf7242",
+    "source": "artifacts/final-native111-runtime-01/baseline-evidence/baseline-filesystem-12/report.md"
+  },
+  "arms/filesystem/FILESYSTEM_ARM_AUDIT.md": {
+    "bytes": 6127,
+    "sha256": "a96b8565e88899f6f9b030891b117dbc98b2f80d2ef672e06e855bd78672e8b4",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/FILESYSTEM_ARM_AUDIT.md"
+  },
+  "arms/filesystem/context.txt": {
+    "bytes": 1350,
+    "retained_selected_inventory_verified": true,
+    "sha256": "da0e2f86d9dee6cb415b784700543471b3a4711015cb0b13ea9df5d3f4be76e1",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/context.txt"
+  },
+  "arms/filesystem/live/badger-durable-r1/result.json": {
+    "bytes": 29869,
+    "retained_selected_inventory_verified": true,
+    "sha256": "060dec1f8e03757f78b451f0b1daeb84d2e86172c6fbbe3c8cd2e752e41c6e8c",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r1/result.json"
+  },
+  "arms/filesystem/live/badger-durable-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8636,
+    "retained_selected_inventory_verified": true,
+    "sha256": "74cedfeb2044aa4bbba3a456e0d816bbcf96576230d70bf19a6bde5023b37d38",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-durable-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-durable-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 7377,
+    "retained_selected_inventory_verified": true,
+    "sha256": "71c991fb5e25afe65492a6518cfbd8b515c5951816504659d3257dda5b2d5e0e",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/badger-durable-r1/runtime-startup-alpha.config.log": {
+    "bytes": 9435,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ad6e46325e66d31d5b429dc3b96cd6d4d1afe5bc6e8621ab41757794dfa365d7",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-durable-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-durable-r1/runtime-startup-zero.config.log": {
+    "bytes": 6837,
+    "retained_selected_inventory_verified": true,
+    "sha256": "befd805136058bd0a03cf0e201be66c43e0ff460c438f6e09566d31fe054f1ed",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r1/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/live/badger-durable-r2/result.json": {
+    "bytes": 29868,
+    "retained_selected_inventory_verified": true,
+    "sha256": "71a44b50c034d3fe93cbad4d830248787b6b3087888b6507d372aefcbcaaec62",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r2/result.json"
+  },
+  "arms/filesystem/live/badger-durable-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8636,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f777ce64089395f125e19e87173f4c7a95f0a3bfe4f294aa752c4910f35740ea",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-durable-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-durable-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5117,
+    "retained_selected_inventory_verified": true,
+    "sha256": "4415801a96f6e6e5a9259ba379def158014939b1f2cb9f9d144374d2605f7656",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/badger-durable-r2/runtime-startup-alpha.config.log": {
+    "bytes": 10026,
+    "retained_selected_inventory_verified": true,
+    "sha256": "87c7748ec717cf17905ef4861ad8b0880988e58b260500df3dece79fabbf6da0",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-durable-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-durable-r2/runtime-startup-zero.config.log": {
+    "bytes": 4577,
+    "retained_selected_inventory_verified": true,
+    "sha256": "1fde6c9ef04c1cee972348e0d801de36053896393c6e6f49e8df2d920ff1685e",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r2/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/live/badger-durable-r3/result.json": {
+    "bytes": 29866,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f17c9c3333cf7412c66389ca6df6e396b901b49d506b67e29b4224094d73729a",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r3/result.json"
+  },
+  "arms/filesystem/live/badger-durable-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8636,
+    "retained_selected_inventory_verified": true,
+    "sha256": "55a3bbbce0fbc44d7a5bd42751a8e03aaeea3eefcba3f94297903608bc2c5778",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-durable-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-durable-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5112,
+    "retained_selected_inventory_verified": true,
+    "sha256": "424e914ed9fd7327a0168eee21cd6a3b18f2383e11ffa4f18abde70075b1c86e",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/badger-durable-r3/runtime-startup-alpha.config.log": {
+    "bytes": 10026,
+    "retained_selected_inventory_verified": true,
+    "sha256": "5687337590f2cb8741a80ee42bfc207473ae795e36a8eaddbe1f9319e75e6747",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-durable-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-durable-r3/runtime-startup-zero.config.log": {
+    "bytes": 4572,
+    "retained_selected_inventory_verified": true,
+    "sha256": "5748c867ea6307569c12315f8cc0cc8d98925181434c2341f2a3d01eac44a2ac",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-durable-r3/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r1/result.json": {
+    "bytes": 29889,
+    "retained_selected_inventory_verified": true,
+    "sha256": "5e3613b18b76ac6a00e09ae9fd5e9c747902b55ce637bddf0d544087e40d229d",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r1/result.json"
+  },
+  "arms/filesystem/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8637,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f4cefd89c92f31b70b94d80f9eb63290b9d2519c792f502f41408d9207bf6046",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-relaxed-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5117,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c85e25db9ac7442c3b121268511233c6a85ce491668f3d66542578aca04bef1c",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r1/runtime-startup-alpha.config.log": {
+    "bytes": 10027,
+    "retained_selected_inventory_verified": true,
+    "sha256": "aeea312ae914d831d37df40903700527acb74b70aa1bf403fe2144a571a5895b",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-relaxed-r1/runtime-startup-zero.config.log": {
+    "bytes": 4577,
+    "retained_selected_inventory_verified": true,
+    "sha256": "084c087c46c23c50c2a5a9eefed866bd0b914084cbd4d1df5d4c1852baa62e4f",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r1/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r2/result.json": {
+    "bytes": 29897,
+    "retained_selected_inventory_verified": true,
+    "sha256": "141da7aff1ed97726c41888a42dfa2ed56f0ab40307daad3c8eeff1477091f3e",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r2/result.json"
+  },
+  "arms/filesystem/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8636,
+    "retained_selected_inventory_verified": true,
+    "sha256": "281d5f7bd4df3ca64610da876f3f16bbf4f24d7b92c0d1e268700aafce52345d",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-relaxed-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5117,
+    "retained_selected_inventory_verified": true,
+    "sha256": "e08a1b820f44239ab0838282dae2fce68ed28b6da89e4fbd181a8431826cfaa9",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r2/runtime-startup-alpha.config.log": {
+    "bytes": 10028,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a8d97b595665e6d5fe71c8a4c96c5d642f0ffb2fb7cd8d0f8f292eb02e1cbb8d",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-relaxed-r2/runtime-startup-zero.config.log": {
+    "bytes": 4577,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d3e97501b5beb8fb1b17e12eee1dfafd20295a0174efeab061dc889b8c1667cd",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r2/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r3/result.json": {
+    "bytes": 29888,
+    "retained_selected_inventory_verified": true,
+    "sha256": "6ffd797a50d630f6e795e91a9631bcf0f3307e41a6e5c65ef6f0b897b1560f5b",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r3/result.json"
+  },
+  "arms/filesystem/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8637,
+    "retained_selected_inventory_verified": true,
+    "sha256": "2443cb15539469b9578feff5947fe5d4372b9498ba8ea584b3441e0891c19ada",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-relaxed-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5117,
+    "retained_selected_inventory_verified": true,
+    "sha256": "61216a6cfb44c8cf670d4c47b31855b1a487f6d15ac31aca9ca81a08dca65ce1",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r3/runtime-startup-alpha.config.log": {
+    "bytes": 10027,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ebf9d44236276f047aaeb4926ad4e4c4bbb0dc3cb24a1cd4fbb23e1df83d762b",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/badger-relaxed-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/badger-relaxed-r3/runtime-startup-zero.config.log": {
+    "bytes": 4577,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c4cdaa945418adf4a57fc9a62257e6b79ef6a8692b70682daf1c40e29d80d57e",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/badger-relaxed-r3/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r1/result.json": {
+    "bytes": 29830,
+    "retained_selected_inventory_verified": true,
+    "sha256": "17cd7250fd8df6b65240a48976146466ce3771bade1888f1adc4e75c8f767ad7",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r1/result.json"
+  },
+  "arms/filesystem/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8123,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3cc698dabcb2bb8bd945cff057a76e5a5f2290d14512ace582dbaa41c2211f17",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 325542,
+    "retained_selected_inventory_verified": true,
+    "sha256": "e615a59b5cb369b0eddbe3d50d21375148f40ba6583f99a5267a51a4a6ee84c8",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-durable-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5117,
+    "retained_selected_inventory_verified": true,
+    "sha256": "826de18b48bcdcce484b74eb2d3a00f2c08a33b95d9e952e31e92a54e373b008",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r1/runtime-startup-alpha.config.log": {
+    "bytes": 9619,
+    "retained_selected_inventory_verified": true,
+    "sha256": "eb18971a476b0491447ccae42a31fa3c7efafc39aa1ee4f658f80f7fe41a9484",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 326905,
+    "retained_selected_inventory_verified": true,
+    "sha256": "4da9e990712bd73e12b94f93b309c9601b041da68697b50a49dec83008cfbd3f",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-durable-r1/runtime-startup-zero.config.log": {
+    "bytes": 4577,
+    "retained_selected_inventory_verified": true,
+    "sha256": "42e97ae421e819e0bdae6e65c1910954acdc9ed9a8b021f7c9365cbc42278dd2",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r1/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r2/result.json": {
+    "bytes": 29846,
+    "retained_selected_inventory_verified": true,
+    "sha256": "dad07b78e20d05f64181d561f05b008fb7802ccb16ad186f9eedf358328d6354",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r2/result.json"
+  },
+  "arms/filesystem/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8136,
+    "retained_selected_inventory_verified": true,
+    "sha256": "089194bb56609d3ff895bb26cd7b37bc8e4c86dfd29f044bdfe4a01e4ee78444",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 325542,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a947269b1bc13c9486731aad23e7419f8d59cc7c5bcd58be134de84c1c110ab4",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-durable-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 7025,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d1a7944b65b3764d9a5518a0552045577e610a83164e551630b7ab00211b93cc",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r2/runtime-startup-alpha.config.log": {
+    "bytes": 9028,
+    "retained_selected_inventory_verified": true,
+    "sha256": "20252ff81ad71e966b7e303907de3e464d5e6e79c60b36b3d0ff9f3756689bf6",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 326873,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a8c94d64bbef8fb83e97a99e106293b9d41a1dfbeecdff769c956a4078b3ab16",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-durable-r2/runtime-startup-zero.config.log": {
+    "bytes": 6485,
+    "retained_selected_inventory_verified": true,
+    "sha256": "429a153aeb2874a9e0331ee62905d259905df18e228851654e98ce96789ae640",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r2/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r3/result.json": {
+    "bytes": 29844,
+    "retained_selected_inventory_verified": true,
+    "sha256": "9f894c7d794d77c0cb7a31952d1bd9f5d0f62d6e7ce241c81dbb764e2efc8859",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r3/result.json"
+  },
+  "arms/filesystem/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8135,
+    "retained_selected_inventory_verified": true,
+    "sha256": "7bd7fbb32f7b9efa097e4cd0572857498bbb0e37ce1238d8a4e4b5ecdaaed709",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 325542,
+    "retained_selected_inventory_verified": true,
+    "sha256": "e809af9b6197a5470b02562c4308a141b29411c4a8ff07d741aba96cbc9a105b",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-durable-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5117,
+    "retained_selected_inventory_verified": true,
+    "sha256": "489f77b2b89cb7150893238f656d69760ad455734ecfc424906dd5d067997ae0",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r3/runtime-startup-alpha.config.log": {
+    "bytes": 9620,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a0dfe415623cfeb567b2c07bccad58bf6dbb5ef63a1ccae2812d5d3996285f63",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-durable-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 326904,
+    "retained_selected_inventory_verified": true,
+    "sha256": "8076906db6bcb37cf82549a6b00c6207323c5c9fc90a457ebcd55fd67770cda3",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-durable-r3/runtime-startup-zero.config.log": {
+    "bytes": 4577,
+    "retained_selected_inventory_verified": true,
+    "sha256": "0275a03938a133ce87c5d11e2484976568186df5badbc784474ea1af06f7fb01",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-durable-r3/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r1/result.json": {
+    "bytes": 29237,
+    "retained_selected_inventory_verified": true,
+    "sha256": "9c22361aa168160be7e3610ad38b8afcbeb203372dbaf5e205b71bb6cb0eaee2",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r1/result.json"
+  },
+  "arms/filesystem/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7180,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d850a11c922ec843b26fc747e315b2d974a76204911536306c4324ab4c047529",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327687,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3f697bdade4729ee0366a8781404c591fdca681dd639c68d6c2be8cc628c8ce3",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-relaxed-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5117,
+    "retained_selected_inventory_verified": true,
+    "sha256": "27e9a259fd715021e593bce9d9536f37e4e594b14888ebb50971218836551d05",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r1/runtime-startup-alpha.config.log": {
+    "bytes": 8575,
+    "retained_selected_inventory_verified": true,
+    "sha256": "b5494bb224b197fe38e06e6203394476c8e29b598f8a7719829ee6721a39ed56",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 327752,
+    "retained_selected_inventory_verified": true,
+    "sha256": "699f95c94602b6b575ba22911c7bd3ee47b2f8c388a5ae4dbdb7da264663953e",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-relaxed-r1/runtime-startup-zero.config.log": {
+    "bytes": 4577,
+    "retained_selected_inventory_verified": true,
+    "sha256": "2bfd94f6a2e2d597a5651776f0772d52de3f56d0e7e781666fa11dc7f82bd389",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r1/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r2/result.json": {
+    "bytes": 29236,
+    "retained_selected_inventory_verified": true,
+    "sha256": "9916022e3d1fa9ffb5cdb53236c861744d869fbf6c6713d6f0d102fe9005be6b",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r2/result.json"
+  },
+  "arms/filesystem/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7181,
+    "retained_selected_inventory_verified": true,
+    "sha256": "af5724a075b49ae410b692a0bda04bec5d8d5eb03992803b2b2ddad3f8b12618",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327688,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d87a8b02a53ac4203e95cd2dc09d1587036ce683ea29026b360d9a8a8e7a25dc",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-relaxed-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5112,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f7737de5d67edcfb199e80b25e088654167d147272c10fb853971f9cb88215fd",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r2/runtime-startup-alpha.config.log": {
+    "bytes": 8574,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c9a8aaa529ed670184a02111225040d8c90fd571f4a2ab2aaafdda05e57a8134",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 327757,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c948d27ddecef0bc774b8c9529995eb63d13c4f36e0da8f401610be5ac851671",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-relaxed-r2/runtime-startup-zero.config.log": {
+    "bytes": 4572,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3e8f7e8f0e75721623d23c8f477329098ae469e8bd6b4a58b1af7cb1b345f9c5",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r2/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r3/result.json": {
+    "bytes": 29238,
+    "retained_selected_inventory_verified": true,
+    "sha256": "7b552cfb5db3adc8d32352a3843b661dede2fc40a0e10b91d084a8524117a664",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r3/result.json"
+  },
+  "arms/filesystem/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7181,
+    "retained_selected_inventory_verified": true,
+    "sha256": "63b06a04d75dc67cb97fb5ec3f1ececa80d6ec3f2cb927ce5e52c92649e199c5",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327686,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3c5dc9bfd5ddf9a7bc01810ef9bc3fae8bcc66653114b0888b7c0d71c3263cbd",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-relaxed-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5117,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a3d23b4b015fda2abff0b59035ba48133e06fdef0975c93eb31539e340058206",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r3/runtime-startup-alpha.config.log": {
+    "bytes": 8575,
+    "retained_selected_inventory_verified": true,
+    "sha256": "9b714722c8ec200b5f38ccc124b4d32cbfd22030222905d6064dfb838de00f52",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/live/treedb-relaxed-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 327753,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d4bdd77b2b8a876b5a835389afc6f9c02e22c9f5283ef3a6da4819037f8fa1ef",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/live/treedb-relaxed-r3/runtime-startup-zero.config.log": {
+    "bytes": 4577,
+    "retained_selected_inventory_verified": true,
+    "sha256": "0eb271f815c7bb891da611a275ea9a4a1c93136a0267f6780fb0c0698905f26f",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/live/treedb-relaxed-r3/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/microbench/raw.stderr": {
+    "bytes": 0,
+    "retained_selected_inventory_verified": true,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/microbench/raw.stderr"
+  },
+  "arms/filesystem/microbench/raw.stdout": {
+    "bytes": 19621,
+    "retained_selected_inventory_verified": true,
+    "sha256": "0667f0c5ed6a9284550d675e017adc5c20ca404b27c65de9943216c69508c61a",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/microbench/raw.stdout"
+  },
+  "arms/filesystem/microbench/raw.txt": {
+    "bytes": 19621,
+    "retained_selected_inventory_verified": true,
+    "sha256": "0667f0c5ed6a9284550d675e017adc5c20ca404b27c65de9943216c69508c61a",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/microbench/raw.txt"
+  },
+  "arms/filesystem/profiles/treedb-durable-run/result.json": {
+    "bytes": 30247,
+    "retained_selected_inventory_verified": true,
+    "sha256": "02a38e121614b397badd0c7ea4c79a2efeddfeb3793c667828252795bf1e6078",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-durable-run/result.json"
+  },
+  "arms/filesystem/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8165,
+    "retained_selected_inventory_verified": true,
+    "sha256": "772ffaed8c7b677bd57c0c023aa4b521b0775d2217029e122aa5bf9fd1b27afc",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 325556,
+    "retained_selected_inventory_verified": true,
+    "sha256": "223f93c578b2e87e7fa797a3268820ef4ef1794a7aefa30776256d26700c67f6",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/profiles/treedb-durable-run/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5117,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3cd4bbe4a4b47b47426615ca1d42518e368a1988e3a053ccadb5fb35fe122925",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/profiles/treedb-durable-run/runtime-startup-alpha.config.log": {
+    "bytes": 9630,
+    "retained_selected_inventory_verified": true,
+    "sha256": "66ce1b8cac4a88ee728f7bb9fc4ac21383850737e76372fede95d8b849b53e2f",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-durable-run/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/profiles/treedb-durable-run/runtime-startup-alpha.store.txt": {
+    "bytes": 326909,
+    "retained_selected_inventory_verified": true,
+    "sha256": "99148af6d3f43ce8337ee9ae64e225538435e3ad00d02cb1eb2778be0129a623",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-durable-run/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/profiles/treedb-durable-run/runtime-startup-zero.config.log": {
+    "bytes": 4577,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f34f7172414443ec52ff787803596028974cfcefdb6c676f7068fb44d16a632b",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-durable-run/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/profiles/treedb-durable-top.txt": {
+    "bytes": 2751,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a3dd29c9f5dec5d8e0b403ff6ecced2e6fbfb39cd89fb9046aab8eab4cb4c706",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-durable-top.txt"
+  },
+  "arms/filesystem/profiles/treedb-durable.pprof": {
+    "bytes": 23535,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c77285fc630fc8e27ac8acf129b185557404f9244371b9642dcdbc8c75d9e375",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-durable.pprof"
+  },
+  "arms/filesystem/profiles/treedb-relaxed-run/result.json": {
+    "bytes": 29670,
+    "retained_selected_inventory_verified": true,
+    "sha256": "4066d54dc7c8498b8c2ae5c5bbbb1c613cf54b04defc831246857b9cee484b38",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-relaxed-run/result.json"
+  },
+  "arms/filesystem/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7480,
+    "retained_selected_inventory_verified": true,
+    "sha256": "b9e13a50348550a278ff742ca07e3672af447baab98058f97fa2f5669b028eb8",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/filesystem/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327737,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3e8546c91d57a84f5dec4f4633bd0a3685fab09f3080de61eef6dec58da4f2a6",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/filesystem/profiles/treedb-relaxed-run/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 7076,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c93fd73934d54d44508e9c85b51ca68a4bd276e0b1951617e819f456bd3ba59e",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/filesystem/profiles/treedb-relaxed-run/runtime-startup-alpha.config.log": {
+    "bytes": 8036,
+    "retained_selected_inventory_verified": true,
+    "sha256": "6914ca10e44445d6d74dfe731a07429404c0e42bc47d7cb7468ef033f8c12c4e",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-relaxed-run/runtime-startup-alpha.config.log"
+  },
+  "arms/filesystem/profiles/treedb-relaxed-run/runtime-startup-alpha.store.txt": {
+    "bytes": 327715,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f36bfa03094f2d63d2a076e574489ae700289b392c3a95ccf26bc08e4d36b5ce",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-relaxed-run/runtime-startup-alpha.store.txt"
+  },
+  "arms/filesystem/profiles/treedb-relaxed-run/runtime-startup-zero.config.log": {
+    "bytes": 6440,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ccc584ada6d89ef89c140bd6ce3f3eed959bab4db7e4144d26104b1218c071e1",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-relaxed-run/runtime-startup-zero.config.log"
+  },
+  "arms/filesystem/profiles/treedb-relaxed-top.txt": {
+    "bytes": 2614,
+    "retained_selected_inventory_verified": true,
+    "sha256": "399cafe6927625d1e377ef982e3dc95c65524bb352d8f4ee690beb2d50117290",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-relaxed-top.txt"
+  },
+  "arms/filesystem/profiles/treedb-relaxed.pprof": {
+    "bytes": 17643,
+    "retained_selected_inventory_verified": true,
+    "sha256": "6063ade4558625668e98ece245a7449f2795adf809eb0823ccfbba25fa0557a8",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/profiles/treedb-relaxed.pprof"
+  },
+  "arms/filesystem/receipts/filesystem-12-ARCHIVE_RECEIPT.json": {
+    "bytes": 274,
+    "retained_selected_inventory_verified": false,
+    "sha256": "18d492af6afe8f2e0e2c99e00db1f34c8a11d654a1bd611cba4a3cdf0d5fc756",
+    "source": "artifacts/final-native111-runtime-01/filesystem-12-ARCHIVE_RECEIPT.json"
+  },
+  "arms/filesystem/receipts/filesystem-12-SELECTED_FILES.json": {
+    "bytes": 21677,
+    "retained_selected_inventory_verified": false,
+    "sha256": "838c9cb607989979b73f639018a7928fd282bfbbd967ba6c853101792a306fde",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12-SELECTED_FILES.json"
+  },
+  "arms/filesystem/receipts/filesystem-12-invocation.json": {
+    "bytes": 1630,
+    "retained_selected_inventory_verified": false,
+    "sha256": "1d885200020de6967fc43cdc425afdf4ba2e3ca8328daa491c0b37a901e286cf",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12-invocation.json"
+  },
+  "arms/filesystem/receipts/filesystem-12-manifest.stdout": {
+    "bytes": 15344,
+    "retained_selected_inventory_verified": false,
+    "sha256": "0142db470d990cceed9165e61f9bd383e235afab6c07df7569726a61e2a5d71b",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12-manifest.stdout"
+  },
+  "arms/filesystem/receipts/filesystem-12-source-manifest.json": {
+    "bytes": 15443,
+    "retained_selected_inventory_verified": false,
+    "sha256": "008eda694c391c88f23af0cad4b06ac145668a38eec7affc27378ea0813c518c",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12-source-manifest.json"
+  },
+  "arms/filesystem/receipts/filesystem-12-verify.stdout": {
+    "bytes": 15344,
+    "retained_selected_inventory_verified": false,
+    "sha256": "0142db470d990cceed9165e61f9bd383e235afab6c07df7569726a61e2a5d71b",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12-verify.stdout"
+  },
+  "arms/filesystem/receipts/quiet/preflight-acquisition.json": {
+    "bytes": 153257,
+    "retained_selected_inventory_verified": false,
+    "sha256": "faadfc508309742bc80c6f0dba7fa59776390eccf61f5c4562499ff2cd0033a8",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/quiet-filesystem-12/preflight-acquisition.json"
+  },
+  "arms/filesystem/receipts/quiet/preflight.json": {
+    "bytes": 58100,
+    "retained_selected_inventory_verified": false,
+    "sha256": "96f8174d8cfbcf3c0a7a27cd501266469ff407adf4cf4d45035647ba90e907ef",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/quiet-filesystem-12/preflight.json"
+  },
+  "arms/filesystem/report.md": {
+    "bytes": 9470,
+    "retained_selected_inventory_verified": true,
+    "sha256": "b72931b85dc2011fadb956ada0370944bb03e46d6b610bb5e6d01828f82b32a6",
+    "source": "artifacts/final-native111-runtime-01/filesystem-evidence/filesystem-12/report.md"
+  },
+  "arms/process/PROCESS_ARM_AUDIT.md": {
+    "bytes": 7426,
+    "retained_selected_inventory_verified": false,
+    "sha256": "d4a9d0dd5e8db024e99e8d04dae206cfe27195b2ab0414e38c1d5c45e82d16da",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/PROCESS_ARM_AUDIT.md"
+  },
+  "arms/process/context.txt": {
+    "bytes": 1341,
+    "retained_selected_inventory_verified": true,
+    "sha256": "b3fdea6e8fd202f519c554dd4f51703f5c03ce235caf9109836f865aa9cb657f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/context.txt"
+  },
+  "arms/process/live/badger-durable-r1/result.json": {
+    "bytes": 29798,
+    "retained_selected_inventory_verified": true,
+    "sha256": "20c0484de9a4573349e3d7e0082e851a79c96483b614e92faff0fe78d4cf5009",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r1/result.json"
+  },
+  "arms/process/live/badger-durable-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8625,
+    "retained_selected_inventory_verified": true,
+    "sha256": "6b7ebbb06d575564311860df9afcd0f4e2089661ef81b8e33deb91f82a6cdaeb",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/badger-durable-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/badger-durable-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5115,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ca177eddafb535e09dc8b22545f1f2a30076871ca152dbe7cec3a451de48f186",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/badger-durable-r1/runtime-startup-alpha.config.log": {
+    "bytes": 10015,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c3938bf7580b18a7106e6029d99d57705939be42d55d6e880ed2c9cb1ba1b7e1",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/badger-durable-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/badger-durable-r1/runtime-startup-zero.config.log": {
+    "bytes": 4575,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c94aa775ddfa34313ef2b60ec318766c18ffa4d2936cbdd0c39a8cec51ce2941",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r1/runtime-startup-zero.config.log"
+  },
+  "arms/process/live/badger-durable-r2/result.json": {
+    "bytes": 29804,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ac99f69a1672b64f5a2ba0f00b1ad3ec19cbcaa408fd6a9914352b84665be5bf",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r2/result.json"
+  },
+  "arms/process/live/badger-durable-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8625,
+    "retained_selected_inventory_verified": true,
+    "sha256": "6da943a4acb6a67b42d9a47a517d070318b7d7c22ddd393cb73f252f25b014dc",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/badger-durable-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/badger-durable-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5115,
+    "retained_selected_inventory_verified": true,
+    "sha256": "1390f85e3446f3617546c212c22b30b3294b4730f81f67d30ce21eb82f88157e",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/badger-durable-r2/runtime-startup-alpha.config.log": {
+    "bytes": 10015,
+    "retained_selected_inventory_verified": true,
+    "sha256": "486a1bd147cf009d3db1179c2e6f182decc93fad3aa4cc71ea3d28d150b111b7",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/badger-durable-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/badger-durable-r2/runtime-startup-zero.config.log": {
+    "bytes": 4575,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d5ca92d05ea2ab27bef1b64b094bfff694318f12fe95c562dc5b6ac9a085cbb4",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r2/runtime-startup-zero.config.log"
+  },
+  "arms/process/live/badger-durable-r3/result.json": {
+    "bytes": 29798,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3c0584aee3f98fe7eb3e93b8bed255512af3c7f2c73ced9e6f7852964272f510",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r3/result.json"
+  },
+  "arms/process/live/badger-durable-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8625,
+    "retained_selected_inventory_verified": true,
+    "sha256": "e916da5148e81553c6bbc1972e2a758bb7bb08fc44f36063c0f0bf82c6c81071",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/badger-durable-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/badger-durable-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5115,
+    "retained_selected_inventory_verified": true,
+    "sha256": "beaef807bcf0044c7a91366829d43320fcd3939e884f1a25be474b5117a300ac",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/badger-durable-r3/runtime-startup-alpha.config.log": {
+    "bytes": 10016,
+    "retained_selected_inventory_verified": true,
+    "sha256": "059a27a2dcaaa60857aea124ee7f471b8af32bdd3a2f871134d16701b3142a58",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/badger-durable-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 202,
+    "retained_selected_inventory_verified": true,
+    "sha256": "18e1d3d69f06031c77ab4d98df906d083c3c2ea533faa3e7453c1e0e73de35c2",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/badger-durable-r3/runtime-startup-zero.config.log": {
+    "bytes": 4575,
+    "retained_selected_inventory_verified": true,
+    "sha256": "b091b5fcc69dafd0407e146eb807d12960149125a936ce91cdd525356c2d7c21",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-durable-r3/runtime-startup-zero.config.log"
+  },
+  "arms/process/live/badger-relaxed-r1/result.json": {
+    "bytes": 29824,
+    "retained_selected_inventory_verified": true,
+    "sha256": "8ae8f45c9035f65111542735110b1ebf426fa918b46ef9536a0ec95d0a82c3be",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r1/result.json"
+  },
+  "arms/process/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8626,
+    "retained_selected_inventory_verified": true,
+    "sha256": "9897105241beed50f874113278549bd68de966951d3767509db5c583ac34cabc",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/badger-relaxed-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5110,
+    "retained_selected_inventory_verified": true,
+    "sha256": "cce59fd8b5d640cfbcd64651e6951219b1e3e4aaf51e74e903c8397752be4983",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/badger-relaxed-r1/runtime-startup-alpha.config.log": {
+    "bytes": 10017,
+    "retained_selected_inventory_verified": true,
+    "sha256": "0756c73ec7ca991f5fe228883bb61bcce2d39067ff301436203217d6dc2cafdf",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/badger-relaxed-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/badger-relaxed-r1/runtime-startup-zero.config.log": {
+    "bytes": 4570,
+    "retained_selected_inventory_verified": true,
+    "sha256": "9d64b4c59419510b5893d6a0fb32d3544cf22a8e2855a8d03aafaf35046f329f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r1/runtime-startup-zero.config.log"
+  },
+  "arms/process/live/badger-relaxed-r2/result.json": {
+    "bytes": 29816,
+    "retained_selected_inventory_verified": true,
+    "sha256": "67ed42a1953a3a86849c55ba625ea54fd537aede391fbcacd736c341dad727b0",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r2/result.json"
+  },
+  "arms/process/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8626,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d6fb0e311bf518c863448003c7c40b8bcd089ce238fd49ed787782925658c865",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/badger-relaxed-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5115,
+    "retained_selected_inventory_verified": true,
+    "sha256": "2d479283916f2b32329fe9839ddb88b0a3732dc0cc314e57f90cfe3276d6d3cd",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/badger-relaxed-r2/runtime-startup-alpha.config.log": {
+    "bytes": 10017,
+    "retained_selected_inventory_verified": true,
+    "sha256": "566cb7253164522b4813601b31b800279948297ea77567001be07b931ec1fd80",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/badger-relaxed-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/badger-relaxed-r2/runtime-startup-zero.config.log": {
+    "bytes": 4575,
+    "retained_selected_inventory_verified": true,
+    "sha256": "adb3181858ce083a94d18754c4febc77af421a951437e6b438941bde6ae63b77",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r2/runtime-startup-zero.config.log"
+  },
+  "arms/process/live/badger-relaxed-r3/result.json": {
+    "bytes": 29803,
+    "retained_selected_inventory_verified": true,
+    "sha256": "13c549ba448851c3aca48579f897bd928f04f6185d007d55e8d4c892d26639a7",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r3/result.json"
+  },
+  "arms/process/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 8626,
+    "retained_selected_inventory_verified": true,
+    "sha256": "00c33c41e048fb27729747661faa6e3fb74c18718e6148f57a0f9b67187722fc",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/badger-relaxed-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 6872,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3535e5dbcc84c9ae307c9eaf90bd28839c1916d2f803dd561690c9a6097d425d",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/badger-relaxed-r3/runtime-startup-alpha.config.log": {
+    "bytes": 9469,
+    "retained_selected_inventory_verified": true,
+    "sha256": "72cd7e400af8b4229c8834c54792f1bf2c5c233e2592f698678ae4e7dc57cbfc",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/badger-relaxed-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 204,
+    "retained_selected_inventory_verified": true,
+    "sha256": "240372a635a284c72af2fc383a193e443c94261b8f08571c97152bf5afcbf74f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/badger-relaxed-r3/runtime-startup-zero.config.log": {
+    "bytes": 6433,
+    "retained_selected_inventory_verified": true,
+    "sha256": "7a08a087004707cd1427d101b8184cef49195f12b527aa6b6009ced79be7a5cf",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/badger-relaxed-r3/runtime-startup-zero.config.log"
+  },
+  "arms/process/live/treedb-durable-r1/result.json": {
+    "bytes": 29157,
+    "retained_selected_inventory_verified": true,
+    "sha256": "e66e7343c70490a7eb2ec294ae8c3ae572d3a9fb3f6b3fb8cdd02c87c037b44c",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r1/result.json"
+  },
+  "arms/process/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7176,
+    "retained_selected_inventory_verified": true,
+    "sha256": "682a69a1ef4d25fa5c095c2b840ca0170e235631259054b431b4e946e73d27b3",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327678,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f7bd83d2d2d81474c553209a9d50b91789ea62a4214a8a0bafd9431fb96032c5",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/treedb-durable-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5115,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d9ee5e17dd47c2d2ec73f9f7b86943e3aaccc2d62096f11b1f0a78fd81094ce0",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/treedb-durable-r1/runtime-startup-alpha.config.log": {
+    "bytes": 8569,
+    "retained_selected_inventory_verified": true,
+    "sha256": "79283ff9bd1cfe9189c24fcfe9160722c1d25adc6138b8e719f6c3202d875310",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/treedb-durable-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 327760,
+    "retained_selected_inventory_verified": true,
+    "sha256": "43798fdc98dd4cdc510031467e845a65573c57f6e9bb8bffca573fc8b4fca370",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/treedb-durable-r1/runtime-startup-zero.config.log": {
+    "bytes": 4575,
+    "retained_selected_inventory_verified": true,
+    "sha256": "2336104577ff6158e9cda6d8bb4351e147a99072b86fbf1d1b96cef589185f24",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r1/runtime-startup-zero.config.log"
+  },
+  "arms/process/live/treedb-durable-r2/result.json": {
+    "bytes": 29160,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3d049ea7916fd238c161f2ee53c29702d1357c7ad435976b3f4da971a48145e4",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r2/result.json"
+  },
+  "arms/process/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7175,
+    "retained_selected_inventory_verified": true,
+    "sha256": "11bed5ac2fb0156303e62992c1f08b78a0eb6e99d27ec8f2284a90767d667c19",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327677,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3c65b9b139efd64f34e0f15d01ed5c4157b026889650df46f5dc891003b8c19e",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/treedb-durable-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 6867,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f0e08ee22c9a0c8692f4ce74c0deff593489cea2c69d071263c2efe8871df8cc",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/treedb-durable-r2/runtime-startup-alpha.config.log": {
+    "bytes": 8021,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a2c793bcc12f1fdd56c89f470ec7b722e6331f0b52b2b8cd81b1b842b9f51dcf",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/treedb-durable-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 327713,
+    "retained_selected_inventory_verified": true,
+    "sha256": "6b0ff2d7e08049d1d398bff3cb21d85565df7b8b2811b97965557eabb2c543e7",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/treedb-durable-r2/runtime-startup-zero.config.log": {
+    "bytes": 6428,
+    "retained_selected_inventory_verified": true,
+    "sha256": "8ce68cc1d20e0ff77e1403cae2b68bccafc3e42f4656e74228daf3fec305fbc2",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r2/runtime-startup-zero.config.log"
+  },
+  "arms/process/live/treedb-durable-r3/result.json": {
+    "bytes": 29154,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ed839b63857adfa9ae08937daa5df9a579735d7fbe9fbb624c2ef1527779d02f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r3/result.json"
+  },
+  "arms/process/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7176,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3becd1fc27edde5a023dd968995f70c7b20b1b6a8bb5457ed2cf9a53341a1e92",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327678,
+    "retained_selected_inventory_verified": true,
+    "sha256": "0f1d13b4261de9b824527d1ddc3646bdc45393c980d6a2d7d6f585e3e5788d58",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/treedb-durable-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5115,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d706c1bccf786c6f222e242519c5eee3b77c7c09a8127ecedbd63cbdb5f0637b",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/treedb-durable-r3/runtime-startup-alpha.config.log": {
+    "bytes": 8570,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c4937587a6e57bd8da23341c172ee3f243604a491952bdeace07e2219fa9f417",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/treedb-durable-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 327755,
+    "retained_selected_inventory_verified": true,
+    "sha256": "bc47576f25ca78da90fb4d9aa18fa08de35a3f5157ab69f9d09a2e7ca5718e82",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/treedb-durable-r3/runtime-startup-zero.config.log": {
+    "bytes": 4575,
+    "retained_selected_inventory_verified": true,
+    "sha256": "6f1a3e025d62df13561a93bddbd6a2c12f3c8a8abca928b9d2e15a15043c3b8f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-durable-r3/runtime-startup-zero.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r1/result.json": {
+    "bytes": 29177,
+    "retained_selected_inventory_verified": true,
+    "sha256": "030b7b1070a758897e6ecbff5f4b7cc3a1a6943c25986c64fc727e306a1533a6",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r1/result.json"
+  },
+  "arms/process/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7175,
+    "retained_selected_inventory_verified": true,
+    "sha256": "7e5a8ed1a024cd8b21bc54d4dcf9886c890c0d223d4ad7712389d92dd77c8611",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327684,
+    "retained_selected_inventory_verified": true,
+    "sha256": "03e0d6b665d5794f31ebb276965128c0098cb651f330de5d4fede3fa371d3982",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/treedb-relaxed-r1/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5115,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a33f9c94a9b2c06785496db8765e9ff2161aa48720d7e239d60d1894c212f355",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r1/runtime-startup-alpha.config.log": {
+    "bytes": 8570,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ad2225761b5b7a66ae54f21b9eac12ace423d4f83b3ecf0175fde925a9b4878d",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r1/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r1/runtime-startup-alpha.store.txt": {
+    "bytes": 327755,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f264c9c388d4c98d7a5802a7d5ef26e6a08a77c032c80f17f3dd034b81e4d12c",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r1/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/treedb-relaxed-r1/runtime-startup-zero.config.log": {
+    "bytes": 4575,
+    "retained_selected_inventory_verified": true,
+    "sha256": "4180c0035307c0003acad9da9df4484e2c47314ca31425c6d31e1823d795591c",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r1/runtime-startup-zero.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r2/result.json": {
+    "bytes": 29176,
+    "retained_selected_inventory_verified": true,
+    "sha256": "8c1c06eef973a8fb8b99621ce9eb7d470ccf3fff8ad7f9ccc773bc73a3c0208f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r2/result.json"
+  },
+  "arms/process/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7175,
+    "retained_selected_inventory_verified": true,
+    "sha256": "09b688a2ccd4ceeae2549604733603307f0db6fea2984351147b9e6169f9f18d",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327684,
+    "retained_selected_inventory_verified": true,
+    "sha256": "31602b7e4be6e101605190fbc4b2102323cc3218fdede78add094f22a0d4a197",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/treedb-relaxed-r2/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5110,
+    "retained_selected_inventory_verified": true,
+    "sha256": "102575a5a27c6eb2c0b6724eacf6d4ec8e4c7c2a07f6cca89af33bdce8c1f083",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r2/runtime-startup-alpha.config.log": {
+    "bytes": 8570,
+    "retained_selected_inventory_verified": true,
+    "sha256": "3feb9d32479a4a70c22fc0ba874f2f3ac110937a745e85d3ef9991f615f3ec81",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r2/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r2/runtime-startup-alpha.store.txt": {
+    "bytes": 327752,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d518452677f053312e721e7eb8ad637a315da40ce958e6570def29eb2cfe585f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r2/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/treedb-relaxed-r2/runtime-startup-zero.config.log": {
+    "bytes": 4570,
+    "retained_selected_inventory_verified": true,
+    "sha256": "ef7a0f2ab350cd56958f35faa183555f7d891c200edab00c38139770d7589703",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r2/runtime-startup-zero.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r3/result.json": {
+    "bytes": 29178,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f7f6b3e3a92589769300187eec0e2ddedbdd7f0e9353b73be830c4552f1aff56",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r3/result.json"
+  },
+  "arms/process/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7176,
+    "retained_selected_inventory_verified": true,
+    "sha256": "39852054b4272e0d3f8c3c2c21498cd663bc629e5f923a44b6faac9a62e31151",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327684,
+    "retained_selected_inventory_verified": true,
+    "sha256": "024abcf8d7a5aa4b7bc3076758d7c3c5ee33b17091cb46e3d38899e677b7b2d4",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/live/treedb-relaxed-r3/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5115,
+    "retained_selected_inventory_verified": true,
+    "sha256": "cebca855a25958f0fac25d0339110e0cd32ffb88e16aa751149e0b3c96b36520",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r3/runtime-startup-alpha.config.log": {
+    "bytes": 8570,
+    "retained_selected_inventory_verified": true,
+    "sha256": "71faedf7325542ad667425d3a171a48039e70d7794f92064ed59876093ded366",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r3/runtime-startup-alpha.config.log"
+  },
+  "arms/process/live/treedb-relaxed-r3/runtime-startup-alpha.store.txt": {
+    "bytes": 327750,
+    "retained_selected_inventory_verified": true,
+    "sha256": "775c68565731d5f3e25a1845cce73c569c1350070cad01c573e3e52ccdc1287f",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r3/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/live/treedb-relaxed-r3/runtime-startup-zero.config.log": {
+    "bytes": 4575,
+    "retained_selected_inventory_verified": true,
+    "sha256": "0d8f61459bae659f051e78f22e0b045282a0dabf9078168966a05988e1519ee8",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/live/treedb-relaxed-r3/runtime-startup-zero.config.log"
+  },
+  "arms/process/microbench/raw.stderr": {
+    "bytes": 0,
+    "retained_selected_inventory_verified": true,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/microbench/raw.stderr"
+  },
+  "arms/process/microbench/raw.stdout": {
+    "bytes": 19620,
+    "retained_selected_inventory_verified": true,
+    "sha256": "7f0f8520a6051df88bf83296bbf8a3a4ad1d90e637e4378d9f5116fe1c11d520",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/microbench/raw.stdout"
+  },
+  "arms/process/microbench/raw.txt": {
+    "bytes": 19620,
+    "retained_selected_inventory_verified": true,
+    "sha256": "7f0f8520a6051df88bf83296bbf8a3a4ad1d90e637e4378d9f5116fe1c11d520",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/microbench/raw.txt"
+  },
+  "arms/process/profiles/treedb-durable-run/result.json": {
+    "bytes": 29573,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f2e2595499ed3089289cd8064de0462c6ff31016807a8ea5abe2769cad5b4eca",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-durable-run/result.json"
+  },
+  "arms/process/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7186,
+    "retained_selected_inventory_verified": true,
+    "sha256": "131061a05a8fab3a9dc5823fc78f51175321787c17724d37674b3087d6b35eff",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327686,
+    "retained_selected_inventory_verified": true,
+    "sha256": "616d8df0757667c49a9bf1ae90ff480d0c463dfd2b2033e9a1a9390c4b3d187c",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/profiles/treedb-durable-run/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5115,
+    "retained_selected_inventory_verified": true,
+    "sha256": "2e2fd61833e0d70f770c8206de8913c9dd5ca17e1c4c06f7d25b72e32228cfb1",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-durable-run/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/profiles/treedb-durable-run/runtime-startup-alpha.config.log": {
+    "bytes": 8580,
+    "retained_selected_inventory_verified": true,
+    "sha256": "fa1885b69d6ffef755de744484659e3e92fb8ae1d1c4f34382761d4b8509d270",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-durable-run/runtime-startup-alpha.config.log"
+  },
+  "arms/process/profiles/treedb-durable-run/runtime-startup-alpha.store.txt": {
+    "bytes": 327766,
+    "retained_selected_inventory_verified": true,
+    "sha256": "c2ea4042f6057edf7350a0280f21237c6b46f5e1f70a81460f150b90f9920ff2",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-durable-run/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/profiles/treedb-durable-run/runtime-startup-zero.config.log": {
+    "bytes": 4575,
+    "retained_selected_inventory_verified": true,
+    "sha256": "bd97bbdf8e0bf5f45307b4c64abb32f3bb9c727a0ea92b952e01cf71d606b8a4",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-durable-run/runtime-startup-zero.config.log"
+  },
+  "arms/process/profiles/treedb-durable-top.txt": {
+    "bytes": 2467,
+    "retained_selected_inventory_verified": true,
+    "sha256": "72d9e8877d09d006b654cd5b48e5b6982661171af19d1d8260f3081cf4f1b383",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-durable-top.txt"
+  },
+  "arms/process/profiles/treedb-durable.pprof": {
+    "bytes": 21596,
+    "retained_selected_inventory_verified": true,
+    "sha256": "fb58dcb5877f8e4508dd1535da17fe57db218880e493c0cab07522128372e5f3",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-durable.pprof"
+  },
+  "arms/process/profiles/treedb-relaxed-run/result.json": {
+    "bytes": 29592,
+    "retained_selected_inventory_verified": true,
+    "sha256": "51984cae5700156e3d13194608379ca9942e3666aaed11788053595d792b0537",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-relaxed-run/result.json"
+  },
+  "arms/process/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.config.log": {
+    "bytes": 7345,
+    "retained_selected_inventory_verified": true,
+    "sha256": "9d11f721675b6194c0761fdd425cdd1b4201aa418e3b755a19eb63c0d2b01522",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.config.log"
+  },
+  "arms/process/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.store.txt": {
+    "bytes": 327720,
+    "retained_selected_inventory_verified": true,
+    "sha256": "9a4d892d2f290737914f9fc37287c4e9dc7cf34e981396cea11a58a1a3027a2b",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.store.txt"
+  },
+  "arms/process/profiles/treedb-relaxed-run/runtime-after_alpha_restart-zero.config.log": {
+    "bytes": 5120,
+    "retained_selected_inventory_verified": true,
+    "sha256": "a6a3e37cc6ae900e1938786096e669dbbbd969d915d112d0807f4194a613499e",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-zero.config.log"
+  },
+  "arms/process/profiles/treedb-relaxed-run/runtime-startup-alpha.config.log": {
+    "bytes": 8580,
+    "retained_selected_inventory_verified": true,
+    "sha256": "2c00bf31bea43d768bcc42827b1ce8f1610af269e42446ee2d89a5ff25b89bcc",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-relaxed-run/runtime-startup-alpha.config.log"
+  },
+  "arms/process/profiles/treedb-relaxed-run/runtime-startup-alpha.store.txt": {
+    "bytes": 327760,
+    "retained_selected_inventory_verified": true,
+    "sha256": "f8cfc19902107412fe211490341da2e9eb56029f5856997e59034d419f3bccf6",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-relaxed-run/runtime-startup-alpha.store.txt"
+  },
+  "arms/process/profiles/treedb-relaxed-run/runtime-startup-zero.config.log": {
+    "bytes": 4580,
+    "retained_selected_inventory_verified": true,
+    "sha256": "53e9ea40040ccd0b90e55e419a8b8643235f7440890f1d232e8255e0005dbad3",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-relaxed-run/runtime-startup-zero.config.log"
+  },
+  "arms/process/profiles/treedb-relaxed-top.txt": {
+    "bytes": 2078,
+    "retained_selected_inventory_verified": true,
+    "sha256": "0a3611648bf1b8d01691539da6879315ac5de2910e95e02e61b4641f9f4aeab8",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-relaxed-top.txt"
+  },
+  "arms/process/profiles/treedb-relaxed.pprof": {
+    "bytes": 72646,
+    "retained_selected_inventory_verified": true,
+    "sha256": "eba368872d97ff34e81b64e05af6734ff935056166008295bec6626b16403b75",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/profiles/treedb-relaxed.pprof"
+  },
+  "arms/process/receipts/process-12-ARCHIVE_RECEIPT.json": {
+    "bytes": 271,
+    "retained_selected_inventory_verified": false,
+    "sha256": "d1f38b2bf46538f6baa2ac1df88af809a6362c51a933625f082699f2f6e47477",
+    "source": "artifacts/final-native111-runtime-01/process-12-ARCHIVE_RECEIPT.json"
+  },
+  "arms/process/receipts/process-12-SELECTED_FILES.json": {
+    "bytes": 21194,
+    "retained_selected_inventory_verified": false,
+    "sha256": "21b56b42aed8693ffbc703dd5eb50a34f621b01e89f990bbf98c4d6d6b0cf35b",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12-SELECTED_FILES.json"
+  },
+  "arms/process/receipts/process-12-invocation.json": {
+    "bytes": 1377,
+    "retained_selected_inventory_verified": false,
+    "sha256": "c0b1263174ba8dfdb80f42d3eb19aeb114b74aa05c4853b86e271cb86da26fe9",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12-invocation.json"
+  },
+  "arms/process/receipts/process-12-manifest.stdout": {
+    "bytes": 15344,
+    "retained_selected_inventory_verified": false,
+    "sha256": "0142db470d990cceed9165e61f9bd383e235afab6c07df7569726a61e2a5d71b",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12-manifest.stdout"
+  },
+  "arms/process/receipts/process-12-source-manifest.json": {
+    "bytes": 15443,
+    "retained_selected_inventory_verified": false,
+    "sha256": "008eda694c391c88f23af0cad4b06ac145668a38eec7affc27378ea0813c518c",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12-source-manifest.json"
+  },
+  "arms/process/receipts/process-12-verify.stdout": {
+    "bytes": 15344,
+    "retained_selected_inventory_verified": false,
+    "sha256": "0142db470d990cceed9165e61f9bd383e235afab6c07df7569726a61e2a5d71b",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12-verify.stdout"
+  },
+  "arms/process/receipts/quiet/preflight-acquisition.json": {
+    "bytes": 155837,
+    "retained_selected_inventory_verified": false,
+    "sha256": "3f697cd6be02baf6191dae0c02813eb64f151ed6512985706dc4599f7f75619b",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/quiet-process-12/preflight-acquisition.json"
+  },
+  "arms/process/receipts/quiet/preflight.json": {
+    "bytes": 59100,
+    "retained_selected_inventory_verified": false,
+    "sha256": "c78ee9ce6d0b4125b276facbcd308ec8a78beb1d0f2deb6384aad846aa90570d",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/quiet-process-12/preflight.json"
+  },
+  "arms/process/report.md": {
+    "bytes": 9411,
+    "retained_selected_inventory_verified": true,
+    "sha256": "1d2899e0ddd88343570130a4ccb49062807366035a90f9bdeb752558e69295ba",
+    "source": "artifacts/final-native111-runtime-01/process-evidence/process-12/report.md"
+  },
+  "authorizations/M0_STABILITY_OVERRIDE.json": {
+    "bytes": 599,
+    "retained_selected_inventory_verified": false,
+    "sha256": "b2cf3c3a665141326b9d8023ff488cd45a0e57da8b9f9500c34c1a9eb0a16f9f",
+    "source": "artifacts/approved-merge-01/M0_STABILITY_OVERRIDE.json"
+  },
+  "authorizations/ROOT_ENVIRONMENT_ACCEPTANCE.json": {
+    "bytes": 735,
+    "retained_selected_inventory_verified": false,
+    "sha256": "a7787e48397a2d5906dcdb7110857a823633ad31a5bb23aab6a4afeca741e9a8",
+    "source": "artifacts/host111-user-authorized-controller-02/ROOT_ENVIRONMENT_ACCEPTANCE.json"
+  },
+  "authorizations/USER_AUTHORIZATION.json": {
+    "bytes": 502,
+    "retained_selected_inventory_verified": false,
+    "sha256": "f104da9862618285aae472eb4d3d461ce84d37fd98e35d6b591ac9800df6cfc6",
+    "source": "artifacts/host111-user-authorized-controller-02/USER_AUTHORIZATION.json"
+  },
+  "baseline-reproduction/TRANSFER_BINDINGS.json": {
+    "bytes": 397,
+    "retained_selected_inventory_verified": false,
+    "sha256": "ceb43fa7cc0ea631ecac880216e522d2e1ceaf6712b7996417882eeffe1d22f8",
+    "source": "artifacts/final-native111-setup-01/TRANSFER_BINDINGS.json"
+  },
+  "baseline-reproduction/accepted-preparation/README.md": {
+    "bytes": 6619,
+    "retained_selected_inventory_verified": false,
+    "sha256": "daa7f6d7772e86ab3eec2ee72ef13e90745d7b06ba290490375abbe522bfd09b",
+    "source": "artifacts/final-baseline-prep-01/README.md"
+  },
+  "baseline-reproduction/accepted-preparation/ROOT_ACCEPTANCE.md": {
+    "bytes": 447,
+    "retained_selected_inventory_verified": false,
+    "sha256": "6f4e8493ff5d44cd58fc24ef416a869d04e99d298c2bfa12ad8366dda1edfa79",
+    "source": "artifacts/final-baseline-prep-01/ROOT_ACCEPTANCE.md"
+  },
+  "baseline-reproduction/accepted-preparation/SHA256SUMS": {
+    "bytes": 2956,
+    "retained_selected_inventory_verified": false,
+    "sha256": "b2852a74a8a0fcc8a36d856d993a00ccfb38aab2c180f04345183e45b4b801cf",
+    "source": "artifacts/final-baseline-prep-01/SHA256SUMS"
+  },
+  "baseline-reproduction/accepted-preparation/baseline.patch": {
+    "bytes": 106379,
+    "retained_selected_inventory_verified": false,
+    "sha256": "4aa5b3d0164f02b512877a5c37094ab51da17c7d812575f1c7466d1d99a2ea46",
+    "source": "artifacts/final-baseline-prep-01/baseline.patch"
+  },
+  "baseline-reproduction/accepted-preparation/historical-build-manifest.json": {
+    "bytes": 2228,
+    "retained_selected_inventory_verified": false,
+    "sha256": "83201acb711b1a740b33de6e552ec599408176b30fd2b93b8f08602b16a23936",
+    "source": "artifacts/final-baseline-prep-01/historical-build-manifest.json"
+  },
+  "baseline-reproduction/accepted-preparation/historical-resolved-dgraph.mod": {
+    "bytes": 8369,
+    "retained_selected_inventory_verified": false,
+    "sha256": "2451777d5ad782dd95a4710e7a8d88e31746f11516e55a923173720a0c7cc094",
+    "source": "artifacts/final-baseline-prep-01/historical-resolved-dgraph.mod"
+  },
+  "baseline-reproduction/accepted-preparation/historical-resolved-dgraph.sum": {
+    "bytes": 96349,
+    "retained_selected_inventory_verified": false,
+    "sha256": "5951dd5a2e63c085a555bf772487031de3ca16dda6e5644e99979e5eae182b04",
+    "source": "artifacts/final-baseline-prep-01/historical-resolved-dgraph.sum"
+  },
+  "baseline-reproduction/accepted-preparation/historical-server_state.patch": {
+    "bytes": 964,
+    "retained_selected_inventory_verified": false,
+    "sha256": "d71937cc6abb3ee0445f775f485f3073d6bdcbef6625072eb360115e79e54dd8",
+    "source": "artifacts/final-baseline-prep-01/historical-server_state.patch"
+  },
+  "baseline-reproduction/accepted-preparation/manifest.json": {
+    "bytes": 9825,
+    "retained_selected_inventory_verified": false,
+    "sha256": "4d2959c8a3e853f13acd2709c5fe5710b12c1d3eb66f099e07755590b1c0a780",
+    "source": "artifacts/final-baseline-prep-01/manifest.json"
+  },
+  "baseline-reproduction/accepted-preparation/original-go.mod": {
+    "bytes": 8266,
+    "retained_selected_inventory_verified": false,
+    "sha256": "07d1d807409d53df40c339e921ab5548bbba76221a0a590bd33820d04b23d0be",
+    "source": "artifacts/final-baseline-prep-01/original-go.mod"
+  },
+  "baseline-reproduction/accepted-preparation/original-go.sum": {
+    "bytes": 96098,
+    "retained_selected_inventory_verified": false,
+    "sha256": "08bc9dc32c41a00fe0e69e2e67fdb6b765b4d01c70fe08eaac9ab1ad9347654d",
+    "source": "artifacts/final-baseline-prep-01/original-go.sum"
+  },
+  "baseline-reproduction/accepted-preparation/packet-files.json": {
+    "bytes": 3187,
+    "retained_selected_inventory_verified": false,
+    "sha256": "9b3d9530e62e30ebb97bb62c945867075cdb9e1c1d0bbccef878138d5a0bd2bc",
+    "source": "artifacts/final-baseline-prep-01/packet-files.json"
+  },
+  "baseline-reproduction/accepted-preparation/prepare_build_mod.py": {
+    "bytes": 4190,
+    "retained_selected_inventory_verified": false,
+    "sha256": "d49b327f01630995c0fbe58f7a6b629cddf149b3ef54e0c7825323b703599b4b",
+    "source": "artifacts/final-baseline-prep-01/prepare_build_mod.py"
+  },
+  "baseline-reproduction/baseline-local.bundle": {
+    "bytes": 25943,
+    "retained_selected_inventory_verified": false,
+    "sha256": "d9b3fcf9ea19d10cbeb6d81c1a49894e3854c551f1d7c8efcd280d00b4c577cb",
+    "source": "artifacts/final-native111-setup-01/transfer/baseline-local.bundle"
+  },
+  "baseline-reproduction/local-build-only/18-go-env.stdout": {
+    "bytes": 1745,
+    "retained_selected_inventory_verified": false,
+    "sha256": "8b45844042e4fa7c1f4eb7fd32a80106671b2c97aba56f2dddb0c7c6dcb4ef0f",
+    "source": "artifacts/final-baseline-build-01/18-go-env.stdout"
+  },
+  "baseline-reproduction/local-build-only/19-gomap-module.stdout": {
+    "bytes": 690,
+    "retained_selected_inventory_verified": false,
+    "sha256": "62446584879e61020558b0717989cb531a5b8916b8165bc4187f82a6ddf660d7",
+    "source": "artifacts/final-baseline-build-01/19-gomap-module.stdout"
+  },
+  "baseline-reproduction/local-build-only/20-all-modules.stdout": {
+    "bytes": 129329,
+    "retained_selected_inventory_verified": false,
+    "sha256": "199836b977e2ff7559d97d82b429c8fa64d94c616261f39f28a736cd7a570e3a",
+    "source": "artifacts/final-baseline-build-01/20-all-modules.stdout"
+  },
+  "baseline-reproduction/local-build-only/RESULTS.json": {
+    "bytes": 1043,
+    "retained_selected_inventory_verified": false,
+    "sha256": "ece3d6212caba2aaa01ef0145258b1d191f151a91f7eb8fc0c9d88690f11be35",
+    "source": "artifacts/final-baseline-build-01/RESULTS.json"
+  },
+  "baseline-reproduction/local-build-only/RESULTS.md": {
+    "bytes": 2290,
+    "retained_selected_inventory_verified": false,
+    "sha256": "6edd0480e9a8e7ed0cc6c077ba1149da5973ff59190e195b8baff67ae51a0ec6",
+    "source": "artifacts/final-baseline-build-01/RESULTS.md"
+  },
+  "baseline-reproduction/local-build-only/ROOT_ACCEPTANCE.md": {
+    "bytes": 900,
+    "retained_selected_inventory_verified": false,
+    "sha256": "040269c43f2f0668bbe9f715cb7db2f36b9053c378f098a457458f7b77af162f",
+    "source": "artifacts/final-baseline-build-01/ROOT_ACCEPTANCE.md"
+  },
+  "baseline-reproduction/local-build-only/commands.json": {
+    "bytes": 23156,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e91e98c944528f62537f7544cc42b03c950822dac75f5a6e3722171fd42e87c7",
+    "source": "artifacts/final-baseline-build-01/commands.json"
+  },
+  "baseline-reproduction/local-build-only/environment.json": {
+    "bytes": 2410,
+    "retained_selected_inventory_verified": false,
+    "sha256": "c7643c2f88af3ba396da2f9629b7187a4346b1ae44e3786f237532ba86183297",
+    "source": "artifacts/final-baseline-build-01/environment.json"
+  },
+  "baseline-reproduction/local-build-only/packet-bindings.json": {
+    "bytes": 3071,
+    "retained_selected_inventory_verified": false,
+    "sha256": "d056b9c143f54759b77076d9265d5b0268cb8c83c79c907e219cc64c9549344f",
+    "source": "artifacts/final-baseline-build-01/packet-bindings.json"
+  },
+  "baseline-reproduction/local-build-only/preparation-bindings.json": {
+    "bytes": 237,
+    "retained_selected_inventory_verified": false,
+    "sha256": "312b349914b62be88f29e9dd416c486c11463a6434b99620713612f96a3986b9",
+    "source": "artifacts/final-baseline-build-01/preparation-bindings.json"
+  },
+  "baseline-reproduction/transfer-SHA256SUMS": {
+    "bytes": 4046,
+    "retained_selected_inventory_verified": false,
+    "sha256": "2626be3b504f5a9dac13919c7c5c4966f5318c2d85e16f960571c5eae9afe25f",
+    "source": "artifacts/final-native111-setup-01/transfer/SHA256SUMS"
+  },
+  "micro/INPUT_PATH_MAPPING.json": {
+    "bytes": 790,
+    "sha256": "fffc677640165cab00c3d17f3478b4f560adc10c81d0ce28db6ec39e229d6de0",
+    "source": "generated artifact-only append_final_inputs.py"
+  },
+  "micro/MICRO_ALLOCATION_REVIEW.md": {
+    "bytes": 18486,
+    "sha256": "698224037386368ed5ad705597232842644dd6838457b2a53cc31efd4b860c13",
+    "source": "artifacts/final-native111-runtime-01/MICRO_ALLOCATION_REVIEW.md"
+  },
+  "micro/MICRO_ALLOCATION_REVIEW_BINDINGS.json": {
+    "bytes": 5128,
+    "sha256": "2078f0be7905cbdce2414138bf63499b785c94c3b7a6755fda769f0dddd506cf",
+    "source": "artifacts/final-native111-runtime-01/MICRO_ALLOCATION_REVIEW_BINDINGS.json"
+  },
+  "micro/analyze_final_micro.py": {
+    "bytes": 6187,
+    "retained_selected_inventory_verified": false,
+    "sha256": "c4475fd7c3865f84c97ca4eede625ebd1e8d1f6470da9994fe443f775d770231",
+    "source": "artifacts/final-native111-runtime-01/analyze_final_micro.py"
+  },
+  "micro/baseline-micro-preview/raw.txt": {
+    "bytes": 19929,
+    "retained_selected_inventory_verified": false,
+    "sha256": "aa6be31e723d072e86ec7d5cf746c8ef6571862fda8c302667f1e13d7fd113ca",
+    "source": "artifacts/final-native111-runtime-01/baseline-micro-preview/raw.txt"
+  },
+  "micro/final-micro-comparison-01.json": {
+    "bytes": 257061,
+    "retained_selected_inventory_verified": false,
+    "sha256": "f8f0801d92b4edb2d81a26ffa71f355b88bf6b8cce07fc8187d4dcb0af0311bf",
+    "source": "artifacts/final-native111-runtime-01/final-micro-comparison-01.json"
+  },
+  "micro/final-micro-comparison-01.md": {
+    "bytes": 5262,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e19201961b25d51c1a8b350b0b977e374c7f9db993bfc7f359451482e537df18",
+    "source": "artifacts/final-native111-runtime-01/final-micro-comparison-01.md"
+  },
+  "protocol/ADMIN_ARCHIVE_RECEIPT.json": {
+    "bytes": 136,
+    "retained_selected_inventory_verified": false,
+    "sha256": "b4514ca6d458178295ffd9eb1294b3528a7dfbfefe61c51120281564433f5b91",
+    "source": "artifacts/final-native111-runtime-01/ADMIN_ARCHIVE_RECEIPT.json"
+  },
+  "protocol/ADMIN_NATIVE_AUDIT.md": {
+    "bytes": 10663,
+    "retained_selected_inventory_verified": false,
+    "sha256": "d1bf0cbeaa18b3ea83e2cd70ff1bf16be733eabba65d4d2731a3a8933ff2959a",
+    "source": "artifacts/final-native111-runtime-01/ADMIN_NATIVE_AUDIT.md"
+  },
+  "protocol/ANALYZE_FINAL_MATRIX_USAGE.md": {
+    "bytes": 3414,
+    "retained_selected_inventory_verified": false,
+    "sha256": "582e0d41b89ddeeb7cb48f847ef1911d05cca2f25e360bb25a062a0107c0c04e",
+    "source": "artifacts/final-native111-runtime-01/ANALYZE_FINAL_MATRIX_USAGE.md"
+  },
+  "protocol/DIAGNOSTIC_CONTINUATION_AMENDMENT.json": {
+    "bytes": 1674,
+    "retained_selected_inventory_verified": false,
+    "sha256": "33a7fbd763a7ab4326381a758561522163b46f629552dfd9f5e68584424a83ac",
+    "source": "artifacts/final-native111-runtime-01/DIAGNOSTIC_CONTINUATION_AMENDMENT.json"
+  },
+  "protocol/DIAGNOSTIC_RUNNER_REVIEW.md": {
+    "bytes": 1966,
+    "retained_selected_inventory_verified": false,
+    "sha256": "1b74c790e8efe0b053773f1731a32c1ed7d71ff3f9a113e3286d1687e1043950",
+    "source": "artifacts/final-native111-runtime-01/DIAGNOSTIC_RUNNER_REVIEW.md"
+  },
+  "protocol/EXECUTION_PLAN.json": {
+    "bytes": 3111,
+    "retained_selected_inventory_verified": false,
+    "sha256": "7851c3e454b6aea893b87702c21cf83027627a81aa58af90b0b5e8270eadabfd",
+    "source": "artifacts/final-native111-runtime-01/EXECUTION_PLAN.json"
+  },
+  "protocol/FINAL_ANALYZER_REVIEW.md": {
+    "bytes": 6299,
+    "retained_selected_inventory_verified": false,
+    "sha256": "f2d60e04eb1286ac4cea258dc8963bf5c7715f4609dd70137312992a5ac6714c",
+    "source": "artifacts/final-native111-runtime-01/FINAL_ANALYZER_REVIEW.md"
+  },
+  "protocol/FINAL_TASK_PROCESS_ABSENCE.json": {
+    "bytes": 208,
+    "sha256": "6d18020e178f591b81cca1d530ba90d4a759edc9f9b2da651d591c842bc89cee",
+    "source": "generated evidence-only report/acceptance receipt"
+  },
+  "protocol/FLOOR_ARCHIVE_RECEIPT.json": {
+    "bytes": 136,
+    "retained_selected_inventory_verified": false,
+    "sha256": "f29ff3d9d3a5d77ceb03c9ba42187559eec864a7d80a9ac1c01cfc5758436629",
+    "source": "artifacts/final-native111-runtime-01/FLOOR_ARCHIVE_RECEIPT.json"
+  },
+  "protocol/MATRIX_COMPARISON_MAPPING.md": {
+    "bytes": 7628,
+    "retained_selected_inventory_verified": false,
+    "sha256": "4b4eda272d3b68fe0ee2bd455b32ffbff404ba89a8c5e21844ee4fcc5c378df2",
+    "source": "artifacts/final-native111-runtime-01/MATRIX_COMPARISON_MAPPING.md"
+  },
+  "protocol/MATRIX_RUNNER_REVIEW.md": {
+    "bytes": 5286,
+    "retained_selected_inventory_verified": false,
+    "sha256": "33cbb4b02d4fdcaadf58497a6e19522df1a4ab5a292e2218bcab453c2cab9f52",
+    "source": "artifacts/final-native111-runtime-01/MATRIX_RUNNER_REVIEW.md"
+  },
+  "protocol/NATIVE_ARCHIVE_RECEIPT.json": {
+    "bytes": 138,
+    "retained_selected_inventory_verified": false,
+    "sha256": "53a9d5c1354fae736cae5451eec08d512cb4eaf69eb17721251ab3ca54e16584",
+    "source": "artifacts/final-native111-runtime-01/NATIVE_ARCHIVE_RECEIPT.json"
+  },
+  "protocol/PROCESS_STOP_PROTOCOL_REVIEW.md": {
+    "bytes": 6426,
+    "retained_selected_inventory_verified": false,
+    "sha256": "f4d45874f6e164230c33201b16b93f5482bcdaa6b497b736a27ff23a4e7cea02",
+    "source": "artifacts/final-native111-runtime-01/PROCESS_STOP_PROTOCOL_REVIEW.md"
+  },
+  "protocol/REPORT_PUBLICATION_DISPOSITION.md": {
+    "bytes": 9921,
+    "retained_selected_inventory_verified": false,
+    "sha256": "cfe24ddb1277e7d30a9a5a2847f8e5298461cb35d5518ed854d7e504e55f6f6f",
+    "source": "artifacts/final-native111-runtime-01/REPORT_PUBLICATION_DISPOSITION.md"
+  },
+  "protocol/SCHEMA_ARCHIVE_RECEIPT.json": {
+    "bytes": 139,
+    "retained_selected_inventory_verified": false,
+    "sha256": "ec2bbf58e41a5e76b04ce262f98cd5261cf949f3e9fc41fe7d438f235fca5e8e",
+    "source": "artifacts/final-native111-runtime-01/SCHEMA_ARCHIVE_RECEIPT.json"
+  },
+  "protocol/SCHEMA_AUDIT.md": {
+    "bytes": 11578,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e539503adcfb5a3dbe5f619b4cdc89642d49349abd61f7972c9bc3a3fde84e19",
+    "source": "artifacts/final-native111-runtime-01/SCHEMA_AUDIT.md"
+  },
+  "protocol/SEMANTIC_ACCEPTANCE.md": {
+    "bytes": 10500,
+    "retained_selected_inventory_verified": false,
+    "sha256": "f73971c1eedeb11169456abd14b58458c5e874f6f09972ee4cb9bd1aa1d6c519",
+    "source": "artifacts/final-native111-runtime-01/SEMANTIC_ACCEPTANCE.md"
+  },
+  "protocol/SEMANTIC_ROOT_ACCEPTANCE.json": {
+    "bytes": 774,
+    "retained_selected_inventory_verified": false,
+    "sha256": "3e07071a08b519d6dde5c6ceff5890b5d92b1c04b816566954e9e8fe4de5b270",
+    "source": "artifacts/final-native111-runtime-01/SEMANTIC_ROOT_ACCEPTANCE.json"
+  },
+  "protocol/SMOKE_ARCHIVE_RECEIPT.json": {
+    "bytes": 562,
+    "retained_selected_inventory_verified": false,
+    "sha256": "8983fa0e24514f7476d2b3a8d126c2be86a8fa52eecdda6213690bb8706b0f90",
+    "source": "artifacts/final-native111-runtime-01/SMOKE_ARCHIVE_RECEIPT.json"
+  },
+  "protocol/SMOKE_ROOT_ACCEPTANCE.json": {
+    "bytes": 1192,
+    "retained_selected_inventory_verified": false,
+    "sha256": "f374b0330d9539054bd3022ecba373a214563c8b73f9f25ea9f9d0c137607d23",
+    "source": "artifacts/final-native111-runtime-01/SMOKE_ROOT_ACCEPTANCE.json"
+  },
+  "protocol/analyze_final_matrix.py": {
+    "bytes": 22694,
+    "retained_selected_inventory_verified": true,
+    "sha256": "d2d103675e1525942d7ffa95454b684c43ff9f8eb0649fac81703217f51a2442",
+    "source": "artifacts/final-native111-runtime-01/analyze_final_matrix.py"
+  },
+  "protocol/archive_arm.py": {
+    "bytes": 1495,
+    "retained_selected_inventory_verified": false,
+    "sha256": "9e148d58f4528d8b6fe6f87c5509a9b951b4a21f40c2a57d59614baaff0acec5",
+    "source": "artifacts/final-native111-runtime-01/archive_arm.py"
+  },
+  "protocol/launch_baseline.sh": {
+    "bytes": 729,
+    "retained_selected_inventory_verified": false,
+    "sha256": "06c6cd07d4770ad2230ee75410f8e51c2c90873f8ec7d98d116d285449e5884d",
+    "source": "artifacts/final-native111-runtime-01/launch_baseline.sh"
+  },
+  "protocol/launch_filesystem.sh": {
+    "bytes": 720,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e2e53f427eb369b5981b0182731b63e530324dc637014cdb6ec75128e885a581",
+    "source": "artifacts/final-native111-runtime-01/launch_filesystem.sh"
+  },
+  "protocol/launch_process.sh": {
+    "bytes": 706,
+    "retained_selected_inventory_verified": false,
+    "sha256": "1686a8d684958d7a80e3a9df31c4d4a3fcbdf3a917b8647619dde10da884d329",
+    "source": "artifacts/final-native111-runtime-01/launch_process.sh"
+  },
+  "protocol/run_matrix_arm.py": {
+    "bytes": 5247,
+    "retained_selected_inventory_verified": false,
+    "sha256": "3c9f08d3a65ef5a02481978f113b249d099957281befe289930256f04e01a761",
+    "source": "artifacts/final-native111-runtime-01/run_matrix_arm.py"
+  },
+  "protocol/run_matrix_diagnostic_arm.py": {
+    "bytes": 5983,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e95fc911ead6cd6c89ea689fa7aabf153d339afcf186baac6de2daa6609433af",
+    "source": "artifacts/final-native111-runtime-01/run_matrix_diagnostic_arm.py"
+  },
+  "raw-archives/ADMIN_ARCHIVE_RECEIPT.json": {
+    "bytes": 136,
+    "sha256": "b4514ca6d458178295ffd9eb1294b3528a7dfbfefe61c51120281564433f5b91",
+    "source": "artifacts/final-native111-runtime-01/ADMIN_ARCHIVE_RECEIPT.json"
+  },
+  "raw-archives/ADMIN_EVIDENCE.tar.gz": {
+    "bytes": 9914,
+    "decoded_original_byte_identity_verified": true,
+    "original_tar_bytes": 71680,
+    "original_tar_sha256": "d0f806c19fa02283564a01df072281f979668cbe17bba4728a822d0728b5463a",
+    "sha256": "87b5ccc63ba814f2399ce69061ee1e6df508691113cdbad820c96c17c32c51a0",
+    "source": "artifacts/final-native111-runtime-01/ADMIN_EVIDENCE.tar",
+    "transformation": "gzip -n -6 -c; filename absent; mtime=0"
+  },
+  "raw-archives/FLOOR_ARCHIVE_RECEIPT.json": {
+    "bytes": 136,
+    "sha256": "f29ff3d9d3a5d77ceb03c9ba42187559eec864a7d80a9ac1c01cfc5758436629",
+    "source": "artifacts/final-native111-runtime-01/FLOOR_ARCHIVE_RECEIPT.json"
+  },
+  "raw-archives/FLOOR_EVIDENCE.tar.gz": {
+    "bytes": 8758,
+    "decoded_original_byte_identity_verified": true,
+    "original_tar_bytes": 61440,
+    "original_tar_sha256": "2fd548fd59919af4fa4c1da8e204071a6c2a53e3ec7e5c87698084b6a61d69bf",
+    "sha256": "3bac1f4e5dcd51559ce27a6973516ae687bef027be7866b4a44170cbe9ebc05d",
+    "source": "artifacts/final-native111-runtime-01/FLOOR_EVIDENCE.tar",
+    "transformation": "gzip -n -6 -c; filename absent; mtime=0"
+  },
+  "raw-archives/NATIVE_ARCHIVE_RECEIPT.json": {
+    "bytes": 138,
+    "sha256": "53a9d5c1354fae736cae5451eec08d512cb4eaf69eb17721251ab3ca54e16584",
+    "source": "artifacts/final-native111-runtime-01/NATIVE_ARCHIVE_RECEIPT.json"
+  },
+  "raw-archives/NATIVE_EVIDENCE.tar.gz": {
+    "bytes": 15387,
+    "decoded_original_byte_identity_verified": true,
+    "original_tar_bytes": 133120,
+    "original_tar_sha256": "ec35dcb546c4f5e9ea2a43969136be7355146d6b5f815578f3fcd7c2badeac91",
+    "sha256": "ac050ecf435da14b0d76ea749463b0ad4604e7ab8135406e61a88777f8b27edc",
+    "source": "artifacts/final-native111-runtime-01/NATIVE_EVIDENCE.tar",
+    "transformation": "gzip -n -6 -c; filename absent; mtime=0"
+  },
+  "raw-archives/RAW_ARCHIVE_CUSTODY.json": {
+    "bytes": 76504,
+    "sha256": "1a4a44f4fc2c477b2bb1143ea840a86cbf23e7c04535c41ffba8d0b32778c3cb",
+    "source": "generated by artifacts/final-evidence-staging-01/add_raw_archives.py"
+  },
+  "raw-archives/REPRODUCTION.md": {
+    "bytes": 1249,
+    "sha256": "519dc1c3b4e43b16b7e5693e2e5a93fcc98bb1c55c1cab09dda9155b39563491",
+    "source": "generated by artifacts/final-evidence-staging-01/add_raw_archives.py"
+  },
+  "raw-archives/SCHEMA_ARCHIVE_RECEIPT.json": {
+    "bytes": 139,
+    "sha256": "ec2bbf58e41a5e76b04ce262f98cd5261cf949f3e9fc41fe7d438f235fca5e8e",
+    "source": "artifacts/final-native111-runtime-01/SCHEMA_ARCHIVE_RECEIPT.json"
+  },
+  "raw-archives/SCHEMA_EVIDENCE.tar.gz": {
+    "bytes": 192872,
+    "decoded_original_byte_identity_verified": true,
+    "original_tar_bytes": 2211840,
+    "original_tar_sha256": "eebd11e2f510e4928f67a337a309f6ba2fd2d82907f45305054f527859e43040",
+    "sha256": "1c0fccc7feb6a78a77f3b2a66d6e23c05da3b0380b9ea9f9c6927fae19d1fce1",
+    "source": "artifacts/final-native111-runtime-01/SCHEMA_EVIDENCE.tar",
+    "transformation": "gzip -n -6 -c; filename absent; mtime=0"
+  },
+  "raw-archives/baseline-filesystem-12-ARCHIVE_RECEIPT.json": {
+    "bytes": 283,
+    "sha256": "bde650aa1e437b5c9a593464b94dbe18e7772d5238c29260159421435710607b",
+    "source": "artifacts/final-native111-runtime-01/baseline-filesystem-12-ARCHIVE_RECEIPT.json"
+  },
+  "raw-archives/baseline-filesystem-12-EVIDENCE.tar.gz": {
+    "bytes": 958222,
+    "decoded_original_byte_identity_verified": true,
+    "original_tar_bytes": 8089600,
+    "original_tar_sha256": "8c84c738db0119e90dacef38663222144e80edcf549b81e8049b79dc7da993e9",
+    "sha256": "3c6b1521a97d0780368b734eb1f6ed063ac04dc501cfa228d48cc1423de33cd7",
+    "source": "artifacts/final-native111-runtime-01/baseline-filesystem-12-EVIDENCE.tar",
+    "transformation": "gzip -n -6 -c; filename absent; mtime=0"
+  },
+  "raw-archives/filesystem-12-ARCHIVE_RECEIPT.json": {
+    "bytes": 274,
+    "sha256": "18d492af6afe8f2e0e2c99e00db1f34c8a11d654a1bd611cba4a3cdf0d5fc756",
+    "source": "artifacts/final-native111-runtime-01/filesystem-12-ARCHIVE_RECEIPT.json"
+  },
+  "raw-archives/filesystem-12-EVIDENCE.tar.gz": {
+    "bytes": 1104279,
+    "decoded_original_byte_identity_verified": true,
+    "original_tar_bytes": 8888320,
+    "original_tar_sha256": "bbeba5a291ec76f66b4feb04d53a7de4b26321f917d9c144c905e5ce4a955ecc",
+    "sha256": "40eda4e41d71a94da95104402f22a561576da6c1c23d48c5c749200362c546df",
+    "source": "artifacts/final-native111-runtime-01/filesystem-12-EVIDENCE.tar",
+    "transformation": "gzip -n -6 -c; filename absent; mtime=0"
+  },
+  "raw-archives/process-12-ARCHIVE_RECEIPT.json": {
+    "bytes": 271,
+    "sha256": "d1f38b2bf46538f6baa2ac1df88af809a6362c51a933625f082699f2f6e47477",
+    "source": "artifacts/final-native111-runtime-01/process-12-ARCHIVE_RECEIPT.json"
+  },
+  "raw-archives/process-12-EVIDENCE.tar.gz": {
+    "bytes": 1153380,
+    "decoded_original_byte_identity_verified": true,
+    "original_tar_bytes": 8929280,
+    "original_tar_sha256": "bb8004c9b9c00d23f10fc6c73223d151d974adf8ed91d5c0102c57caefecec8d",
+    "sha256": "3cb450124fbea359cad5467c3051d75459ad68000d3b2a9054f61824c323e90c",
+    "source": "artifacts/final-native111-runtime-01/process-12-EVIDENCE.tar",
+    "transformation": "gzip -n -6 -c; filename absent; mtime=0"
+  },
+  "semantics/admin/result.json": {
+    "bytes": 4560,
+    "retained_selected_inventory_verified": false,
+    "sha256": "db0c9623b454cf2614d47c233159d94cab19fc9aa1b870e4c1fe70b044954396",
+    "source": "artifacts/final-native111-runtime-01/admin-evidence/admin-close/result.json"
+  },
+  "semantics/floor/FLOOR_AUDIT.md": {
+    "bytes": 6627,
+    "retained_selected_inventory_verified": false,
+    "sha256": "09f770aa3d63bf0cfd08b3737ade2402216f0c8968dd02d168539ba6ce1f03db",
+    "source": "artifacts/final-native111-runtime-01/floor-evidence/floor-ack/FLOOR_AUDIT.md"
+  },
+  "semantics/floor/result.json": {
+    "bytes": 8685,
+    "retained_selected_inventory_verified": false,
+    "sha256": "645eeeff8d287e120b9d47eaf5ce384991f7724ce27a6914b1fd4ffb44de3e6a",
+    "source": "artifacts/final-native111-runtime-01/floor-evidence/floor-ack/result.json"
+  },
+  "semantics/native/result.json": {
+    "bytes": 8574,
+    "retained_selected_inventory_verified": false,
+    "sha256": "f9eefa916f9646664cf6d87b88bbba8f4f868afb3b8036aaa6fc125ad9706acc",
+    "source": "artifacts/final-native111-runtime-01/native-evidence/native-peers/result.json"
+  },
+  "semantics/schema/result.json": {
+    "bytes": 26303,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e01aaa936a6b2b93b9bd9c7e52e3661214689eab992fc497a4083dc624ae1955",
+    "source": "artifacts/final-native111-runtime-01/schema-evidence/schema-ack-suffix/result.json"
+  },
+  "source-and-build/SMOKE_PRE_LAUNCH.json": {
+    "bytes": 481,
+    "retained_selected_inventory_verified": false,
+    "sha256": "e67312bbfad8426746992e6501e2d675d609f7cbad62a198d89d63801b82678f",
+    "source": "artifacts/final-native111-runtime-01/smoke-evidence/SMOKE_PRE_LAUNCH.json"
+  },
+  "source-and-build/baseline-source-manifest.json": {
+    "bytes": 15533,
+    "retained_selected_inventory_verified": false,
+    "sha256": "7dcaa8e87a9b1a772eb7094d675f85dc4211c1aa0e66f67ab502f5538a4ff445",
+    "source": "artifacts/final-native111-runtime-01/smoke-evidence/baseline-source-manifest.json"
+  },
+  "source-and-build/candidate-source-manifest.json": {
+    "bytes": 15443,
+    "retained_selected_inventory_verified": false,
+    "sha256": "008eda694c391c88f23af0cad4b06ac145668a38eec7affc27378ea0813c518c",
+    "source": "artifacts/final-native111-runtime-01/smoke-evidence/candidate-source-manifest.json"
+  },
+  "source-and-build/compile-version.txt": {
+    "bytes": 25,
+    "retained_selected_inventory_verified": false,
+    "sha256": "9dc03a66cbc3a678819f738fac7199804b65192bf15217e3093352eed28b7b8c",
+    "source": "artifacts/final-native111-runtime-01/smoke-evidence/compile-version.txt"
+  },
+  "source-and-build/executed-source-manifest.json": {
+    "bytes": 15443,
+    "retained_selected_inventory_verified": false,
+    "sha256": "008eda694c391c88f23af0cad4b06ac145668a38eec7affc27378ea0813c518c",
+    "source": "artifacts/final-native111-runtime-01/smoke-evidence/executed-source-manifest.json"
+  },
+  "source-and-build/go-env.json": {
+    "bytes": 1748,
+    "retained_selected_inventory_verified": false,
+    "sha256": "c252b332cd6e96b25cbb7a69cd712baa5064a69d1fc981ce3da0bdd974893156",
+    "source": "artifacts/final-native111-runtime-01/smoke-evidence/go-env.json"
+  },
+  "source-and-build/root-selected-source.txt": {
+    "bytes": 48,
+    "retained_selected_inventory_verified": false,
+    "sha256": "ff4c5cc2a98952197d49c13563c1f9aebda14fccd81b76bf579cf61048c87bae",
+    "source": "artifacts/final-native111-runtime-01/smoke-evidence/root-selected-source.txt"
+  }
+}

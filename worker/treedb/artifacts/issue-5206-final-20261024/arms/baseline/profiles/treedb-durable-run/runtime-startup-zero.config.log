@@ -1,0 +1,79 @@
+I1023 17:59:55.860253 3324658 init.go:69] 
+
+Dgraph version   : dev
+Dgraph codename  : 
+Dgraph SHA-256   : 58075e248543eb56ec618fe4099c04fd7fc741817558765e83e98af6432960a8
+Commit SHA-1     : 
+Commit timestamp : 
+Branch           : 
+Go version       : go1.26.9
+jemalloc enabled : false
+GOMAXPROCS       : 2
+Num CPUs         : 16
+
+For Dgraph official documentation, visit https://docs.dgraph.io
+For discussions about Dgraph     , visit https://github.com/orgs/dgraph-io/discussions
+
+Licensed under the Apache Public License 2.0.
+© Istari Digital, Inc.
+
+
+I1023 17:59:55.860376 3324658 run.go:232] Setting Config to: {raft:0x2ac42838e048 telemetry:0x2ac42838e858 limit:0x2ac42838e060 bindall:true portOffset:26200 numReplicas:1 peer: w:/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/baseline-filesystem-12/profiles/treedb-durable-run/cluster/zw rebalanceInterval:480000000000 tlsClientConfig:<nil> audit:<nil> limiterConfig:0x2ac4284ee0a0}
+I1023 17:59:55.860387 3324658 run.go:234] x.WorkerConfig: {TmpDir: ExportPath: MyAddr: ZeroAddr:[] Raft: WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:0s ProposedGroupId:0 StartTime:0001-01-01 00:00:00 +0000 UTC Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}
+I1023 17:59:55.860398 3324658 run.go:129] Setting up grpc listener at: 0.0.0.0:31280
+I1023 17:59:55.860475 3324658 run.go:129] Setting up http listener at: 0.0.0.0:32280
+I1023 17:59:55.860710 3324658 storage.go:113] Init Raft Storage with snap: 0, first: 1, last: 0
+I1023 17:59:55.860759 3324658 node.go:146] Setting raft.Config to: &{ID:1 ElectionTick:20 HeartbeatTick:1 Storage:0x2ac42826a680 Applied:0 MaxSizePerMsg:262144 MaxCommittedSizePerReady:67108864 MaxUncommittedEntriesSize:0 MaxInflightMsgs:256 CheckQuorum:false PreVote:true ReadOnlyOption:0 Logger:0x4f52640 DisableProposalForwarding:false}
+I1023 17:59:55.861527 3324658 node.go:320] Group 0 found 0 entries
+I1023 17:59:55.861532 3324658 raft.go:699] Starting a brand new node
+I1023 17:59:55.861639 3324658 log.go:22] 1 switched to configuration voters=()
+I1023 17:59:55.861651 3324658 log.go:22] 1 became follower at term 0
+I1023 17:59:55.861654 3324658 log.go:22] newRaft 1 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
+I1023 17:59:55.861656 3324658 log.go:22] 1 became follower at term 1
+I1023 17:59:55.861667 3324658 log.go:22] 1 switched to configuration voters=(1)
+I1023 17:59:55.861735 3324658 run.go:360] Running Dgraph Zero...
+E1023 17:59:55.862003 3324658 raft.go:587] While proposing CID: Not Zero leader. Aborting proposal: cid:"1db82c55-0527-4e86-a9de-4869ee099511". Retrying...
+I1023 17:59:55.885379 3324658 log.go:22] 1 switched to configuration voters=(1)
+I1023 17:59:55.885413 3324658 node.go:182] Setting conf state to voters:1 
+I1023 17:59:55.885482 3324658 raft.go:1081] Done applying conf change at 0x1
+I1023 17:59:56.328961 3324658 zero.go:506] Got connection request: clusterInfoOnly:true
+I1023 17:59:56.328997 3324658 log.go:22] 1 no leader at term 1; dropping index reading msg
+I1023 17:59:58.162459 3324658 log.go:22] 1 is starting a new election at term 1
+I1023 17:59:58.162505 3324658 log.go:22] 1 became pre-candidate at term 1
+I1023 17:59:58.162509 3324658 log.go:22] 1 received MsgPreVoteResp from 1 at term 1
+I1023 17:59:58.162539 3324658 log.go:22] 1 became candidate at term 2
+I1023 17:59:58.162541 3324658 log.go:22] 1 received MsgVoteResp from 1 at term 2
+I1023 17:59:58.162571 3324658 log.go:22] 1 became leader at term 2
+I1023 17:59:58.162575 3324658 log.go:22] raft.node: 1 elected leader 1 at term 2
+I1023 17:59:58.162588 3324658 raft.go:1023] I've become the leader, updating leases.
+I1023 17:59:58.162595 3324658 assign.go:38] Updated UID: 1. Txn Ts: 1. NsID: 1.
+W1023 17:59:58.329315 3324658 node.go:701] [0x1] Read index context timed out
+I1023 17:59:58.329456 3324658 zero.go:671] Connected: clusterInfoOnly:true
+I1023 17:59:58.329859 3324658 zero.go:506] Got connection request: addr:"localhost:33320"
+I1023 17:59:58.329938 3324658 pool.go:172] CONN: Connecting to localhost:33320
+I1023 17:59:58.329978 3324658 zero.go:671] Connected: id:1  groupId:1  addr:"localhost:33320"
+I1023 17:59:58.430732 3324658 zero.go:506] Got connection request: clusterInfoOnly:true
+I1023 17:59:58.430831 3324658 zero.go:671] Connected: clusterInfoOnly:true
+I1023 17:59:58.431200 3324658 zero.go:506] Got connection request: addr:"localhost:33320"
+I1023 17:59:58.431298 3324658 zero.go:671] Connected: id:2  groupId:1  addr:"localhost:33320"
+I1023 17:59:58.532070 3324658 zero.go:506] Got connection request: clusterInfoOnly:true
+I1023 17:59:58.532174 3324658 zero.go:671] Connected: clusterInfoOnly:true
+I1023 17:59:58.532458 3324658 zero.go:506] Got connection request: addr:"localhost:33320"
+I1023 17:59:58.532557 3324658 zero.go:671] Connected: id:3  groupId:1  addr:"localhost:33320"
+I1023 17:59:58.633464 3324658 zero.go:506] Got connection request: clusterInfoOnly:true
+I1023 17:59:58.633585 3324658 zero.go:671] Connected: clusterInfoOnly:true
+I1023 17:59:58.633912 3324658 zero.go:506] Got connection request: addr:"localhost:33320"
+I1023 17:59:58.634024 3324658 zero.go:671] Connected: id:4  groupId:1  addr:"localhost:33320"
+I1023 17:59:58.734437 3324658 zero.go:506] Got connection request: clusterInfoOnly:true
+I1023 17:59:58.734552 3324658 zero.go:671] Connected: clusterInfoOnly:true
+I1023 17:59:58.734974 3324658 zero.go:506] Got connection request: addr:"localhost:33320"
+I1023 17:59:58.735063 3324658 zero.go:671] Connected: id:5  groupId:1  addr:"localhost:33320"
+I1023 17:59:58.835686 3324658 zero.go:506] Got connection request: clusterInfoOnly:true
+I1023 17:59:58.835779 3324658 zero.go:671] Connected: clusterInfoOnly:true
+I1023 17:59:58.836015 3324658 zero.go:506] Got connection request: addr:"localhost:33320"
+I1023 17:59:58.836090 3324658 zero.go:671] Connected: id:6  groupId:1  addr:"localhost:33320"
+E1023 17:59:58.862449 3324658 raft.go:587] While proposing CID: Not Zero leader. Aborting proposal: cid:"e3ebef2f-207a-491b-9bf6-bbc798ceb9ca". Retrying...
+I1023 17:59:58.936956 3324658 zero.go:506] Got connection request: clusterInfoOnly:true
+I1023 17:59:58.937052 3324658 zero.go:671] Connected: clusterInfoOnly:true
+I1023 17:59:58.937291 3324658 zero.go:506] Got connection request: addr:"localhost:33320"
+I1023 17:59:58.942232 3324658 zero.go:671] Connected: id:7  groupId:1  addr:"localhost:33320"

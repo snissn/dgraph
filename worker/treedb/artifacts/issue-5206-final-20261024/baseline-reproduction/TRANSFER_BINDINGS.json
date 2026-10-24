@@ -1,0 +1,9 @@
+{
+  "utc": "2026-10-24T02:11:06.725608+00:00",
+  "role": "PROSPECTIVE_BUILD_PREPARATION_ONLY",
+  "source": "2d6bee5d616327a827924fd52a035101f0784cb8",
+  "sha256": "9054bb8dedf28df04b750b214a3e96760cb8785c57162743adfcbc31bc3079f7",
+  "bytes": 696320,
+  "source_review": "ROOT+independent accepted source-audit-01 and independent-review-01; no source edits",
+  "no_benchmark_or_merge_claim": true
+}

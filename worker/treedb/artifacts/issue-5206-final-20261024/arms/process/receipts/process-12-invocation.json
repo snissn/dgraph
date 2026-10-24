@@ -1,0 +1,38 @@
+{
+  "arm": "process-12",
+  "status": "STOP",
+  "started_utc": "2026-10-24T03:17:34.532391+00:00",
+  "source_sha": "bad4ced2c88e15076f73e3647a72e965f63be2b9",
+  "environment": {
+    "SURVIVE": "process",
+    "TREEDB_DURABLE_POLICY": "store_wal",
+    "REQUIRE_TREEDB_MEMTABLE": "cow_ordered",
+    "REPEATS": "3",
+    "DATASET_NODES": "500",
+    "WARMUP_OPS": "100",
+    "TIMED_OPS": "2000",
+    "CONCURRENCY": "4",
+    "GOMAXPROCS": "2",
+    "GOFLAGS": "-p=2",
+    "GOTOOLCHAIN": "local",
+    "GOWORK": "off",
+    "GOGC": null,
+    "GOMEMLIMIT": null
+  },
+  "outer_deadline_seconds": 10800,
+  "interrupt_grace_seconds": 45,
+  "comparison_mapping_sha256": "4b4eda272d3b68fe0ee2bd455b32ffbff404ba89a8c5e21844ee4fcc5c378df2",
+  "performance_qualification": null,
+  "physical_quiet": "ACQUIRED_ORIGINAL_WINDOW_NOT_CONTINUOUS",
+  "command": [
+    "bash",
+    "worker/treedb/run_durability_ab.sh",
+    "--artifact-dir",
+    "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/process-12"
+  ],
+  "exit_code": 0,
+  "executed_server_sha256": "46763a6bfcd02c37a44fb36e8c866dd7bbf7e2ca9777ad0a0aefb1ada9325175",
+  "source_manifest_sha256": "008eda694c391c88f23af0cad4b06ac145668a38eec7affc27378ea0813c518c",
+  "report_sha256": "1d2899e0ddd88343570130a4ccb49062807366035a90f9bdeb752558e69295ba",
+  "finished_utc": "2026-10-24T03:25:49.516969+00:00"
+}

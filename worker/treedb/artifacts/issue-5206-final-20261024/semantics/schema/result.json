@@ -1,0 +1,583 @@
+{
+  "success": true,
+  "diagnostic_only": true,
+  "policy": "raft_checkpoint",
+  "contract": "real gRPC; public Alter/CommitNow ACK then immediate all-process SIGKILL; Alpha-only orderly pending checkpoint keeps Zero alive",
+  "limitations": [
+    "No deterministic delay between frontend schema admission and ordered Raft apply; delayed-admission race remains a focused Go proof.",
+    "Small fixtures do not force cold splits or qualify scratch/rebuild resource budgets.",
+    "Process SIGKILL is not a power-loss experiment.",
+    "Historical raw gRPC proof covers UID posting history; schema definitions themselves are current, not historical snapshots.",
+    "Root namespace only; non-root namespace isolation remains a focused ordered-apply proof."
+  ],
+  "commands": [
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/zw",
+      "--replicas=1",
+      "--port_offset=46000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:51080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/p",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/w",
+      "--port_offset=47000",
+      "--survive=filesystem",
+      "--security",
+      "token=schema-grpc-correctness-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/build-merged/bin/schema-proof",
+      "--addr",
+      "localhost:56080",
+      "--phase",
+      "seed",
+      "--auth-token",
+      "schema-grpc-correctness-diagnostic"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/build-merged/bin/schema-proof",
+      "--addr",
+      "localhost:56080",
+      "--phase",
+      "count-cut",
+      "--auth-token",
+      "schema-grpc-correctness-diagnostic",
+      "--state",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/state.json"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/zw",
+      "--replicas=1",
+      "--port_offset=46000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:51080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/p",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/w",
+      "--port_offset=47000",
+      "--survive=filesystem",
+      "--security",
+      "token=schema-grpc-correctness-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/build-merged/bin/schema-proof",
+      "--addr",
+      "localhost:56080",
+      "--phase",
+      "count-check",
+      "--auth-token",
+      "schema-grpc-correctness-diagnostic",
+      "--state",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/state.json"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/build-merged/bin/schema-proof",
+      "--addr",
+      "localhost:56080",
+      "--phase",
+      "conversion-cut",
+      "--auth-token",
+      "schema-grpc-correctness-diagnostic",
+      "--state",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/state.json"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/zw",
+      "--replicas=1",
+      "--port_offset=46000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:51080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/p",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/w",
+      "--port_offset=47000",
+      "--survive=filesystem",
+      "--security",
+      "token=schema-grpc-correctness-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/build-merged/bin/schema-proof",
+      "--addr",
+      "localhost:56080",
+      "--phase",
+      "conversion-check",
+      "--auth-token",
+      "schema-grpc-correctness-diagnostic",
+      "--state",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/state.json"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/zw",
+      "--replicas=1",
+      "--port_offset=46000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:51080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/p",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/w",
+      "--port_offset=47000",
+      "--survive=filesystem",
+      "--security",
+      "token=schema-grpc-correctness-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/build-merged/bin/schema-proof",
+      "--addr",
+      "localhost:56080",
+      "--phase",
+      "conversion-final",
+      "--auth-token",
+      "schema-grpc-correctness-diagnostic",
+      "--state",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/state.json"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/build-merged/bin/schema-proof",
+      "--addr",
+      "localhost:56080",
+      "--phase",
+      "unique-prepare",
+      "--auth-token",
+      "schema-grpc-correctness-diagnostic",
+      "--state",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/state.json"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:51080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/p",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/w",
+      "--port_offset=47000",
+      "--survive=filesystem",
+      "--security",
+      "token=schema-grpc-correctness-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/build-merged/bin/schema-proof",
+      "--addr",
+      "localhost:56080",
+      "--phase",
+      "unique-decide",
+      "--auth-token",
+      "schema-grpc-correctness-diagnostic",
+      "--state",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/state.json"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "zero",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/zw",
+      "--replicas=1",
+      "--port_offset=46000",
+      "--survive=filesystem"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/smoke/matrix/bin/dgraph",
+      "alpha",
+      "--zero",
+      "localhost:51080",
+      "--postings",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/p",
+      "--wal",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/w",
+      "--port_offset=47000",
+      "--survive=filesystem",
+      "--security",
+      "token=schema-grpc-correctness-diagnostic",
+      "--posting-store",
+      "backend=treedb;tier=benchmark_minimal;durability=raft_checkpoint;events=true",
+      "--badger",
+      "syncwrites=false"
+    ],
+    [
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/build-merged/bin/schema-proof",
+      "--addr",
+      "localhost:56080",
+      "--phase",
+      "final",
+      "--auth-token",
+      "schema-grpc-correctness-diagnostic",
+      "--state",
+      "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/schema-ack-suffix/state.json"
+    ]
+  ],
+  "phases": [
+    {
+      "phase": "seed",
+      "event": "phase_done",
+      "transcript": "seed.jsonl"
+    },
+    {
+      "phase": "count-cut",
+      "event": "ack_cut",
+      "transcript": "count-cut.jsonl"
+    },
+    {
+      "phase": "count-check",
+      "event": "phase_done",
+      "transcript": "count-check.jsonl"
+    },
+    {
+      "phase": "conversion-cut",
+      "event": "ack_cut",
+      "transcript": "conversion-cut.jsonl"
+    },
+    {
+      "phase": "conversion-check",
+      "event": "ack_cut",
+      "transcript": "conversion-check.jsonl"
+    },
+    {
+      "phase": "conversion-final",
+      "event": "phase_done",
+      "transcript": "conversion-final.jsonl"
+    },
+    {
+      "phase": "unique-prepare",
+      "event": "alpha_restart",
+      "transcript": "unique-prepare.jsonl"
+    },
+    {
+      "phase": "unique-decide",
+      "event": "ack_cut",
+      "transcript": "unique-decide.jsonl"
+    },
+    {
+      "phase": "final",
+      "event": "phase_done",
+      "transcript": "final.jsonl"
+    }
+  ],
+  "cuts": [
+    {
+      "phase": "count-cut",
+      "response_to_kill_ns": 235722
+    },
+    {
+      "phase": "conversion-cut",
+      "response_to_kill_ns": 298273
+    },
+    {
+      "phase": "conversion-check",
+      "response_to_kill_ns": 180031
+    },
+    {
+      "phase": "unique-decide",
+      "response_to_kill_ns": 342434
+    }
+  ],
+  "runtime": [
+    {
+      "processes": [
+        {
+          "role": "zero",
+          "pid": 3259528,
+          "generation": 1,
+          "config": "I1023 17:08:57.118877 3259528 run.go:234] x.WorkerConfig: {TmpDir: ExportPath: MyAddr: ZeroAddr:[] Raft: WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:0s ProposedGroupId:0 StartTime:0001-01-01 00:00:00 +0000 UTC Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "eb0c1af1a7c159a40fb4102a73a3163212310a83f4182708e9ef38b84cb628d3"
+        },
+        {
+          "role": "alpha",
+          "pid": 3259536,
+          "generation": 1,
+          "config": "I1023 17:08:57.262454 3259536 run.go:830] x.WorkerConfig: {TmpDir:t ExportPath:export MyAddr: ZeroAddr:[localhost:51080] Raft:learner=false; snapshot-after-entries=10000; snapshot-after-duration=30m; pending-proposals=256; idx=; group= WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:5m0s ProposedGroupId:0 StartTime:2026-10-23 17:08:57.172598243 -1000 HST m=+0.048794830 Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "c76eb7698cdf2a7b6380f0d104de88422d24f03f9993649c9d1eaedae481a362"
+        }
+      ],
+      "store_status": {
+        "backend": "treedb",
+        "closed": "false",
+        "durability": "raft_checkpoint",
+        "durable_commits": "false",
+        "post_commit_events": "true",
+        "profile": "raft_checkpoint",
+        "tier": "benchmark_minimal",
+        "unsupported": "backup,export,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality"
+      },
+      "store_sha256": "2dc007f29dc2cf7687cbcb9f95997dbe799c3becfcb2ba0ada54d61344d7ef9f"
+    },
+    {
+      "processes": [
+        {
+          "role": "zero",
+          "pid": 3259747,
+          "generation": 2,
+          "config": "I1023 17:09:04.392568 3259747 run.go:234] x.WorkerConfig: {TmpDir: ExportPath: MyAddr: ZeroAddr:[] Raft: WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:0s ProposedGroupId:0 StartTime:0001-01-01 00:00:00 +0000 UTC Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "b0406e44f152055deafbbda3eb7a93eec757e0462236ad0542eec86987822d06"
+        },
+        {
+          "role": "alpha",
+          "pid": 3259754,
+          "generation": 2,
+          "config": "I1023 17:09:04.572834 3259754 run.go:830] x.WorkerConfig: {TmpDir:t ExportPath:export MyAddr: ZeroAddr:[localhost:51080] Raft:learner=false; snapshot-after-entries=10000; snapshot-after-duration=30m; pending-proposals=256; idx=; group= WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:5m0s ProposedGroupId:0 StartTime:2026-10-23 17:09:04.477752989 -1000 HST m=+0.061164149 Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "cb1d32ad16a5c61255019d79ed7eba28bc3d733540efb0d286465ca67ae50b75"
+        }
+      ],
+      "store_status": {
+        "backend": "treedb",
+        "closed": "false",
+        "durability": "raft_checkpoint",
+        "durable_commits": "false",
+        "post_commit_events": "true",
+        "profile": "raft_checkpoint",
+        "tier": "benchmark_minimal",
+        "unsupported": "backup,export,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality"
+      },
+      "store_sha256": "185d28be60b6d3e459ace541a026e4c22422c28c4c3e8bd7591b50b605a0f1f6",
+      "recovery": {
+        "certified_index": 1,
+        "oracle": 0,
+        "pre_startup_durable_commit": 27,
+        "replayed_through": 29,
+        "uncertified_suffix_replayed": true
+      }
+    },
+    {
+      "processes": [
+        {
+          "role": "zero",
+          "pid": 3259873,
+          "generation": 3,
+          "config": "I1023 17:09:13.513931 3259873 run.go:234] x.WorkerConfig: {TmpDir: ExportPath: MyAddr: ZeroAddr:[] Raft: WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:0s ProposedGroupId:0 StartTime:0001-01-01 00:00:00 +0000 UTC Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "6da843fc1890e22c782a5697a92aafe6bf881bca6ffef59c07274a6c3e4f1a83"
+        },
+        {
+          "role": "alpha",
+          "pid": 3259880,
+          "generation": 3,
+          "config": "I1023 17:09:13.700578 3259880 run.go:830] x.WorkerConfig: {TmpDir:t ExportPath:export MyAddr: ZeroAddr:[localhost:51080] Raft:snapshot-after-entries=10000; snapshot-after-duration=30m; pending-proposals=256; idx=; group=; learner=false WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:5m0s ProposedGroupId:0 StartTime:2026-10-23 17:09:13.599063474 -1000 HST m=+0.062009537 Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "389e539fb420a7b5965603c533a5671aa05676d868c3c73fcd66449871758d75"
+        }
+      ],
+      "store_status": {
+        "backend": "treedb",
+        "closed": "false",
+        "durability": "raft_checkpoint",
+        "durable_commits": "false",
+        "post_commit_events": "true",
+        "profile": "raft_checkpoint",
+        "tier": "benchmark_minimal",
+        "unsupported": "backup,export,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality"
+      },
+      "store_sha256": "ff6ec2b02461ce304abda243f207bff2692c611f7f2be26feef806f7ae93ca08",
+      "recovery": {
+        "certified_index": 1,
+        "oracle": 0,
+        "pre_startup_durable_commit": 47,
+        "replayed_through": 49,
+        "uncertified_suffix_replayed": true
+      }
+    },
+    {
+      "processes": [
+        {
+          "role": "zero",
+          "pid": 3260054,
+          "generation": 4,
+          "config": "I1023 17:09:20.122588 3260054 run.go:234] x.WorkerConfig: {TmpDir: ExportPath: MyAddr: ZeroAddr:[] Raft: WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:0s ProposedGroupId:0 StartTime:0001-01-01 00:00:00 +0000 UTC Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "87dbb7c9f8551cdc53392b73c31ab8561899c31b54ee6af2f1941a4be0424e8c"
+        },
+        {
+          "role": "alpha",
+          "pid": 3260093,
+          "generation": 4,
+          "config": "I1023 17:09:20.308940 3260093 run.go:830] x.WorkerConfig: {TmpDir:t ExportPath:export MyAddr: ZeroAddr:[localhost:51080] Raft:learner=false; snapshot-after-entries=10000; snapshot-after-duration=30m; pending-proposals=256; idx=; group= WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:5m0s ProposedGroupId:0 StartTime:2026-10-23 17:09:20.208416614 -1000 HST m=+0.061948287 Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "a34e06e64e6f3101f2dd8a48814cbcb533f86332e46df2053d003819dc3e20d3"
+        }
+      ],
+      "store_status": {
+        "backend": "treedb",
+        "closed": "false",
+        "durability": "raft_checkpoint",
+        "durable_commits": "false",
+        "post_commit_events": "true",
+        "profile": "raft_checkpoint",
+        "tier": "benchmark_minimal",
+        "unsupported": "backup,export,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality"
+      },
+      "store_sha256": "5e453f481c79ca7e39f5cc079f7582fd23d727f397b9eee6588878e4a5763c07",
+      "recovery": {
+        "certified_index": 1,
+        "oracle": 0,
+        "pre_startup_durable_commit": 55,
+        "replayed_through": 57,
+        "uncertified_suffix_replayed": true
+      }
+    },
+    {
+      "processes": [
+        {
+          "role": "zero",
+          "pid": 3260054,
+          "generation": 4,
+          "config": "I1023 17:09:20.122588 3260054 run.go:234] x.WorkerConfig: {TmpDir: ExportPath: MyAddr: ZeroAddr:[] Raft: WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:0s ProposedGroupId:0 StartTime:0001-01-01 00:00:00 +0000 UTC Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "d62c27162109d0fd8e1cc5a62aacb00dacb8b06be7b4b723a759dd51d89fb84b"
+        },
+        {
+          "role": "alpha",
+          "pid": 3260210,
+          "generation": 5,
+          "config": "I1023 17:09:28.153058 3260210 run.go:830] x.WorkerConfig: {TmpDir:t ExportPath:export MyAddr: ZeroAddr:[localhost:51080] Raft:snapshot-after-duration=30m; pending-proposals=256; idx=; group=; learner=false; snapshot-after-entries=10000 WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:5m0s ProposedGroupId:0 StartTime:2026-10-23 17:09:28.037957926 -1000 HST m=+0.062300215 Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "969a0167797d0ad73eecf2632704a16026b5dc3bbf711d4b4c57996cfadadf01"
+        }
+      ],
+      "store_status": {
+        "backend": "treedb",
+        "closed": "false",
+        "durability": "raft_checkpoint",
+        "durable_commits": "false",
+        "post_commit_events": "true",
+        "profile": "raft_checkpoint",
+        "tier": "benchmark_minimal",
+        "unsupported": "backup,export,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality"
+      },
+      "store_sha256": "1ba27adcaaca25792f1a7c5b60422720abd56af2e28d8f75bafa3772bc9f3a8c",
+      "recovery": {
+        "certified_index": 78,
+        "oracle": 30017,
+        "pre_startup_durable_commit": 78,
+        "replayed_through": 80,
+        "uncertified_suffix_replayed": false
+      }
+    },
+    {
+      "processes": [
+        {
+          "role": "zero",
+          "pid": 3260318,
+          "generation": 5,
+          "config": "I1023 17:09:32.532115 3260318 run.go:234] x.WorkerConfig: {TmpDir: ExportPath: MyAddr: ZeroAddr:[] Raft: WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:0s ProposedGroupId:0 StartTime:0001-01-01 00:00:00 +0000 UTC Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "3ebfa3403cc478270e9da00e8a57bfcea71736307b1e69eb3162833088ea3ea1"
+        },
+        {
+          "role": "alpha",
+          "pid": 3260325,
+          "generation": 6,
+          "config": "I1023 17:09:32.736447 3260325 run.go:830] x.WorkerConfig: {TmpDir:t ExportPath:export MyAddr: ZeroAddr:[localhost:51080] Raft:learner=false; snapshot-after-entries=10000; snapshot-after-duration=30m; pending-proposals=256; idx=; group= WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:5m0s ProposedGroupId:0 StartTime:2026-10-23 17:09:32.621187685 -1000 HST m=+0.062516172 Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}",
+          "log_sha256_at_health": "58000916ecd1fec38f78edb9d6c0605b0e456844c9d30bedec6be5f077ab2275"
+        }
+      ],
+      "store_status": {
+        "backend": "treedb",
+        "closed": "false",
+        "durability": "raft_checkpoint",
+        "durable_commits": "false",
+        "post_commit_events": "true",
+        "profile": "raft_checkpoint",
+        "tier": "benchmark_minimal",
+        "unsupported": "backup,export,import,restore,encryption,in_memory,ttl,badger_subscribe,sort,count,inequality"
+      },
+      "store_sha256": "cee3b6934e6558847cec05d100392e1f66e841b5d290beb30912ef7bc7768299",
+      "recovery": {
+        "certified_index": 78,
+        "oracle": 30017,
+        "pre_startup_durable_commit": 83,
+        "replayed_through": 85,
+        "uncertified_suffix_replayed": true
+      }
+    }
+  ],
+  "dgraph_sha256": "46763a6bfcd02c37a44fb36e8c866dd7bbf7e2ca9777ad0a0aefb1ada9325175",
+  "proof_sha256": "687d5445ade522289cd1aef2941013d3bd95a97e1ba47b07f861c99f8ab141e8",
+  "sources": {
+    "dgraph": {
+      "directory": "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/source/prospective-dgraph",
+      "head": "bad4ced2c88e15076f73e3647a72e965f63be2b9",
+      "status": "",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untracked_sha256": {}
+    },
+    "gomap": {
+      "directory": "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/source/final-gomap",
+      "head": "29a2fdf153ce6e214abf9502d7970de727a38967",
+      "status": "",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untracked_sha256": {}
+    }
+  },
+  "dgraph_buildinfo_sha256": "97df60a70c282696b4a66bad34cdba46676540e9084412773883aa8b31ea1ed0",
+  "proof_buildinfo_sha256": "573cb597c22cf78fb54f35185e4cf1d228d929ee9553cbcc02a84f6d1786a0b1",
+  "pending_restart": {
+    "zero_pid": 3260054,
+    "alpha_exit": 0,
+    "log": "alpha-4.log"
+  },
+  "uncertified_suffix_replayed": true,
+  "sources_at_finish": {
+    "dgraph": {
+      "directory": "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/source/prospective-dgraph",
+      "head": "bad4ced2c88e15076f73e3647a72e965f63be2b9",
+      "status": "",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untracked_sha256": {}
+    },
+    "gomap": {
+      "directory": "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/source/final-gomap",
+      "head": "29a2fdf153ce6e214abf9502d7970de727a38967",
+      "status": "",
+      "diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untracked_sha256": {}
+    }
+  }
+}

@@ -1,0 +1,2323 @@
+{
+  "archive_count": 7,
+  "archives": [
+    {
+      "gzip": "process-12-EVIDENCE.tar.gz",
+      "gzip_bytes": 1153380,
+      "gzip_header_hex": "1f8b0800000000000003",
+      "gzip_mtime": 0,
+      "gzip_sha256": "3cb450124fbea359cad5467c3051d75459ad68000d3b2a9054f61824c323e90c",
+      "members": [
+        {
+          "bytes": 1341,
+          "name": "process-12/context.txt"
+        },
+        {
+          "bytes": 12936,
+          "name": "process-12/live/badger-durable-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 18190,
+          "name": "process-12/live/badger-durable-r1/alpha.log"
+        },
+        {
+          "bytes": 29798,
+          "name": "process-12/live/badger-durable-r1/result.json"
+        },
+        {
+          "bytes": 8625,
+          "name": "process-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "process-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5115,
+          "name": "process-12/live/badger-durable-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10015,
+          "name": "process-12/live/badger-durable-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "process-12/live/badger-durable-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4575,
+          "name": "process-12/live/badger-durable-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6406,
+          "name": "process-12/live/badger-durable-r1/zero.log"
+        },
+        {
+          "bytes": 12936,
+          "name": "process-12/live/badger-durable-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 17982,
+          "name": "process-12/live/badger-durable-r2/alpha.log"
+        },
+        {
+          "bytes": 29804,
+          "name": "process-12/live/badger-durable-r2/result.json"
+        },
+        {
+          "bytes": 8625,
+          "name": "process-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "process-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5115,
+          "name": "process-12/live/badger-durable-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10015,
+          "name": "process-12/live/badger-durable-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "process-12/live/badger-durable-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4575,
+          "name": "process-12/live/badger-durable-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6406,
+          "name": "process-12/live/badger-durable-r2/zero.log"
+        },
+        {
+          "bytes": 12953,
+          "name": "process-12/live/badger-durable-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 20095,
+          "name": "process-12/live/badger-durable-r3/alpha.log"
+        },
+        {
+          "bytes": 29798,
+          "name": "process-12/live/badger-durable-r3/result.json"
+        },
+        {
+          "bytes": 8625,
+          "name": "process-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "process-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5115,
+          "name": "process-12/live/badger-durable-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10016,
+          "name": "process-12/live/badger-durable-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "process-12/live/badger-durable-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4575,
+          "name": "process-12/live/badger-durable-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6308,
+          "name": "process-12/live/badger-durable-r3/zero.log"
+        },
+        {
+          "bytes": 12937,
+          "name": "process-12/live/badger-relaxed-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 15493,
+          "name": "process-12/live/badger-relaxed-r1/alpha.log"
+        },
+        {
+          "bytes": 29824,
+          "name": "process-12/live/badger-relaxed-r1/result.json"
+        },
+        {
+          "bytes": 8626,
+          "name": "process-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "process-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5110,
+          "name": "process-12/live/badger-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10017,
+          "name": "process-12/live/badger-relaxed-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "process-12/live/badger-relaxed-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4570,
+          "name": "process-12/live/badger-relaxed-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6401,
+          "name": "process-12/live/badger-relaxed-r1/zero.log"
+        },
+        {
+          "bytes": 12937,
+          "name": "process-12/live/badger-relaxed-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 22594,
+          "name": "process-12/live/badger-relaxed-r2/alpha.log"
+        },
+        {
+          "bytes": 29816,
+          "name": "process-12/live/badger-relaxed-r2/result.json"
+        },
+        {
+          "bytes": 8626,
+          "name": "process-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "process-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5115,
+          "name": "process-12/live/badger-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10017,
+          "name": "process-12/live/badger-relaxed-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "process-12/live/badger-relaxed-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4575,
+          "name": "process-12/live/badger-relaxed-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6406,
+          "name": "process-12/live/badger-relaxed-r2/zero.log"
+        },
+        {
+          "bytes": 12937,
+          "name": "process-12/live/badger-relaxed-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 14845,
+          "name": "process-12/live/badger-relaxed-r3/alpha.log"
+        },
+        {
+          "bytes": 29803,
+          "name": "process-12/live/badger-relaxed-r3/result.json"
+        },
+        {
+          "bytes": 8626,
+          "name": "process-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "process-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 6872,
+          "name": "process-12/live/badger-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 9469,
+          "name": "process-12/live/badger-relaxed-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "process-12/live/badger-relaxed-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 6433,
+          "name": "process-12/live/badger-relaxed-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 8065,
+          "name": "process-12/live/badger-relaxed-r3/zero.log"
+        },
+        {
+          "bytes": 15424,
+          "name": "process-12/live/treedb-durable-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 13283,
+          "name": "process-12/live/treedb-durable-r1/alpha.log"
+        },
+        {
+          "bytes": 29157,
+          "name": "process-12/live/treedb-durable-r1/result.json"
+        },
+        {
+          "bytes": 7176,
+          "name": "process-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327678,
+          "name": "process-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5115,
+          "name": "process-12/live/treedb-durable-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8569,
+          "name": "process-12/live/treedb-durable-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327760,
+          "name": "process-12/live/treedb-durable-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4575,
+          "name": "process-12/live/treedb-durable-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6308,
+          "name": "process-12/live/treedb-durable-r1/zero.log"
+        },
+        {
+          "bytes": 12079,
+          "name": "process-12/live/treedb-durable-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 12735,
+          "name": "process-12/live/treedb-durable-r2/alpha.log"
+        },
+        {
+          "bytes": 29160,
+          "name": "process-12/live/treedb-durable-r2/result.json"
+        },
+        {
+          "bytes": 7175,
+          "name": "process-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327677,
+          "name": "process-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 6867,
+          "name": "process-12/live/treedb-durable-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8021,
+          "name": "process-12/live/treedb-durable-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327713,
+          "name": "process-12/live/treedb-durable-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 6428,
+          "name": "process-12/live/treedb-durable-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 8060,
+          "name": "process-12/live/treedb-durable-r2/zero.log"
+        },
+        {
+          "bytes": 16164,
+          "name": "process-12/live/treedb-durable-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 18711,
+          "name": "process-12/live/treedb-durable-r3/alpha.log"
+        },
+        {
+          "bytes": 29154,
+          "name": "process-12/live/treedb-durable-r3/result.json"
+        },
+        {
+          "bytes": 7176,
+          "name": "process-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327678,
+          "name": "process-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5115,
+          "name": "process-12/live/treedb-durable-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8570,
+          "name": "process-12/live/treedb-durable-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327755,
+          "name": "process-12/live/treedb-durable-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4575,
+          "name": "process-12/live/treedb-durable-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6308,
+          "name": "process-12/live/treedb-durable-r3/zero.log"
+        },
+        {
+          "bytes": 10616,
+          "name": "process-12/live/treedb-relaxed-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 12550,
+          "name": "process-12/live/treedb-relaxed-r1/alpha.log"
+        },
+        {
+          "bytes": 29177,
+          "name": "process-12/live/treedb-relaxed-r1/result.json"
+        },
+        {
+          "bytes": 7175,
+          "name": "process-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327684,
+          "name": "process-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5115,
+          "name": "process-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8570,
+          "name": "process-12/live/treedb-relaxed-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327755,
+          "name": "process-12/live/treedb-relaxed-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4575,
+          "name": "process-12/live/treedb-relaxed-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6406,
+          "name": "process-12/live/treedb-relaxed-r1/zero.log"
+        },
+        {
+          "bytes": 10616,
+          "name": "process-12/live/treedb-relaxed-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 14013,
+          "name": "process-12/live/treedb-relaxed-r2/alpha.log"
+        },
+        {
+          "bytes": 29176,
+          "name": "process-12/live/treedb-relaxed-r2/result.json"
+        },
+        {
+          "bytes": 7175,
+          "name": "process-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327684,
+          "name": "process-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5110,
+          "name": "process-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8570,
+          "name": "process-12/live/treedb-relaxed-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327752,
+          "name": "process-12/live/treedb-relaxed-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4570,
+          "name": "process-12/live/treedb-relaxed-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6303,
+          "name": "process-12/live/treedb-relaxed-r2/zero.log"
+        },
+        {
+          "bytes": 10617,
+          "name": "process-12/live/treedb-relaxed-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 20283,
+          "name": "process-12/live/treedb-relaxed-r3/alpha.log"
+        },
+        {
+          "bytes": 29178,
+          "name": "process-12/live/treedb-relaxed-r3/result.json"
+        },
+        {
+          "bytes": 7176,
+          "name": "process-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327684,
+          "name": "process-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5115,
+          "name": "process-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8570,
+          "name": "process-12/live/treedb-relaxed-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327750,
+          "name": "process-12/live/treedb-relaxed-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4575,
+          "name": "process-12/live/treedb-relaxed-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6406,
+          "name": "process-12/live/treedb-relaxed-r3/zero.log"
+        },
+        {
+          "bytes": 0,
+          "name": "process-12/microbench/raw.stderr"
+        },
+        {
+          "bytes": 19620,
+          "name": "process-12/microbench/raw.stdout"
+        },
+        {
+          "bytes": 19620,
+          "name": "process-12/microbench/raw.txt"
+        },
+        {
+          "bytes": 15350,
+          "name": "process-12/profiles/treedb-durable-run/alpha-restart.log"
+        },
+        {
+          "bytes": 14972,
+          "name": "process-12/profiles/treedb-durable-run/alpha.log"
+        },
+        {
+          "bytes": 29573,
+          "name": "process-12/profiles/treedb-durable-run/result.json"
+        },
+        {
+          "bytes": 7186,
+          "name": "process-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327686,
+          "name": "process-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5115,
+          "name": "process-12/profiles/treedb-durable-run/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8580,
+          "name": "process-12/profiles/treedb-durable-run/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327766,
+          "name": "process-12/profiles/treedb-durable-run/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4575,
+          "name": "process-12/profiles/treedb-durable-run/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6308,
+          "name": "process-12/profiles/treedb-durable-run/zero.log"
+        },
+        {
+          "bytes": 2467,
+          "name": "process-12/profiles/treedb-durable-top.txt"
+        },
+        {
+          "bytes": 21596,
+          "name": "process-12/profiles/treedb-durable.pprof"
+        },
+        {
+          "bytes": 10786,
+          "name": "process-12/profiles/treedb-relaxed-run/alpha-restart.log"
+        },
+        {
+          "bytes": 12046,
+          "name": "process-12/profiles/treedb-relaxed-run/alpha.log"
+        },
+        {
+          "bytes": 29592,
+          "name": "process-12/profiles/treedb-relaxed-run/result.json"
+        },
+        {
+          "bytes": 7345,
+          "name": "process-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327720,
+          "name": "process-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5120,
+          "name": "process-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8580,
+          "name": "process-12/profiles/treedb-relaxed-run/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327760,
+          "name": "process-12/profiles/treedb-relaxed-run/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4580,
+          "name": "process-12/profiles/treedb-relaxed-run/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6411,
+          "name": "process-12/profiles/treedb-relaxed-run/zero.log"
+        },
+        {
+          "bytes": 2078,
+          "name": "process-12/profiles/treedb-relaxed-top.txt"
+        },
+        {
+          "bytes": 72646,
+          "name": "process-12/profiles/treedb-relaxed.pprof"
+        },
+        {
+          "bytes": 9411,
+          "name": "process-12/report.md"
+        },
+        {
+          "bytes": 1377,
+          "name": "process-12-invocation.json"
+        },
+        {
+          "bytes": 0,
+          "name": "process-12-manifest.stderr"
+        },
+        {
+          "bytes": 15344,
+          "name": "process-12-manifest.stdout"
+        },
+        {
+          "bytes": 15443,
+          "name": "process-12-source-manifest.json"
+        },
+        {
+          "bytes": 0,
+          "name": "process-12-verify.stderr"
+        },
+        {
+          "bytes": 15344,
+          "name": "process-12-verify.stdout"
+        },
+        {
+          "bytes": 0,
+          "name": "process-12.stderr"
+        },
+        {
+          "bytes": 24658,
+          "name": "process-12.stdout"
+        },
+        {
+          "bytes": 155837,
+          "name": "quiet-process-12/preflight-acquisition.json"
+        },
+        {
+          "bytes": 822638,
+          "name": "quiet-process-12/preflight-processes-02.jsonl"
+        },
+        {
+          "bytes": 822594,
+          "name": "quiet-process-12/preflight-processes.jsonl"
+        },
+        {
+          "bytes": 59100,
+          "name": "quiet-process-12/preflight.json"
+        },
+        {
+          "bytes": 21194,
+          "name": "process-12-SELECTED_FILES.json"
+        }
+      ],
+      "original_receipt": "process-12-ARCHIVE_RECEIPT.json",
+      "original_receipt_sha256": "d1f38b2bf46538f6baa2ac1df88af809a6362c51a933625f082699f2f6e47477",
+      "original_tar": "process-12-EVIDENCE.tar",
+      "original_tar_bytes": 8929280,
+      "original_tar_reproduced_and_verified": true,
+      "original_tar_sha256": "bb8004c9b9c00d23f10fc6c73223d151d974adf8ed91d5c0102c57caefecec8d",
+      "reproduction_command": "gzip -n -6 -c -- /path/to/retained/process-12-EVIDENCE.tar > process-12-EVIDENCE.tar.gz",
+      "retained_original": "artifacts/final-native111-runtime-01/process-12-EVIDENCE.tar",
+      "verification_command": "gzip -d -c -- process-12-EVIDENCE.tar.gz | sha256sum"
+    },
+    {
+      "gzip": "filesystem-12-EVIDENCE.tar.gz",
+      "gzip_bytes": 1104279,
+      "gzip_header_hex": "1f8b0800000000000003",
+      "gzip_mtime": 0,
+      "gzip_sha256": "40eda4e41d71a94da95104402f22a561576da6c1c23d48c5c749200362c546df",
+      "members": [
+        {
+          "bytes": 1350,
+          "name": "filesystem-12/context.txt"
+        },
+        {
+          "bytes": 16067,
+          "name": "filesystem-12/live/badger-durable-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 20863,
+          "name": "filesystem-12/live/badger-durable-r1/alpha.log"
+        },
+        {
+          "bytes": 29869,
+          "name": "filesystem-12/live/badger-durable-r1/result.json"
+        },
+        {
+          "bytes": 8636,
+          "name": "filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 7377,
+          "name": "filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 9435,
+          "name": "filesystem-12/live/badger-durable-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "filesystem-12/live/badger-durable-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 6837,
+          "name": "filesystem-12/live/badger-durable-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 8668,
+          "name": "filesystem-12/live/badger-durable-r1/zero.log"
+        },
+        {
+          "bytes": 22738,
+          "name": "filesystem-12/live/badger-durable-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 23853,
+          "name": "filesystem-12/live/badger-durable-r2/alpha.log"
+        },
+        {
+          "bytes": 29868,
+          "name": "filesystem-12/live/badger-durable-r2/result.json"
+        },
+        {
+          "bytes": 8636,
+          "name": "filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5117,
+          "name": "filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10026,
+          "name": "filesystem-12/live/badger-durable-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "filesystem-12/live/badger-durable-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4577,
+          "name": "filesystem-12/live/badger-durable-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6408,
+          "name": "filesystem-12/live/badger-durable-r2/zero.log"
+        },
+        {
+          "bytes": 39664,
+          "name": "filesystem-12/live/badger-durable-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 15185,
+          "name": "filesystem-12/live/badger-durable-r3/alpha.log"
+        },
+        {
+          "bytes": 29866,
+          "name": "filesystem-12/live/badger-durable-r3/result.json"
+        },
+        {
+          "bytes": 8636,
+          "name": "filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5112,
+          "name": "filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10026,
+          "name": "filesystem-12/live/badger-durable-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "filesystem-12/live/badger-durable-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4572,
+          "name": "filesystem-12/live/badger-durable-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6403,
+          "name": "filesystem-12/live/badger-durable-r3/zero.log"
+        },
+        {
+          "bytes": 13364,
+          "name": "filesystem-12/live/badger-relaxed-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 19982,
+          "name": "filesystem-12/live/badger-relaxed-r1/alpha.log"
+        },
+        {
+          "bytes": 29889,
+          "name": "filesystem-12/live/badger-relaxed-r1/result.json"
+        },
+        {
+          "bytes": 8637,
+          "name": "filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5117,
+          "name": "filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10027,
+          "name": "filesystem-12/live/badger-relaxed-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "filesystem-12/live/badger-relaxed-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4577,
+          "name": "filesystem-12/live/badger-relaxed-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6310,
+          "name": "filesystem-12/live/badger-relaxed-r1/zero.log"
+        },
+        {
+          "bytes": 13469,
+          "name": "filesystem-12/live/badger-relaxed-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 17484,
+          "name": "filesystem-12/live/badger-relaxed-r2/alpha.log"
+        },
+        {
+          "bytes": 29897,
+          "name": "filesystem-12/live/badger-relaxed-r2/result.json"
+        },
+        {
+          "bytes": 8636,
+          "name": "filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5117,
+          "name": "filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10028,
+          "name": "filesystem-12/live/badger-relaxed-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "filesystem-12/live/badger-relaxed-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4577,
+          "name": "filesystem-12/live/badger-relaxed-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6408,
+          "name": "filesystem-12/live/badger-relaxed-r2/zero.log"
+        },
+        {
+          "bytes": 13572,
+          "name": "filesystem-12/live/badger-relaxed-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 16021,
+          "name": "filesystem-12/live/badger-relaxed-r3/alpha.log"
+        },
+        {
+          "bytes": 29888,
+          "name": "filesystem-12/live/badger-relaxed-r3/result.json"
+        },
+        {
+          "bytes": 8637,
+          "name": "filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5117,
+          "name": "filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10027,
+          "name": "filesystem-12/live/badger-relaxed-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "filesystem-12/live/badger-relaxed-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4577,
+          "name": "filesystem-12/live/badger-relaxed-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6310,
+          "name": "filesystem-12/live/badger-relaxed-r3/zero.log"
+        },
+        {
+          "bytes": 10967,
+          "name": "filesystem-12/live/treedb-durable-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 13180,
+          "name": "filesystem-12/live/treedb-durable-r1/alpha.log"
+        },
+        {
+          "bytes": 29830,
+          "name": "filesystem-12/live/treedb-durable-r1/result.json"
+        },
+        {
+          "bytes": 8123,
+          "name": "filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 325542,
+          "name": "filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5117,
+          "name": "filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 9619,
+          "name": "filesystem-12/live/treedb-durable-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 326905,
+          "name": "filesystem-12/live/treedb-durable-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4577,
+          "name": "filesystem-12/live/treedb-durable-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6408,
+          "name": "filesystem-12/live/treedb-durable-r1/zero.log"
+        },
+        {
+          "bytes": 10980,
+          "name": "filesystem-12/live/treedb-durable-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 12589,
+          "name": "filesystem-12/live/treedb-durable-r2/alpha.log"
+        },
+        {
+          "bytes": 29846,
+          "name": "filesystem-12/live/treedb-durable-r2/result.json"
+        },
+        {
+          "bytes": 8136,
+          "name": "filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 325542,
+          "name": "filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 7025,
+          "name": "filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 9028,
+          "name": "filesystem-12/live/treedb-durable-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 326873,
+          "name": "filesystem-12/live/treedb-durable-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 6485,
+          "name": "filesystem-12/live/treedb-durable-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 8218,
+          "name": "filesystem-12/live/treedb-durable-r2/zero.log"
+        },
+        {
+          "bytes": 10979,
+          "name": "filesystem-12/live/treedb-durable-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 13181,
+          "name": "filesystem-12/live/treedb-durable-r3/alpha.log"
+        },
+        {
+          "bytes": 29844,
+          "name": "filesystem-12/live/treedb-durable-r3/result.json"
+        },
+        {
+          "bytes": 8135,
+          "name": "filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 325542,
+          "name": "filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5117,
+          "name": "filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 9620,
+          "name": "filesystem-12/live/treedb-durable-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 326904,
+          "name": "filesystem-12/live/treedb-durable-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4577,
+          "name": "filesystem-12/live/treedb-durable-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6408,
+          "name": "filesystem-12/live/treedb-durable-r3/zero.log"
+        },
+        {
+          "bytes": 15613,
+          "name": "filesystem-12/live/treedb-relaxed-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 13913,
+          "name": "filesystem-12/live/treedb-relaxed-r1/alpha.log"
+        },
+        {
+          "bytes": 29237,
+          "name": "filesystem-12/live/treedb-relaxed-r1/result.json"
+        },
+        {
+          "bytes": 7180,
+          "name": "filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327687,
+          "name": "filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5117,
+          "name": "filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8575,
+          "name": "filesystem-12/live/treedb-relaxed-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327752,
+          "name": "filesystem-12/live/treedb-relaxed-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4577,
+          "name": "filesystem-12/live/treedb-relaxed-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6310,
+          "name": "filesystem-12/live/treedb-relaxed-r1/zero.log"
+        },
+        {
+          "bytes": 12286,
+          "name": "filesystem-12/live/treedb-relaxed-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 12667,
+          "name": "filesystem-12/live/treedb-relaxed-r2/alpha.log"
+        },
+        {
+          "bytes": 29236,
+          "name": "filesystem-12/live/treedb-relaxed-r2/result.json"
+        },
+        {
+          "bytes": 7181,
+          "name": "filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327688,
+          "name": "filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5112,
+          "name": "filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8574,
+          "name": "filesystem-12/live/treedb-relaxed-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327757,
+          "name": "filesystem-12/live/treedb-relaxed-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4572,
+          "name": "filesystem-12/live/treedb-relaxed-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6305,
+          "name": "filesystem-12/live/treedb-relaxed-r2/zero.log"
+        },
+        {
+          "bytes": 12078,
+          "name": "filesystem-12/live/treedb-relaxed-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 13501,
+          "name": "filesystem-12/live/treedb-relaxed-r3/alpha.log"
+        },
+        {
+          "bytes": 29238,
+          "name": "filesystem-12/live/treedb-relaxed-r3/result.json"
+        },
+        {
+          "bytes": 7181,
+          "name": "filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327686,
+          "name": "filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5117,
+          "name": "filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8575,
+          "name": "filesystem-12/live/treedb-relaxed-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327753,
+          "name": "filesystem-12/live/treedb-relaxed-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4577,
+          "name": "filesystem-12/live/treedb-relaxed-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6408,
+          "name": "filesystem-12/live/treedb-relaxed-r3/zero.log"
+        },
+        {
+          "bytes": 0,
+          "name": "filesystem-12/microbench/raw.stderr"
+        },
+        {
+          "bytes": 19621,
+          "name": "filesystem-12/microbench/raw.stdout"
+        },
+        {
+          "bytes": 19621,
+          "name": "filesystem-12/microbench/raw.txt"
+        },
+        {
+          "bytes": 11009,
+          "name": "filesystem-12/profiles/treedb-durable-run/alpha-restart.log"
+        },
+        {
+          "bytes": 13828,
+          "name": "filesystem-12/profiles/treedb-durable-run/alpha.log"
+        },
+        {
+          "bytes": 30247,
+          "name": "filesystem-12/profiles/treedb-durable-run/result.json"
+        },
+        {
+          "bytes": 8165,
+          "name": "filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 325556,
+          "name": "filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5117,
+          "name": "filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 9630,
+          "name": "filesystem-12/profiles/treedb-durable-run/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 326909,
+          "name": "filesystem-12/profiles/treedb-durable-run/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4577,
+          "name": "filesystem-12/profiles/treedb-durable-run/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6310,
+          "name": "filesystem-12/profiles/treedb-durable-run/zero.log"
+        },
+        {
+          "bytes": 2751,
+          "name": "filesystem-12/profiles/treedb-durable-top.txt"
+        },
+        {
+          "bytes": 23535,
+          "name": "filesystem-12/profiles/treedb-durable.pprof"
+        },
+        {
+          "bytes": 14892,
+          "name": "filesystem-12/profiles/treedb-relaxed-run/alpha-restart.log"
+        },
+        {
+          "bytes": 15131,
+          "name": "filesystem-12/profiles/treedb-relaxed-run/alpha.log"
+        },
+        {
+          "bytes": 29670,
+          "name": "filesystem-12/profiles/treedb-relaxed-run/result.json"
+        },
+        {
+          "bytes": 7480,
+          "name": "filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327737,
+          "name": "filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 7076,
+          "name": "filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8036,
+          "name": "filesystem-12/profiles/treedb-relaxed-run/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327715,
+          "name": "filesystem-12/profiles/treedb-relaxed-run/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 6440,
+          "name": "filesystem-12/profiles/treedb-relaxed-run/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 8367,
+          "name": "filesystem-12/profiles/treedb-relaxed-run/zero.log"
+        },
+        {
+          "bytes": 2614,
+          "name": "filesystem-12/profiles/treedb-relaxed-top.txt"
+        },
+        {
+          "bytes": 17643,
+          "name": "filesystem-12/profiles/treedb-relaxed.pprof"
+        },
+        {
+          "bytes": 9470,
+          "name": "filesystem-12/report.md"
+        },
+        {
+          "bytes": 1630,
+          "name": "filesystem-12-invocation.json"
+        },
+        {
+          "bytes": 0,
+          "name": "filesystem-12-manifest.stderr"
+        },
+        {
+          "bytes": 15344,
+          "name": "filesystem-12-manifest.stdout"
+        },
+        {
+          "bytes": 15443,
+          "name": "filesystem-12-source-manifest.json"
+        },
+        {
+          "bytes": 0,
+          "name": "filesystem-12-verify.stderr"
+        },
+        {
+          "bytes": 15344,
+          "name": "filesystem-12-verify.stdout"
+        },
+        {
+          "bytes": 0,
+          "name": "filesystem-12.stderr"
+        },
+        {
+          "bytes": 25491,
+          "name": "filesystem-12.stdout"
+        },
+        {
+          "bytes": 153257,
+          "name": "quiet-filesystem-12/preflight-acquisition.json"
+        },
+        {
+          "bytes": 808201,
+          "name": "quiet-filesystem-12/preflight-processes-02.jsonl"
+        },
+        {
+          "bytes": 808077,
+          "name": "quiet-filesystem-12/preflight-processes.jsonl"
+        },
+        {
+          "bytes": 58100,
+          "name": "quiet-filesystem-12/preflight.json"
+        },
+        {
+          "bytes": 21677,
+          "name": "filesystem-12-SELECTED_FILES.json"
+        }
+      ],
+      "original_receipt": "filesystem-12-ARCHIVE_RECEIPT.json",
+      "original_receipt_sha256": "18d492af6afe8f2e0e2c99e00db1f34c8a11d654a1bd611cba4a3cdf0d5fc756",
+      "original_tar": "filesystem-12-EVIDENCE.tar",
+      "original_tar_bytes": 8888320,
+      "original_tar_reproduced_and_verified": true,
+      "original_tar_sha256": "bbeba5a291ec76f66b4feb04d53a7de4b26321f917d9c144c905e5ce4a955ecc",
+      "reproduction_command": "gzip -n -6 -c -- /path/to/retained/filesystem-12-EVIDENCE.tar > filesystem-12-EVIDENCE.tar.gz",
+      "retained_original": "artifacts/final-native111-runtime-01/filesystem-12-EVIDENCE.tar",
+      "verification_command": "gzip -d -c -- filesystem-12-EVIDENCE.tar.gz | sha256sum"
+    },
+    {
+      "gzip": "SCHEMA_EVIDENCE.tar.gz",
+      "gzip_bytes": 192872,
+      "gzip_header_hex": "1f8b0800000000000003",
+      "gzip_mtime": 0,
+      "gzip_sha256": "1c0fccc7feb6a78a77f3b2a66d6e23c05da3b0380b9ea9f9c6927fae19d1fce1",
+      "members": [
+        {
+          "bytes": 13244,
+          "name": "schema-ack-suffix/alpha-1.log"
+        },
+        {
+          "bytes": 12977,
+          "name": "schema-ack-suffix/alpha-2.log"
+        },
+        {
+          "bytes": 10477,
+          "name": "schema-ack-suffix/alpha-3.log"
+        },
+        {
+          "bytes": 14890,
+          "name": "schema-ack-suffix/alpha-4.log"
+        },
+        {
+          "bytes": 8526,
+          "name": "schema-ack-suffix/alpha-5.log"
+        },
+        {
+          "bytes": 12241,
+          "name": "schema-ack-suffix/alpha-6.log"
+        },
+        {
+          "bytes": 4032,
+          "name": "schema-ack-suffix/conversion-check.jsonl"
+        },
+        {
+          "bytes": 0,
+          "name": "schema-ack-suffix/conversion-check.stderr"
+        },
+        {
+          "bytes": 2498,
+          "name": "schema-ack-suffix/conversion-cut.jsonl"
+        },
+        {
+          "bytes": 0,
+          "name": "schema-ack-suffix/conversion-cut.stderr"
+        },
+        {
+          "bytes": 2675,
+          "name": "schema-ack-suffix/conversion-final.jsonl"
+        },
+        {
+          "bytes": 0,
+          "name": "schema-ack-suffix/conversion-final.stderr"
+        },
+        {
+          "bytes": 6381,
+          "name": "schema-ack-suffix/count-check.jsonl"
+        },
+        {
+          "bytes": 0,
+          "name": "schema-ack-suffix/count-check.stderr"
+        },
+        {
+          "bytes": 2641,
+          "name": "schema-ack-suffix/count-cut.jsonl"
+        },
+        {
+          "bytes": 0,
+          "name": "schema-ack-suffix/count-cut.stderr"
+        },
+        {
+          "bytes": 14005,
+          "name": "schema-ack-suffix/dgraph.buildinfo.txt"
+        },
+        {
+          "bytes": 4847,
+          "name": "schema-ack-suffix/final.jsonl"
+        },
+        {
+          "bytes": 0,
+          "name": "schema-ack-suffix/final.stderr"
+        },
+        {
+          "bytes": 1235,
+          "name": "schema-ack-suffix/proof.buildinfo.txt"
+        },
+        {
+          "bytes": 26303,
+          "name": "schema-ack-suffix/result.json"
+        },
+        {
+          "bytes": 326877,
+          "name": "schema-ack-suffix/runtime-alpha-1.store.txt"
+        },
+        {
+          "bytes": 327030,
+          "name": "schema-ack-suffix/runtime-alpha-2.store.txt"
+        },
+        {
+          "bytes": 328375,
+          "name": "schema-ack-suffix/runtime-alpha-3.store.txt"
+        },
+        {
+          "bytes": 327218,
+          "name": "schema-ack-suffix/runtime-alpha-4.store.txt"
+        },
+        {
+          "bytes": 325506,
+          "name": "schema-ack-suffix/runtime-alpha-5.store.txt"
+        },
+        {
+          "bytes": 328430,
+          "name": "schema-ack-suffix/runtime-alpha-6.store.txt"
+        },
+        {
+          "bytes": 1535,
+          "name": "schema-ack-suffix/seed.jsonl"
+        },
+        {
+          "bytes": 0,
+          "name": "schema-ack-suffix/seed.stderr"
+        },
+        {
+          "bytes": 461,
+          "name": "schema-ack-suffix/state.json"
+        },
+        {
+          "bytes": 2057,
+          "name": "schema-ack-suffix/unique-decide.jsonl"
+        },
+        {
+          "bytes": 0,
+          "name": "schema-ack-suffix/unique-decide.stderr"
+        },
+        {
+          "bytes": 4641,
+          "name": "schema-ack-suffix/unique-prepare.jsonl"
+        },
+        {
+          "bytes": 0,
+          "name": "schema-ack-suffix/unique-prepare.stderr"
+        },
+        {
+          "bytes": 4641,
+          "name": "schema-ack-suffix/zero-1.log"
+        },
+        {
+          "bytes": 4808,
+          "name": "schema-ack-suffix/zero-2.log"
+        },
+        {
+          "bytes": 4529,
+          "name": "schema-ack-suffix/zero-3.log"
+        },
+        {
+          "bytes": 5444,
+          "name": "schema-ack-suffix/zero-4.log"
+        },
+        {
+          "bytes": 6001,
+          "name": "schema-ack-suffix/zero-5.log"
+        }
+      ],
+      "original_receipt": "SCHEMA_ARCHIVE_RECEIPT.json",
+      "original_receipt_sha256": "ec2bbf58e41a5e76b04ce262f98cd5261cf949f3e9fc41fe7d438f235fca5e8e",
+      "original_tar": "SCHEMA_EVIDENCE.tar",
+      "original_tar_bytes": 2211840,
+      "original_tar_reproduced_and_verified": true,
+      "original_tar_sha256": "eebd11e2f510e4928f67a337a309f6ba2fd2d82907f45305054f527859e43040",
+      "reproduction_command": "gzip -n -6 -c -- /path/to/retained/SCHEMA_EVIDENCE.tar > SCHEMA_EVIDENCE.tar.gz",
+      "retained_original": "artifacts/final-native111-runtime-01/SCHEMA_EVIDENCE.tar",
+      "verification_command": "gzip -d -c -- SCHEMA_EVIDENCE.tar.gz | sha256sum"
+    },
+    {
+      "gzip": "FLOOR_EVIDENCE.tar.gz",
+      "gzip_bytes": 8758,
+      "gzip_header_hex": "1f8b0800000000000003",
+      "gzip_mtime": 0,
+      "gzip_sha256": "3bac1f4e5dcd51559ce27a6973516ae687bef027be7866b4a44170cbe9ebc05d",
+      "members": [
+        {
+          "bytes": 12585,
+          "name": "floor-ack/alpha-initial.log"
+        },
+        {
+          "bytes": 12322,
+          "name": "floor-ack/alpha-restart.log"
+        },
+        {
+          "bytes": 8685,
+          "name": "floor-ack/result.json"
+        },
+        {
+          "bytes": 4643,
+          "name": "floor-ack/zero-initial.log"
+        },
+        {
+          "bytes": 6011,
+          "name": "floor-ack/zero-restart.log"
+        }
+      ],
+      "original_receipt": "FLOOR_ARCHIVE_RECEIPT.json",
+      "original_receipt_sha256": "f29ff3d9d3a5d77ceb03c9ba42187559eec864a7d80a9ac1c01cfc5758436629",
+      "original_tar": "FLOOR_EVIDENCE.tar",
+      "original_tar_bytes": 61440,
+      "original_tar_reproduced_and_verified": true,
+      "original_tar_sha256": "2fd548fd59919af4fa4c1da8e204071a6c2a53e3ec7e5c87698084b6a61d69bf",
+      "reproduction_command": "gzip -n -6 -c -- /path/to/retained/FLOOR_EVIDENCE.tar > FLOOR_EVIDENCE.tar.gz",
+      "retained_original": "artifacts/final-native111-runtime-01/FLOOR_EVIDENCE.tar",
+      "verification_command": "gzip -d -c -- FLOOR_EVIDENCE.tar.gz | sha256sum"
+    },
+    {
+      "gzip": "ADMIN_EVIDENCE.tar.gz",
+      "gzip_bytes": 9914,
+      "gzip_header_hex": "1f8b0800000000000003",
+      "gzip_mtime": 0,
+      "gzip_sha256": "87b5ccc63ba814f2399ce69061ee1e6df508691113cdbad820c96c17c32c51a0",
+      "members": [
+        {
+          "bytes": 11848,
+          "name": "admin-close/alpha-after-close.log"
+        },
+        {
+          "bytes": 13059,
+          "name": "admin-close/alpha-after-drop.log"
+        },
+        {
+          "bytes": 12319,
+          "name": "admin-close/alpha-initial.log"
+        },
+        {
+          "bytes": 4560,
+          "name": "admin-close/result.json"
+        },
+        {
+          "bytes": 4727,
+          "name": "admin-close/zero-after-drop.log"
+        },
+        {
+          "bytes": 6285,
+          "name": "admin-close/zero-after-outage.log"
+        },
+        {
+          "bytes": 4645,
+          "name": "admin-close/zero-initial.log"
+        }
+      ],
+      "original_receipt": "ADMIN_ARCHIVE_RECEIPT.json",
+      "original_receipt_sha256": "b4514ca6d458178295ffd9eb1294b3528a7dfbfefe61c51120281564433f5b91",
+      "original_tar": "ADMIN_EVIDENCE.tar",
+      "original_tar_bytes": 71680,
+      "original_tar_reproduced_and_verified": true,
+      "original_tar_sha256": "d0f806c19fa02283564a01df072281f979668cbe17bba4728a822d0728b5463a",
+      "reproduction_command": "gzip -n -6 -c -- /path/to/retained/ADMIN_EVIDENCE.tar > ADMIN_EVIDENCE.tar.gz",
+      "retained_original": "artifacts/final-native111-runtime-01/ADMIN_EVIDENCE.tar",
+      "verification_command": "gzip -d -c -- ADMIN_EVIDENCE.tar.gz | sha256sum"
+    },
+    {
+      "gzip": "NATIVE_EVIDENCE.tar.gz",
+      "gzip_bytes": 15387,
+      "gzip_header_hex": "1f8b0800000000000003",
+      "gzip_mtime": 0,
+      "gzip_sha256": "ac050ecf435da14b0d76ea749463b0ad4604e7ab8135406e61a88777f8b27edc",
+      "members": [
+        {
+          "bytes": 15026,
+          "name": "native-peers/alpha1-initial.log"
+        },
+        {
+          "bytes": 16032,
+          "name": "native-peers/alpha1-restart.log"
+        },
+        {
+          "bytes": 9009,
+          "name": "native-peers/alpha2-join.log"
+        },
+        {
+          "bytes": 8688,
+          "name": "native-peers/alpha2-rejoin.log"
+        },
+        {
+          "bytes": 13024,
+          "name": "native-peers/alpha2-restart.log"
+        },
+        {
+          "bytes": 10659,
+          "name": "native-peers/alpha3-join.log"
+        },
+        {
+          "bytes": 13785,
+          "name": "native-peers/alpha3-restart.log"
+        },
+        {
+          "bytes": 8574,
+          "name": "native-peers/result.json"
+        },
+        {
+          "bytes": 6402,
+          "name": "native-peers/zero-initial.log"
+        },
+        {
+          "bytes": 9362,
+          "name": "native-peers/zero-restart.log"
+        }
+      ],
+      "original_receipt": "NATIVE_ARCHIVE_RECEIPT.json",
+      "original_receipt_sha256": "53a9d5c1354fae736cae5451eec08d512cb4eaf69eb17721251ab3ca54e16584",
+      "original_tar": "NATIVE_EVIDENCE.tar",
+      "original_tar_bytes": 133120,
+      "original_tar_reproduced_and_verified": true,
+      "original_tar_sha256": "ec35dcb546c4f5e9ea2a43969136be7355146d6b5f815578f3fcd7c2badeac91",
+      "reproduction_command": "gzip -n -6 -c -- /path/to/retained/NATIVE_EVIDENCE.tar > NATIVE_EVIDENCE.tar.gz",
+      "retained_original": "artifacts/final-native111-runtime-01/NATIVE_EVIDENCE.tar",
+      "verification_command": "gzip -d -c -- NATIVE_EVIDENCE.tar.gz | sha256sum"
+    },
+    {
+      "gzip": "baseline-filesystem-12-EVIDENCE.tar.gz",
+      "gzip_bytes": 958222,
+      "gzip_header_hex": "1f8b0800000000000003",
+      "gzip_mtime": 0,
+      "gzip_sha256": "3c6b1521a97d0780368b734eb1f6ed063ac04dc501cfa228d48cc1423de33cd7",
+      "members": [
+        {
+          "bytes": 1570,
+          "name": "baseline-filesystem-12/context.txt"
+        },
+        {
+          "bytes": 22566,
+          "name": "baseline-filesystem-12/live/badger-durable-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 14711,
+          "name": "baseline-filesystem-12/live/badger-durable-r1/alpha.log"
+        },
+        {
+          "bytes": 30297,
+          "name": "baseline-filesystem-12/live/badger-durable-r1/result.json"
+        },
+        {
+          "bytes": 8671,
+          "name": "baseline-filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "baseline-filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5121,
+          "name": "baseline-filesystem-12/live/badger-durable-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10063,
+          "name": "baseline-filesystem-12/live/badger-durable-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "baseline-filesystem-12/live/badger-durable-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4581,
+          "name": "baseline-filesystem-12/live/badger-durable-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6412,
+          "name": "baseline-filesystem-12/live/badger-durable-r1/zero.log"
+        },
+        {
+          "bytes": 39474,
+          "name": "baseline-filesystem-12/live/badger-durable-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 26062,
+          "name": "baseline-filesystem-12/live/badger-durable-r2/alpha.log"
+        },
+        {
+          "bytes": 30294,
+          "name": "baseline-filesystem-12/live/badger-durable-r2/result.json"
+        },
+        {
+          "bytes": 8671,
+          "name": "baseline-filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "baseline-filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5121,
+          "name": "baseline-filesystem-12/live/badger-durable-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10063,
+          "name": "baseline-filesystem-12/live/badger-durable-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "baseline-filesystem-12/live/badger-durable-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4581,
+          "name": "baseline-filesystem-12/live/badger-durable-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6412,
+          "name": "baseline-filesystem-12/live/badger-durable-r2/zero.log"
+        },
+        {
+          "bytes": 15895,
+          "name": "baseline-filesystem-12/live/badger-durable-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 16942,
+          "name": "baseline-filesystem-12/live/badger-durable-r3/alpha.log"
+        },
+        {
+          "bytes": 30305,
+          "name": "baseline-filesystem-12/live/badger-durable-r3/result.json"
+        },
+        {
+          "bytes": 8672,
+          "name": "baseline-filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "baseline-filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 7386,
+          "name": "baseline-filesystem-12/live/badger-durable-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 9471,
+          "name": "baseline-filesystem-12/live/badger-durable-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 202,
+          "name": "baseline-filesystem-12/live/badger-durable-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 6846,
+          "name": "baseline-filesystem-12/live/badger-durable-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 8677,
+          "name": "baseline-filesystem-12/live/badger-durable-r3/zero.log"
+        },
+        {
+          "bytes": 13608,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 31052,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r1/alpha.log"
+        },
+        {
+          "bytes": 30311,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r1/result.json"
+        },
+        {
+          "bytes": 8673,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5126,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10064,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4586,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6417,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r1/zero.log"
+        },
+        {
+          "bytes": 13400,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 15862,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r2/alpha.log"
+        },
+        {
+          "bytes": 30315,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r2/result.json"
+        },
+        {
+          "bytes": 8673,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5126,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10063,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4586,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6319,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r2/zero.log"
+        },
+        {
+          "bytes": 19016,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 16275,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r3/alpha.log"
+        },
+        {
+          "bytes": 30316,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r3/result.json"
+        },
+        {
+          "bytes": 8673,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5126,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 10064,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 204,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4586,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6319,
+          "name": "baseline-filesystem-12/live/badger-relaxed-r3/zero.log"
+        },
+        {
+          "bytes": 17399,
+          "name": "baseline-filesystem-12/live/treedb-durable-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 14041,
+          "name": "baseline-filesystem-12/live/treedb-durable-r1/alpha.log"
+        },
+        {
+          "bytes": 29653,
+          "name": "baseline-filesystem-12/live/treedb-durable-r1/result.json"
+        },
+        {
+          "bytes": 7302,
+          "name": "baseline-filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327251,
+          "name": "baseline-filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5126,
+          "name": "baseline-filesystem-12/live/treedb-durable-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8696,
+          "name": "baseline-filesystem-12/live/treedb-durable-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327332,
+          "name": "baseline-filesystem-12/live/treedb-durable-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4586,
+          "name": "baseline-filesystem-12/live/treedb-durable-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6417,
+          "name": "baseline-filesystem-12/live/treedb-durable-r1/zero.log"
+        },
+        {
+          "bytes": 17503,
+          "name": "baseline-filesystem-12/live/treedb-durable-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 12366,
+          "name": "baseline-filesystem-12/live/treedb-durable-r2/alpha.log"
+        },
+        {
+          "bytes": 29651,
+          "name": "baseline-filesystem-12/live/treedb-durable-r2/result.json"
+        },
+        {
+          "bytes": 7301,
+          "name": "baseline-filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327251,
+          "name": "baseline-filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5126,
+          "name": "baseline-filesystem-12/live/treedb-durable-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8696,
+          "name": "baseline-filesystem-12/live/treedb-durable-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327327,
+          "name": "baseline-filesystem-12/live/treedb-durable-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4586,
+          "name": "baseline-filesystem-12/live/treedb-durable-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6417,
+          "name": "baseline-filesystem-12/live/treedb-durable-r2/zero.log"
+        },
+        {
+          "bytes": 16983,
+          "name": "baseline-filesystem-12/live/treedb-durable-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 19901,
+          "name": "baseline-filesystem-12/live/treedb-durable-r3/alpha.log"
+        },
+        {
+          "bytes": 29655,
+          "name": "baseline-filesystem-12/live/treedb-durable-r3/result.json"
+        },
+        {
+          "bytes": 7302,
+          "name": "baseline-filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327251,
+          "name": "baseline-filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 7034,
+          "name": "baseline-filesystem-12/live/treedb-durable-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8104,
+          "name": "baseline-filesystem-12/live/treedb-durable-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327291,
+          "name": "baseline-filesystem-12/live/treedb-durable-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 6494,
+          "name": "baseline-filesystem-12/live/treedb-durable-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 8227,
+          "name": "baseline-filesystem-12/live/treedb-durable-r3/zero.log"
+        },
+        {
+          "bytes": 17824,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r1/alpha-restart.log"
+        },
+        {
+          "bytes": 21170,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r1/alpha.log"
+        },
+        {
+          "bytes": 29666,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r1/result.json"
+        },
+        {
+          "bytes": 7302,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327260,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 7039,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r1/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8104,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r1/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327278,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r1/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 6499,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r1/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 8330,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r1/zero.log"
+        },
+        {
+          "bytes": 33916,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r2/alpha-restart.log"
+        },
+        {
+          "bytes": 15502,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r2/alpha.log"
+        },
+        {
+          "bytes": 29671,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r2/result.json"
+        },
+        {
+          "bytes": 7302,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327256,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5126,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r2/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8696,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r2/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327327,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r2/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4586,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r2/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6319,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r2/zero.log"
+        },
+        {
+          "bytes": 22207,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r3/alpha-restart.log"
+        },
+        {
+          "bytes": 12368,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r3/alpha.log"
+        },
+        {
+          "bytes": 29662,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r3/result.json"
+        },
+        {
+          "bytes": 7301,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327257,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5126,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r3/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8696,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r3/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327322,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r3/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4586,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r3/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6417,
+          "name": "baseline-filesystem-12/live/treedb-relaxed-r3/zero.log"
+        },
+        {
+          "bytes": 0,
+          "name": "baseline-filesystem-12/microbench/raw.stderr"
+        },
+        {
+          "bytes": 19929,
+          "name": "baseline-filesystem-12/microbench/raw.stdout"
+        },
+        {
+          "bytes": 19929,
+          "name": "baseline-filesystem-12/microbench/raw.txt"
+        },
+        {
+          "bytes": 12834,
+          "name": "baseline-filesystem-12/profiles/treedb-durable-run/alpha-restart.log"
+        },
+        {
+          "bytes": 14916,
+          "name": "baseline-filesystem-12/profiles/treedb-durable-run/alpha.log"
+        },
+        {
+          "bytes": 30073,
+          "name": "baseline-filesystem-12/profiles/treedb-durable-run/result.json"
+        },
+        {
+          "bytes": 7313,
+          "name": "baseline-filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327258,
+          "name": "baseline-filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 7044,
+          "name": "baseline-filesystem-12/profiles/treedb-durable-run/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8113,
+          "name": "baseline-filesystem-12/profiles/treedb-durable-run/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327290,
+          "name": "baseline-filesystem-12/profiles/treedb-durable-run/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 6504,
+          "name": "baseline-filesystem-12/profiles/treedb-durable-run/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 8237,
+          "name": "baseline-filesystem-12/profiles/treedb-durable-run/zero.log"
+        },
+        {
+          "bytes": 2521,
+          "name": "baseline-filesystem-12/profiles/treedb-durable-top.txt"
+        },
+        {
+          "bytes": 12243,
+          "name": "baseline-filesystem-12/profiles/treedb-durable.pprof"
+        },
+        {
+          "bytes": 17731,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed-run/alpha-restart.log"
+        },
+        {
+          "bytes": 17379,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed-run/alpha.log"
+        },
+        {
+          "bytes": 30120,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed-run/result.json"
+        },
+        {
+          "bytes": 7602,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.config.log"
+        },
+        {
+          "bytes": 327316,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-alpha.store.txt"
+        },
+        {
+          "bytes": 5323,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-after_alpha_restart-zero.config.log"
+        },
+        {
+          "bytes": 8705,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-startup-alpha.config.log"
+        },
+        {
+          "bytes": 327332,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-startup-alpha.store.txt"
+        },
+        {
+          "bytes": 4586,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed-run/runtime-startup-zero.config.log"
+        },
+        {
+          "bytes": 6614,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed-run/zero.log"
+        },
+        {
+          "bytes": 2441,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed-top.txt"
+        },
+        {
+          "bytes": 15284,
+          "name": "baseline-filesystem-12/profiles/treedb-relaxed.pprof"
+        },
+        {
+          "bytes": 10813,
+          "name": "baseline-filesystem-12/report.md"
+        },
+        {
+          "bytes": 1767,
+          "name": "baseline-filesystem-12-invocation.json"
+        },
+        {
+          "bytes": 0,
+          "name": "baseline-filesystem-12-manifest.stderr"
+        },
+        {
+          "bytes": 15438,
+          "name": "baseline-filesystem-12-manifest.stdout"
+        },
+        {
+          "bytes": 15533,
+          "name": "baseline-filesystem-12-source-manifest.json"
+        },
+        {
+          "bytes": 0,
+          "name": "baseline-filesystem-12-verify.stderr"
+        },
+        {
+          "bytes": 15438,
+          "name": "baseline-filesystem-12-verify.stdout"
+        },
+        {
+          "bytes": 0,
+          "name": "baseline-filesystem-12.stderr"
+        },
+        {
+          "bytes": 25432,
+          "name": "baseline-filesystem-12.stdout"
+        },
+        {
+          "bytes": 76532,
+          "name": "quiet-baseline-filesystem-12/preflight-acquisition.json"
+        },
+        {
+          "bytes": 807081,
+          "name": "quiet-baseline-filesystem-12/preflight-processes.jsonl"
+        },
+        {
+          "bytes": 57981,
+          "name": "quiet-baseline-filesystem-12/preflight.json"
+        },
+        {
+          "bytes": 22995,
+          "name": "baseline-filesystem-12-SELECTED_FILES.json"
+        }
+      ],
+      "original_receipt": "baseline-filesystem-12-ARCHIVE_RECEIPT.json",
+      "original_receipt_sha256": "bde650aa1e437b5c9a593464b94dbe18e7772d5238c29260159421435710607b",
+      "original_tar": "baseline-filesystem-12-EVIDENCE.tar",
+      "original_tar_bytes": 8089600,
+      "original_tar_reproduced_and_verified": true,
+      "original_tar_sha256": "8c84c738db0119e90dacef38663222144e80edcf549b81e8049b79dc7da993e9",
+      "reproduction_command": "gzip -n -6 -c -- /path/to/retained/baseline-filesystem-12-EVIDENCE.tar > baseline-filesystem-12-EVIDENCE.tar.gz",
+      "retained_original": "artifacts/final-native111-runtime-01/baseline-filesystem-12-EVIDENCE.tar",
+      "verification_command": "gzip -d -c -- baseline-filesystem-12-EVIDENCE.tar.gz | sha256sum"
+    }
+  ],
+  "baseline_raw_archive": "INCLUDED",
+  "compression": "gzip -n -6 -c; original tar bytes unchanged; gzip timestamp0 and no embedded filename",
+  "gzip_total_bytes": 3442812,
+  "gzip_version": "gzip 1.10",
+  "original_tar_total_bytes": 28385280,
+  "public_custody": "PENDING_COMMIT_AND_PUSH; final full-SHA repository links will bind these compressed archives; no public availability claimed yet",
+  "raw_database_and_executable_custody": "Not included in selected-file archives; retained in owned remote runtime paths pending root release. No deletion authorized by this receipt.",
+  "status": "ALL_SEVEN_SELECTED_ARCHIVE_CUSTODY_STAGED_NOT_PUBLISHED"
+}

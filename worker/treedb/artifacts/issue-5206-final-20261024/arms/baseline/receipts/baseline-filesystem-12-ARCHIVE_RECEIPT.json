@@ -1,0 +1,7 @@
+{
+  "archive": "baseline-filesystem-12-EVIDENCE.tar",
+  "bytes": 8089600,
+  "sha256": "8c84c738db0119e90dacef38663222144e80edcf549b81e8049b79dc7da993e9",
+  "selected_files": 161,
+  "omitted": "database directories and binaries retained remotely; executedserver hash-boundmanifest"
+}

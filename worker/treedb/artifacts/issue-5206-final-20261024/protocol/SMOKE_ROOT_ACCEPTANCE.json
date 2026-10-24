@@ -1,0 +1,40 @@
+{
+  "at_utc": "2026-10-24T03:08:56.273197+00:00",
+  "status": "POSTMERGE_SMOKE_CORRECTNESS_ACTIVATION_PASS",
+  "qualification": null,
+  "rows": [
+    {
+      "run": "badger-durable-r1",
+      "throughput_ops_s": 144.81147466199164,
+      "parity_restart_and_activation": "PASS"
+    },
+    {
+      "run": "badger-relaxed-r1",
+      "throughput_ops_s": 147.92420755308282,
+      "parity_restart_and_activation": "PASS"
+    },
+    {
+      "run": "treedb-durable-r1",
+      "throughput_ops_s": 307.6940269918554,
+      "parity_restart_and_activation": "PASS"
+    },
+    {
+      "run": "treedb-relaxed-r1",
+      "throughput_ops_s": 173.71254898585312,
+      "parity_restart_and_activation": "PASS"
+    }
+  ],
+  "common_checksum_and_node_count": [
+    "4cc93705cb2932e2cb30ae5de2ebbe32eaeb12855b586e5f2b5ea2a3297266af",
+    63
+  ],
+  "actual_server_sha256": "46763a6bfcd02c37a44fb36e8c866dd7bbf7e2ca9777ad0a0aefb1ada9325175",
+  "actual_dgraph_sha": "bad4ced2c88e15076f73e3647a72e965f63be2b9",
+  "archive_receipt": "SMOKE_ARCHIVE_RECEIPT.json",
+  "original_report_verdict": "ADVANCE (smoke only; timing qualification remains null)",
+  "root_sessions_joined": [
+    5579,
+    51581,
+    87482
+  ]
+}

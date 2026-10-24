@@ -1,0 +1,63 @@
+I1023 17:50:57.279795 3313790 init.go:69] 
+
+Dgraph version   : dev
+Dgraph codename  : 
+Dgraph SHA-256   : 58075e248543eb56ec618fe4099c04fd7fc741817558765e83e98af6432960a8
+Commit SHA-1     : 
+Commit timestamp : 
+Branch           : 
+Go version       : go1.26.9
+jemalloc enabled : false
+GOMAXPROCS       : 2
+Num CPUs         : 16
+
+For Dgraph official documentation, visit https://docs.dgraph.io
+For discussions about Dgraph     , visit https://github.com/orgs/dgraph-io/discussions
+
+Licensed under the Apache Public License 2.0.
+© Istari Digital, Inc.
+
+
+I1023 17:50:57.279939 3313790 run.go:232] Setting Config to: {raft:0x34fd3fb882e8 telemetry:0x34fd3fb88290 limit:0x34fd3fb882f0 bindall:true portOffset:23104 numReplicas:1 peer: w:/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/baseline-filesystem-12/live/treedb-relaxed-r2/cluster/zw rebalanceInterval:480000000000 tlsClientConfig:<nil> audit:<nil> limiterConfig:0x34fd3feda9d0}
+I1023 17:50:57.279951 3313790 run.go:234] x.WorkerConfig: {TmpDir: ExportPath: MyAddr: ZeroAddr:[] Raft: WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:0s ProposedGroupId:0 StartTime:0001-01-01 00:00:00 +0000 UTC Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}
+I1023 17:50:57.279964 3313790 run.go:129] Setting up grpc listener at: 0.0.0.0:28184
+I1023 17:50:57.280044 3313790 run.go:129] Setting up http listener at: 0.0.0.0:29184
+I1023 17:50:57.280330 3313790 storage.go:113] Init Raft Storage with snap: 0, first: 1, last: 0
+I1023 17:50:57.280379 3313790 node.go:146] Setting raft.Config to: &{ID:1 ElectionTick:20 HeartbeatTick:1 Storage:0x34fd3fee26c0 Applied:0 MaxSizePerMsg:262144 MaxCommittedSizePerReady:67108864 MaxUncommittedEntriesSize:0 MaxInflightMsgs:256 CheckQuorum:false PreVote:true ReadOnlyOption:0 Logger:0x4f52640 DisableProposalForwarding:false}
+I1023 17:50:57.281333 3313790 node.go:320] Group 0 found 0 entries
+I1023 17:50:57.281338 3313790 raft.go:699] Starting a brand new node
+I1023 17:50:57.281463 3313790 log.go:22] 1 switched to configuration voters=()
+I1023 17:50:57.281474 3313790 log.go:22] 1 became follower at term 0
+I1023 17:50:57.281477 3313790 log.go:22] newRaft 1 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
+I1023 17:50:57.281480 3313790 log.go:22] 1 became follower at term 1
+I1023 17:50:57.281493 3313790 log.go:22] 1 switched to configuration voters=(1)
+I1023 17:50:57.281626 3313790 run.go:360] Running Dgraph Zero...
+E1023 17:50:57.281842 3313790 raft.go:587] While proposing CID: Not Zero leader. Aborting proposal: cid:"4a8adcc6-f3e6-45d9-af66-4d7140784794". Retrying...
+I1023 17:50:57.297316 3313790 log.go:22] 1 switched to configuration voters=(1)
+I1023 17:50:57.297346 3313790 node.go:182] Setting conf state to voters:1 
+I1023 17:50:57.297412 3313790 raft.go:1081] Done applying conf change at 0x1
+I1023 17:50:57.713763 3313790 zero.go:506] Got connection request: clusterInfoOnly:true
+I1023 17:50:57.713805 3313790 log.go:22] 1 no leader at term 1; dropping index reading msg
+W1023 17:50:59.714760 3313790 node.go:701] [0x1] Read index context timed out
+I1023 17:50:59.714825 3313790 log.go:22] 1 no leader at term 1; dropping index reading msg
+E1023 17:51:00.282626 3313790 raft.go:587] While proposing CID: Not Zero leader. Aborting proposal: cid:"4a17ab2b-22cd-4600-8ab0-0ea7f4ce2bf2". Retrying...
+I1023 17:51:01.181967 3313790 log.go:22] 1 is starting a new election at term 1
+I1023 17:51:01.182014 3313790 log.go:22] 1 became pre-candidate at term 1
+I1023 17:51:01.182019 3313790 log.go:22] 1 received MsgPreVoteResp from 1 at term 1
+I1023 17:51:01.182038 3313790 log.go:22] 1 became candidate at term 2
+I1023 17:51:01.182040 3313790 log.go:22] 1 received MsgVoteResp from 1 at term 2
+I1023 17:51:01.182058 3313790 log.go:22] 1 became leader at term 2
+I1023 17:51:01.182062 3313790 log.go:22] raft.node: 1 elected leader 1 at term 2
+I1023 17:51:01.182077 3313790 raft.go:1023] I've become the leader, updating leases.
+I1023 17:51:01.182086 3313790 assign.go:38] Updated UID: 1. Txn Ts: 1. NsID: 1.
+W1023 17:51:01.715685 3313790 node.go:701] [0x1] Read index context timed out
+I1023 17:51:01.715761 3313790 zero.go:671] Connected: clusterInfoOnly:true
+I1023 17:51:01.716166 3313790 zero.go:506] Got connection request: addr:"localhost:30224"
+I1023 17:51:01.716258 3313790 pool.go:172] CONN: Connecting to localhost:30224
+I1023 17:51:01.719855 3313790 zero.go:671] Connected: id:1  groupId:1  addr:"localhost:30224"
+I1023 17:51:03.286889 3313790 raft.go:580] CID set for cluster: 2195bf9e-799a-4c52-9907-7f19fc82cf48
+I1023 17:51:09.217433 3313790 zero.go:506] Got connection request: clusterInfoOnly:true
+I1023 17:51:09.217517 3313790 zero.go:671] Connected: clusterInfoOnly:true
+I1023 17:51:09.218004 3313790 zero.go:506] Got connection request: id:1  addr:"localhost:30224"
+I1023 17:51:09.218046 3313790 zero.go:671] Connected: id:1  addr:"localhost:30224"
+I1023 17:51:09.779001 3313790 pool.go:349] CONN: Re-established connection with localhost:30224.

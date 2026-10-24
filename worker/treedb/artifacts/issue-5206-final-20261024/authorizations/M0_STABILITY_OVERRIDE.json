@@ -1,0 +1,9 @@
+{
+  "recorded_utc": "2026-10-24T03:02:49.875423+00:00",
+  "user_statement": "sure override approved",
+  "context": "User explicitly approves pending original M0 stability-only max-writer-pause CV12.54285559% vs unchanged10% limit for this staged integration and normal merge.",
+  "original_verdict": "FAIL_RETAINED",
+  "semantic_runs": 20,
+  "semantic_verdict": "PASS",
+  "scope": "M0 stability task gate nonblocking; existing physical-host quiet override retained. No workload/numerical/correctness/source/required-CI threshold change; no unchanged rerun; no complete parent acceptance implied."
+}

@@ -1,0 +1,32 @@
+{
+  "status": "BUILT_UNEXECUTED",
+  "gomap_sha": "fc3c3db97ec2954d47a1adf731d501e7b73f181f",
+  "gomap_tree": "c202dbc8cbcfc85b929845433c322cc012168d39",
+  "dgraph_sha": "b87e967bc3c18d4c609e652d79c7ccb8e94ace1b",
+  "prep_sha256": {
+    "source-manifest.json": "fd0d0cce8a7f2d125f92e2caa52df0af2d62f28977611576f1984b987d5d9625",
+    "STATIC-VALIDATION.txt": "401e9dfc64ca924106639bcccd187c254bff13334d4ce404343e6241b41c4681",
+    "server_state.go": "06060d3ed4ee3247b421cee563795fc81ca63c54cc2751a72a75e17ce41f8d3d",
+    "PROTOCOL.md": "511552ddd30f6f6f620c201b2d08b2029c2ffda04caa5c8d34464763f8637767",
+    "cells.tsv": "4d273bba3bec07332b921a7ae4d10e0073eb29e3990b30f13e6c52487a496dc6",
+    "run-12-cells.sh": "f85aca7220cadb169279739cfe6c8a68861ad7e7fbf16fa14f0e5c2371c706b4",
+    "server_state.patch": "d71937cc6abb3ee0445f775f485f3073d6bdcbef6625072eb360115e79e54dd8",
+    "plan.json": "86e81a58a738e706ed781a6e882c52edbd25dc028e1979bccf974de119fa38b7",
+    "build-after-merge.sh": "b8806eb193f7bb865066537be5fbb6d671fb6a54b0d731c4d7242d3d7638b6af",
+    "overlay.json": "8b76f20358ab5adc05f15c66401e707951e8a00999054bac0d3377aec1261de3",
+    "SHA256SUMS": "64c3f0319eae71e8a7cee114b251dc572d87a02bd0962f8f75d8de46213f6b5a"
+  },
+  "build_sha256": {
+    "dgraph.mod": "2451777d5ad782dd95a4710e7a8d88e31746f11516e55a923173720a0c7cc094",
+    "dgraph.sum": "5951dd5a2e63c085a555bf772487031de3ca16dda6e5644e99979e5eae182b04",
+    "gomap-module.json": "20607c449f65f0c498db5535523fab35eb72a5b04e803c16cc826acc2da81e84",
+    "modules.json": "105783aca102d999b19c910b98494189be69ff846ea3d4fecd1ac6bd753b3915",
+    "goflags.txt": "42516d9cd945d3a151b6df96e51f1ba4a423738d2f3f458c1d32ddf69ab87858",
+    "gomap-source.txt": "fafac457618b6cd8ce62503042ebdd0c8af0c8f7a843908df3c887912f8d0b4b",
+    "gomap-sha.txt": "0fcaf424406d41bdc79bb673f4f4f527bfebf33aea57dbc1b63c7bb73be9e0fc",
+    "prep-path.txt": "f5e2d04e4f49be84481b0cc879026e3c95d1bb1ce2616015c5bea3d06f49e68b",
+    "bin/dgraph": "ff55ff28704c212a1baa75fcf6296be58b675c3554091b72c15c09fd68d1886a",
+    "bin/livebench": "10fb05ca5b97aaa5e896bc717c277ef0946bdcff9812d57e79f47869ec6798f0",
+    "bin/report": "448779e880048f719e3c9b112b62f7531e5005fe105d8b70562700817b075095"
+  }
+}

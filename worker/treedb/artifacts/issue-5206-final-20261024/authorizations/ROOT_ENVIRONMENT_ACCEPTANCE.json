@@ -1,0 +1,11 @@
+{
+  "utc": "2026-10-24T00:54:21.219786+00:00",
+  "decision": "ROOT_ACCEPTED_FRESH111_USER_AUTHORIZED_ENVIRONMENT",
+  "source_sha256": "ac92f8cbf0c986f8bf1e1da9538959a68f0fe8fad16fb81b0ecfa0a69c742467",
+  "waiver_sha256": "f104da9862618285aae472eb4d3d461ce84d37fd98e35d6b591ac9800df6cfc6",
+  "receipt_sha256": "710f51f82bfd8e29754c9d6c2b0eacd09324a1873dcd63064f54a815e1c42966",
+  "stopped_disk_sha256": "e4403a36a9a095b7887d1d814ab53daa06a71bcf67336f33635d84eb4b3130e5",
+  "verification": "ROOT independently rehashed actual stopped disk, all input receipt bindings, sources and lifecycle absence",
+  "physical_quiet": "USER_WAIVED_NOT_CLAIMED_QUIET",
+  "next": "Start one original full guest CI gate with physical observer advisory"
+}

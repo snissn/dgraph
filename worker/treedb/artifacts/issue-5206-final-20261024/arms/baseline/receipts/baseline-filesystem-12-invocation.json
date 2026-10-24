@@ -1,0 +1,41 @@
+{
+  "arm": "baseline-filesystem-12",
+  "status": "STOP",
+  "started_utc": "2026-10-24T03:45:03.515028+00:00",
+  "source_sha": "7f2720bf0d7ed90e82b04c52911bff92e9f22726",
+  "environment": {
+    "SURVIVE": "filesystem",
+    "TREEDB_DURABLE_POLICY": "store_wal",
+    "REQUIRE_TREEDB_MEMTABLE": "cow_ordered",
+    "REPEATS": "3",
+    "DATASET_NODES": "500",
+    "WARMUP_OPS": "100",
+    "TIMED_OPS": "2000",
+    "CONCURRENCY": "4",
+    "GOMAXPROCS": "2",
+    "GOFLAGS": "-p=2 -mod=readonly -modfile=/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/baseline-build-inputs/build.mod",
+    "GOTOOLCHAIN": "local",
+    "GOWORK": "off",
+    "GOGC": null,
+    "GOMEMLIMIT": null
+  },
+  "outer_deadline_seconds": 10800,
+  "interrupt_grace_seconds": 45,
+  "comparison_mapping_sha256": "4b4eda272d3b68fe0ee2bd455b32ffbff404ba89a8c5e21844ee4fcc5c378df2",
+  "performance_qualification": null,
+  "collection_role": "DIAGNOSTIC_CONTINUATION_ONLY",
+  "whole_campaign_qualification": "STOP_LOCKED_PRIOR_PROCESS_ARM_NUMERIC_FAILURE",
+  "protocol_amendment_sha256": "33a7fbd763a7ab4326381a758561522163b46f629552dfd9f5e68584424a83ac",
+  "physical_quiet": "ACQUIRED_ORIGINAL_WINDOW_NOT_CONTINUOUS",
+  "command": [
+    "bash",
+    "worker/treedb/run_durability_ab.sh",
+    "--artifact-dir",
+    "/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/baseline-filesystem-12"
+  ],
+  "exit_code": 0,
+  "executed_server_sha256": "58075e248543eb56ec618fe4099c04fd7fc741817558765e83e98af6432960a8",
+  "source_manifest_sha256": "7dcaa8e87a9b1a772eb7094d675f85dc4211c1aa0e66f67ab502f5538a4ff445",
+  "report_sha256": "c01ccc04b4d766041676817517db9410c2566a642744c58f2ac878398acf7242",
+  "finished_utc": "2026-10-24T04:00:50.736362+00:00"
+}

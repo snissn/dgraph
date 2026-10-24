@@ -1,0 +1,11 @@
+{
+  "verified_utc": "2026-10-24T04:01:28.906398+00:00",
+  "archive_sha256": "8c84c738db0119e90dacef38663222144e80edcf549b81e8049b79dc7da993e9",
+  "archive_bytes": 8089600,
+  "members": 161,
+  "selected_file_hashes_verified": 160,
+  "preview_micro_exact_bytes_match": true,
+  "preview_and_final_micro_sha256": "aa6be31e723d072e86ec7d5cf746c8ef6571862fda8c302667f1e13d7fd113ca",
+  "source_binary": "58075e248543eb56ec618fe4099c04fd7fc741817558765e83e98af6432960a8",
+  "scope": "artifact integrity; no product acceptance"
+}

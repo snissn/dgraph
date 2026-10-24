@@ -1,0 +1,33 @@
+File: dgraph
+Build ID: ed90a0fb58e86d2febaa35a68749418fb94e3af4
+Type: cpu
+Time: 2026-10-23 18:00:02 HST
+Duration: 5s, Total samples = 390ms ( 7.79%)
+Showing nodes accounting for 310ms, 79.49% of 390ms total
+Showing top 25 nodes out of 230
+      flat  flat%   sum%        cum   cum%
+      60ms 15.38% 15.38%       60ms 15.38%  internal/runtime/syscall/linux.Syscall6
+      20ms  5.13% 20.51%       20ms  5.13%  runtime.chansend
+      10ms  2.56% 23.08%       10ms  2.56%  github.com/dgraph-io/dgraph/v25/lex.(*Lexer).Emit
+      10ms  2.56% 25.64%       20ms  5.13%  github.com/dgraph-io/dgraph/v25/posting.(*treeDBReadTxn).Get
+      10ms  2.56% 28.21%       10ms  2.56%  github.com/dgraph-io/dgraph/v25/protos/pb.(*PostingList).ProtoReflect
+      10ms  2.56% 30.77%       80ms 20.51%  github.com/dgraph-io/dgraph/v25/query.ProcessGraph
+      10ms  2.56% 33.33%       40ms 10.26%  github.com/dgraph-io/dgraph/v25/worker.processTask
+      10ms  2.56% 35.90%       30ms  7.69%  github.com/snissn/gomap/TreeDB.(*commandWALPublicBatch).registerCOWAppend
+      10ms  2.56% 38.46%       10ms  2.56%  github.com/snissn/gomap/TreeDB/internal/retainedalloc.AllocationCharge
+      10ms  2.56% 41.03%       10ms  2.56%  github.com/snissn/gomap/TreeDB/tree.(*Tree).OwnedUserRootEmpty
+      10ms  2.56% 43.59%       10ms  2.56%  go.etcd.io/etcd/raft/v3.(*raft).hardState
+      10ms  2.56% 46.15%       10ms  2.56%  golang.org/x/net/http2/hpack.(*Encoder).searchTable
+      10ms  2.56% 48.72%       10ms  2.56%  google.golang.org/grpc.recv
+      10ms  2.56% 51.28%       10ms  2.56%  google.golang.org/grpc/internal/idle.(*Manager).isClosed
+      10ms  2.56% 53.85%       10ms  2.56%  google.golang.org/grpc/internal/transport.(*loopyWriter).processData
+      10ms  2.56% 56.41%       10ms  2.56%  google.golang.org/grpc/mem.BufferSlice.Free
+      10ms  2.56% 58.97%       10ms  2.56%  google.golang.org/protobuf/internal/impl.(*MessageInfo).unmarshalPointerEager
+      10ms  2.56% 61.54%       10ms  2.56%  hash/crc32.slicingUpdate
+      10ms  2.56% 64.10%       10ms  2.56%  internal/runtime/maps.(*groupsReference).group (inline)
+      10ms  2.56% 66.67%       10ms  2.56%  reflect.copyVal
+      10ms  2.56% 69.23%       10ms  2.56%  runtime.(*spanInlineMarkBits).init
+      10ms  2.56% 71.79%       10ms  2.56%  runtime.(*timers).check
+      10ms  2.56% 74.36%       10ms  2.56%  runtime.adjustframe
+      10ms  2.56% 76.92%       10ms  2.56%  runtime.concatstrings
+      10ms  2.56% 79.49%       10ms  2.56%  runtime.gcTrigger.test

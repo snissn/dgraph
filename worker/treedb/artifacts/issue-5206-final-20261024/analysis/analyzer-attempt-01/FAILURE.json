@@ -1,0 +1,11 @@
+{
+  "time": "2026-10-24T04:02:09.315252+00:00",
+  "kind": "OFFLINE_ARTIFACT_PARSER_FAILURE_NOT_WORKLOAD",
+  "command": "python3 analyze_final_matrix.py --root <final-native111-runtime-01> --output-prefix <final-matrix-analysis-01>",
+  "exit_code": 2,
+  "stderr": "UNQUALIFIED: baseline: row module mismatch",
+  "outputs_created": false,
+  "script_sha256": "0375c0eb19e9f8b3eac258b134e376bfa19dde8f1e2335b247d2e10bd875d892",
+  "cause": "Reader incorrectly expected no-replacement display for accepted baseline v1; actual nominal84e3 => exactfc3replacement@(devel) is retained in original rows/build-info/source manifest. Candidate noReplace contract unchanged.",
+  "runtime_retry": false
+}

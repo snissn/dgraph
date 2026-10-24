@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "frozen_utc": "2026-10-24T03:28:09.700554+00:00",
+  "owner": "root",
+  "disposition": "PROSPECTIVE_DIAGNOSTIC_EVIDENCE_COMPLETION_ONLY",
+  "reason": "Full36predeclared comparison includes legacy process/store_wal control and changed filesystem/raft_checkpoint design; task-local ADVANCE-chain prevents testing selecteddesign after knownlegacycost. Independent source/protocol reviewers agree this is orchestration constraint, not user global executionhalt.",
+  "original_runner_sha256": "3c9f08d3a65ef5a02481978f113b249d099957281befe289930256f04e01a761",
+  "retained_process_invocation_sha256": "c0b1263174ba8dfdb80f42d3eb19aeb114b74aa05c4853b86e271cb86da26fe9",
+  "retained_process_report_sha256": "1d2899e0ddd88343570130a4ccb49062807366035a90f9bdeb752558e69295ba",
+  "whole_campaign_qualification": "STOP_LOCKED_PRIOR_PROCESS_ARM_NUMERIC_FAILURE",
+  "remaining_rows": [
+    "filesystem-12 original12 unchangedrows",
+    "baseline-filesystem-12 original12 unchangedrows"
+  ],
+  "execution": "ONCE_EACH_DISTINCT_PREDECLARED_ARM_DIAGNOSTIC_ONLY; prior arm correctness/complete files required, prior numeric STOP retained",
+  "unchanged": [
+    "all36 originalshape/order/source/thresholds/GC/toolchain/quietacquisition",
+    "eacharm originalreportADVANCEorSTOP",
+    "allfailures/nulls/samples/profiles retained",
+    "Badgerdefault and broaderparentsopen"
+  ],
+  "forbidden": [
+    "processretry",
+    "thresholdrelaxation",
+    "favorablepooling",
+    "laterADVANCEwaivesprocessSTOP",
+    "productpromotion/fullqualificationclaim"
+  ],
+  "reviews": [
+    "raft_owned_dgraph protocolreview",
+    "captured_prefix_engine independentprotocolreview"
+  ]
+}

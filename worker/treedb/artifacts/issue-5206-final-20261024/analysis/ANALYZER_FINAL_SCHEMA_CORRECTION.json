@@ -1,0 +1,13 @@
+{
+  "time": "2026-10-24T04:02:39.577432+00:00",
+  "previous_sha256": "0375c0eb19e9f8b3eac258b134e376bfa19dde8f1e2335b247d2e10bd875d892",
+  "corrected_sha256": "d2d103675e1525942d7ffa95454b684c43ff9f8eb0649fac81703217f51a2442",
+  "change": "Accepted baseline v1 nominal=>exactreplacement@(devel) display and adjacent dep/replace build-info checked; candidate noReplace unchanged",
+  "independent_source_review": "captured_prefix_engine source ACCEPT before offline execution, exact frozen rows/runtime.go contract",
+  "first_failure": "analyzer-attempt-01/FAILURE.json",
+  "output_json_sha256": "f5b40f19fd2f77fabeaa631850532f362964b088ad6df040f198879567e6d740",
+  "output_md_sha256": "0035a214aa2ad2b728baa1463e3ee0246bd669bd47840c60d40fe0cf3612b971",
+  "raw_rows_modified": false,
+  "runtime_retry": false,
+  "whole_campaign_qualification": "STOP_LOCKED_PRIOR_PROCESS_ARM_NUMERIC_FAILURE"
+}

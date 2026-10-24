@@ -1,0 +1,85 @@
+I1023 17:51:50.463858 3314952 init.go:69] 
+
+Dgraph version   : dev
+Dgraph codename  : 
+Dgraph SHA-256   : 58075e248543eb56ec618fe4099c04fd7fc741817558765e83e98af6432960a8
+Commit SHA-1     : 
+Commit timestamp : 
+Branch           : 
+Go version       : go1.26.9
+jemalloc enabled : false
+GOMAXPROCS       : 2
+Num CPUs         : 16
+
+For Dgraph official documentation, visit https://docs.dgraph.io
+For discussions about Dgraph     , visit https://github.com/orgs/dgraph-io/discussions
+
+Licensed under the Apache Public License 2.0.
+© Istari Digital, Inc.
+
+
+I1023 17:51:50.464000 3314952 run.go:829] x.Config: {PortOffset:23244 Limit:max-pending-queries=10000; shared-instance=false; query-edge=1000000; normalize-node=10000; mutations-nquad=1000000; query-timeout=0ms; txn-abort-after=5m; max-retries=10; type-filter-uid-limit=10; mutations=allow; disallow-drop=false LimitMutationsNquad:1000000 LimitQueryEdge:1000000 BlockClusterWideDrop:false LimitNormalizeNode:10000 QueryTimeout:0s MaxRetries:10 SharedInstance:false GraphQL:introspection=true; debug=false; extensions=true; poll-interval=1s; lambda-url= GraphQLDebug:false NormalizeCompatibilityMode:}
+I1023 17:51:50.464016 3314952 run.go:830] x.WorkerConfig: {TmpDir:t ExportPath:export MyAddr: ZeroAddr:[localhost:28284] Raft:snapshot-after-entries=10000; snapshot-after-duration=30m; pending-proposals=256; idx=; group=; learner=false WhiteListedIPRanges:[] StrictMutations:false AclEnabled:false AclJwtAlg:<nil> AclPublicKey:**** AbortOlderThan:5m0s ProposedGroupId:0 StartTime:2026-10-23 17:51:50.357114208 -1000 HST m=+0.061846589 Security:**** EncryptionKey:**** LogDQLRequest:0 SlowQueryThreshold:0s HardSync:true Audit:false}
+I1023 17:51:50.464026 3314952 run.go:831] worker.Config: {PostingDir:/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/baseline-filesystem-12/live/badger-durable-r2/cluster/p WALDir:/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/baseline-filesystem-12/live/badger-durable-r2/cluster/w PostingStoreBackend:badger PostingStoreTier:production PostingStoreDurability:durable PostingStoreEvents:false MutationsMode:0 AuthToken:**** AclJwtAlg:<nil> AclSecretKey:**** AclSecretKeyBytes:**** AccessJwtTtl:0s RefreshJwtTtl:0s CachePercentage:40,40,20 CacheMb:4096 RemoveOnUpdate:false Audit:<nil> ChangeDataConf:file=; kafka=; sasl_user=; sasl_password=; ca_cert=; client_cert=; client_key=; sasl-mechanism=PLAIN; tls=false; TypeFilterUidLimit:10}
+I1023 17:51:50.464287 3314952 storage.go:113] Init Raft Storage with snap: 0, first: 1, last: 0
+I1023 17:51:50.464305 3314952 server_state.go:154] posting-store backend badger: default production backend; tier=production; durability=durable; post_commit_events=false
+I1023 17:51:50.464309 3314952 server_state.go:166] Opening postings BadgerDB with options: {testOnlyOptions:{syncChan:<nil>} Dir:/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/baseline-filesystem-12/live/badger-durable-r2/cluster/p ValueDir:/home/mikers/.cache/gomap-raft-production-20261023T0744Z/native-final-01/runtime-merged-01/baseline-filesystem-12/live/badger-durable-r2/cluster/p SyncWrites:true NumVersionsToKeep:2147483647 ReadOnly:false Logger:0x4f52640 Compression:1 InMemory:false MetricsEnabled:true NumGoroutines:8 MemTableSize:67108864 BaseTableSize:2097152 BaseLevelSize:10485760 LevelSizeMultiplier:10 TableSizeMultiplier:2 MaxLevels:7 VLogPercentile:0 ValueThreshold:1048576 NumMemtables:5 BlockSize:4096 BloomFalsePositive:0.01 BlockCacheSize:1717986918 IndexCacheSize:858993459 NumLevelZeroTables:5 NumLevelZeroTablesStall:15 ValueLogFileSize:1073741823 ValueLogMaxEntries:1000000 NumCompactors:4 CompactL0OnClose:false LmaxCompaction:false ZSTDCompressionLevel:0 VerifyValueChecksum:false EncryptionKey:[] EncryptionKeyRotationDuration:240h0m0s BypassLockGuard:false ChecksumVerificationMode:0 DetectConflicts:false NamespaceOffset:1 ExternalMagicVersion:0 managedTxns:false maxBatchCount:0 maxBatchSize:0 maxValueThreshold:0}
+I1023 17:51:50.492837 3314952 log.go:22] All 0 tables opened in 0s
+I1023 17:51:50.496609 3314952 log.go:22] Discard stats nextEmptySlot: 0
+I1023 17:51:50.496621 3314952 log.go:22] Set nextTxnTs to 0
+I1023 17:51:50.498646 3314952 groups.go:89] Current Raft Id: 0x0
+I1023 17:51:50.498677 3314952 groups.go:105] Sending member request to Zero: addr:"localhost:30324"
+I1023 17:51:50.499048 3314952 worker.go:125] Worker listening at address: [::]:30324
+I1023 17:51:50.499099 3314952 run.go:626] Bringing up GraphQL HTTP API at 0.0.0.0:31324/graphql
+I1023 17:51:50.499105 3314952 run.go:627] Bringing up GraphQL HTTP admin API at 0.0.0.0:31324/admin
+I1023 17:51:50.499112 3314952 run.go:665] gRPC server started.  Listening on port 32324
+I1023 17:51:50.499115 3314952 run.go:666] HTTP server started.  Listening on port 31324
+E1023 17:51:50.499118 3314952 groups.go:1164] Error during SubscribeForUpdates for prefix "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15dgraph.graphql.schema\x00": unable to find any servers for group: 1. closer err: <nil>
+I1023 17:51:50.599252 3314952 pool.go:172] CONN: Connecting to localhost:28284
+E1023 17:51:51.499400 3314952 groups.go:1164] Error during SubscribeForUpdates for prefix "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15dgraph.graphql.schema\x00": unable to find any servers for group: 1. closer err: <nil>
+E1023 17:51:52.499778 3314952 groups.go:1164] Error during SubscribeForUpdates for prefix "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15dgraph.graphql.schema\x00": unable to find any servers for group: 1. closer err: <nil>
+E1023 17:51:53.500543 3314952 groups.go:1164] Error during SubscribeForUpdates for prefix "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15dgraph.graphql.schema\x00": unable to find any servers for group: 1. closer err: <nil>
+E1023 17:51:54.501440 3314952 groups.go:1164] Error during SubscribeForUpdates for prefix "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x15dgraph.graphql.schema\x00": unable to find any servers for group: 1. closer err: <nil>
+I1023 17:51:54.607098 3314952 groups.go:124] Connected to group zero. Assigned group: 1
+I1023 17:51:54.607122 3314952 groups.go:126] Raft Id after connection to Zero: 0x1
+I1023 17:51:54.607132 3314952 draft.go:257] Node ID: 0x1 with GroupID: 1
+I1023 17:51:54.607138 3314952 draft.go:266] RaftContext: id:1  group:1  addr:"localhost:30324"
+I1023 17:51:54.607202 3314952 node.go:146] Setting raft.Config to: &{ID:1 ElectionTick:20 HeartbeatTick:1 Storage:0x32ad53e69c40 Applied:0 MaxSizePerMsg:262144 MaxCommittedSizePerReady:67108864 MaxUncommittedEntriesSize:0 MaxInflightMsgs:256 CheckQuorum:false PreVote:true ReadOnlyOption:0 Logger:0x4f52640 DisableProposalForwarding:false}
+I1023 17:51:54.607239 3314952 groups.go:143] Load schema from DB: OK
+I1023 17:51:54.607249 3314952 node.go:320] Group 1 found 0 entries
+I1023 17:51:54.607255 3314952 draft.go:2008] New Node for group: 1
+I1023 17:51:54.607266 3314952 log.go:22] 1 switched to configuration voters=()
+I1023 17:51:54.607287 3314952 log.go:22] 1 became follower at term 0
+I1023 17:51:54.607293 3314952 log.go:22] newRaft 1 [peers: [], term: 0, commit: 0, applied: 0, lastindex: 0, lastterm: 0]
+I1023 17:51:54.607297 3314952 log.go:22] 1 became follower at term 1
+I1023 17:51:54.607318 3314952 log.go:22] 1 switched to configuration voters=(1)
+I1023 17:51:54.607348 3314952 draft.go:198] Operation started with id: opRollup
+I1023 17:51:54.607355 3314952 groups.go:146] Init and start Raft node: OK
+I1023 17:51:54.607396 3314952 draft.go:1345] Found Raft progress: 0
+I1023 17:51:54.607414 3314952 groups.go:851] Got address of a Zero leader: localhost:28284
+I1023 17:51:54.607464 3314952 groups.go:865] Starting a new membership stream receive from localhost:28284.
+I1023 17:51:54.607719 3314952 groups.go:882] Received first state update from Zero: counter:3  groups:{key:1  value:{members:{key:1  value:{id:1  groupId:1  addr:"localhost:30324"}}}}  zeros:{key:1  value:{id:1  addr:"localhost:28284"  leader:true}}  maxRaftId:1
+I1023 17:51:54.623564 3314952 log.go:22] 1 switched to configuration voters=(1)
+I1023 17:51:54.623619 3314952 node.go:182] Setting conf state to voters:1 
+I1023 17:51:54.623830 3314952 log.go:22] 1 is starting a new election at term 1
+I1023 17:51:54.623836 3314952 log.go:22] 1 became pre-candidate at term 1
+I1023 17:51:54.623839 3314952 log.go:22] 1 received MsgPreVoteResp from 1 at term 1
+I1023 17:51:54.623847 3314952 log.go:22] 1 became candidate at term 2
+I1023 17:51:54.623850 3314952 log.go:22] 1 received MsgVoteResp from 1 at term 2
+I1023 17:51:54.623855 3314952 log.go:22] 1 became leader at term 2
+I1023 17:51:54.623859 3314952 log.go:22] raft.node: 1 elected leader 1 at term 2
+E1023 17:51:55.499843 3314952 admin.go:836] namespace: 0. Error reading GraphQL schema: Please retry again, server is not ready to accept requests.
+I1023 17:51:55.501986 3314952 pool.go:172] CONN: Connecting to localhost:30324
+I1023 17:51:55.607967 3314952 groups.go:153] Informed Zero about tablets I have: OK
+I1023 17:51:55.607979 3314952 groups.go:935] Leader idx=0x1 of group=1 is connecting to Zero for txn updates
+I1023 17:51:55.608152 3314952 groups.go:947] Got Zero leader: localhost:28284
+I1023 17:51:55.626029 3314952 groups.go:479] Serving tablet for: 0-dgraph.type
+I1023 17:51:55.635171 3314952 groups.go:479] Serving tablet for: 0-dgraph.drop.op
+I1023 17:51:55.643959 3314952 groups.go:479] Serving tablet for: 0-dgraph.graphql.schema
+I1023 17:51:55.652491 3314952 groups.go:479] Serving tablet for: 0-dgraph.graphql.xid
+I1023 17:51:55.661213 3314952 groups.go:479] Serving tablet for: 0-dgraph.graphql.p_query
+I1023 17:51:55.670104 3314952 groups.go:479] Serving tablet for: 0-dgraph.namespace.name
+I1023 17:51:55.678972 3314952 groups.go:479] Serving tablet for: 0-dgraph.namespace.id
+I1023 17:51:55.688422 3314952 groups.go:156] Upserted Schema and Types: OK
+I1023 17:51:55.688431 3314952 groups.go:159] Server is ready: OK
+I1023 17:51:55.688437 3314952 access.go:419] InitializeAcl closed
