@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/dgraph-io/badger/v4"
 	treedb "github.com/snissn/gomap/TreeDB"
@@ -124,6 +125,9 @@ type TreeDBStore struct {
 	// commitGroupsForTest injects the storage result at the ambiguity boundary.
 	// Production stores always use the owned MVCC store.
 	commitGroupsForTest func([]mvcc.CommitGroup, mvcc.CommitMode) error
+	// commitCollectionDeadlineForTest extends the existing collection window only
+	// for causal tests that hold a real physical sync across staggered arrivals.
+	commitCollectionDeadlineForTest func(time.Time) time.Time
 }
 
 // OpenTreeDBStore opens and owns a TreeDB posting store. The adapter commit
@@ -266,7 +270,7 @@ func (s *TreeDBStore) Stats() (map[string]string, error) {
 	if s.mode == TreeDBCommitDurable {
 		stats["dgraph.treedb.commit_pipeline"] = "fifo"
 		if s.stagedCommitGroups {
-			stats["dgraph.treedb.commit_pipeline"] = "bounded_staged_v2"
+			stats["dgraph.treedb.commit_pipeline"] = "one_window_v3"
 		}
 	}
 	stats["dgraph.treedb.durable_staged_input_bytes"] = strconv.FormatInt(s.commitStagedBytes.Load(), 10)
@@ -625,8 +629,8 @@ func (s *TreeDBStore) enqueueCommit(request treeDBCommitRequest) error {
 }
 
 // SealCommitWindow publishes an admitted FIFO endpoint without waiting for
-// storage or claiming completion. A single wakeup coalesces producer fences;
-// the submitter always rechecks the monotonic endpoint after waking.
+// storage or claiming completion. The endpoint coalesces duplicate producer
+// wakeups; collection still follows the shared deadline and original bounds.
 func (s *TreeDBStore) SealCommitWindow() {
 	if s == nil || s.mode != TreeDBCommitDurable {
 		return

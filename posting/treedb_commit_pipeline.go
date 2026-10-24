@@ -8,6 +8,7 @@ package posting
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/snissn/gomap/TreeDB/mvcc"
 )
@@ -77,6 +78,11 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 		close(ready)
 		<-finished
 	}()
+	collectionTimer := time.NewTimer(time.Hour)
+	if !collectionTimer.Stop() {
+		<-collectionTimer.C
+	}
+	defer collectionTimer.Stop()
 
 	var carried treeDBCommitRequest
 	hasCarried := false
@@ -100,6 +106,11 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 		}
 		aggregate.ownedBytes = ownedBytes
 		s.stageDurableRequest(aggregate, 0)
+		deadline := aggregate.builder.CollectionDeadline()
+		if s.commitCollectionDeadlineForTest != nil {
+			deadline = s.commitCollectionDeadlineForTest(deadline)
+		}
+		timerArmed := false
 	collect:
 		for aggregate.n < len(aggregate.requests) && ownedBytes < treeDBCommitCohortBytes && work < s.writeWorkLimit {
 			var request treeDBCommitRequest
@@ -107,17 +118,21 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 			select {
 			case request, ok = <-queue:
 			default:
-				last := aggregate.requests[aggregate.n-1].sequence
-				seal := s.commitSeal.Load()
 				if predecessor == 0 || s.commitCompleted.Load() >= predecessor ||
-					(seal >= first.sequence && last >= seal) ||
+					deadline.IsZero() || !time.Now().Before(deadline) ||
 					len(s.commitSlots) == cap(s.commitSlots) {
 					break collect
+				}
+				if !timerArmed {
+					collectionTimer.Reset(time.Until(deadline))
+					timerArmed = true
 				}
 				select {
 				case request, ok = <-queue:
 				case <-s.commitWake:
 					continue
+				case <-collectionTimer.C:
+					break collect
 				}
 			}
 			if !ok {
@@ -135,6 +150,12 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 			aggregate.ownedBytes += size
 			ownedBytes += size
 			work += request.batch.work
+		}
+		if timerArmed && !collectionTimer.Stop() {
+			select {
+			case <-collectionTimer.C:
+			default:
+			}
 		}
 		s.submitDurableAggregate(aggregate)
 		if aggregate.await && predecessor != 0 && s.commitCompleted.Load() < predecessor {

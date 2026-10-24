@@ -38,13 +38,22 @@ func openPipelinePostingStore(t *testing.T, dir string) (*TreeDBStore, treedb.Op
 }
 
 func TestTreeDBDurablePipelineStagesAndInstallsDuringPhysicalSync(t *testing.T) {
-	for _, seal := range []string{"producer-fence", "ownership-full"} {
+	for _, seal := range []string{"shared-deadline", "ownership-full"} {
 		t.Run(seal, func(t *testing.T) { testTreeDBDurablePipelinePhysicalSync(t, seal) })
 	}
 }
 
 func testTreeDBDurablePipelinePhysicalSync(t *testing.T, seal string) {
 	store, opts := openPipelinePostingStore(t, t.TempDir())
+	// The production 200us budget is tested in Gomap. This longer, test-only
+	// window coordinates staggered native stages while a real file sync is held.
+	deadlines := make(chan time.Time, 2)
+	store.commitCollectionDeadlineForTest = func(time.Time) time.Time {
+		deadline := time.Now().Add(time.Second)
+		deadlines <- deadline
+		return deadline
+	}
+	staged := make(chan struct{}, treeDBCommitOwnershipLimit+1)
 	bus := NewCommitEventBus(128)
 	defer bus.Close()
 	events, err := bus.Subscribe(context.Background(), 128)
@@ -63,6 +72,7 @@ func testTreeDBDurablePipelinePhysicalSync(t *testing.T, seal string) {
 		switch e.Point {
 		case durabilitycut.AfterLogicalMVCCStaging:
 			stages.Add(1)
+			staged <- struct{}{}
 		case durabilitycut.BeforeCOWPreparation:
 			preparations.Add(1)
 		case durabilitycut.AfterDependencyAppend:
@@ -86,7 +96,9 @@ func testTreeDBDurablePipelinePhysicalSync(t *testing.T, seal string) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("first request did not enter the physical file sync")
 	}
-	stagesBefore, preparesBefore := stages.Load(), preparations.Load()
+	<-staged // The first aggregate staged before entering the held sync.
+	<-deadlines
+	preparesBefore := preparations.Load()
 	successor := NewTxnWriterForStore(wrapped)
 	count := 2
 	if seal == "ownership-full" {
@@ -96,17 +108,24 @@ func testTreeDBDurablePipelinePhysicalSync(t *testing.T, seal string) {
 		ts := uint64(i + 2)
 		require.NoError(t, successor.SetAt([]byte("shared"), []byte(fmt.Sprint(ts)), 0, ts))
 		if i < 2 {
-			want := stagesBefore + int32(i+1)
-			awaitTreeDBCohort(t, "successor native operands staged before seal", func() bool { return stages.Load() >= want })
+			select {
+			case <-staged:
+			case <-time.After(5 * time.Second):
+				t.Fatal("successor operands did not stage during the held predecessor sync")
+			}
 			require.Equal(t, int32(1), appends.Load(), "an open successor must not append on queue emptiness")
 			require.Equal(t, preparesBefore, preparations.Load(), "root-dependent COW work is built once after seal")
 		}
 	}
+	deadline := <-deadlines
 	flushed := make(chan error, 1)
-	if seal == "producer-fence" {
+	if seal == "shared-deadline" {
 		go func() { flushed <- successor.Flush() }()
 	}
 	awaitTreeDBCohort(t, "successor ordered append/install while predecessor sync is held", func() bool { return store.durableOverlap.Load() == 1 })
+	if seal == "shared-deadline" {
+		require.False(t, time.Now().Before(deadline), "producer Flush must not cut the shared collection window short")
+	}
 	require.Equal(t, int32(2), appends.Load())
 	require.Equal(t, preparesBefore+1, preparations.Load())
 	require.Equal(t, int32(1), syncs.Load())
