@@ -527,6 +527,8 @@ github.com/snissn/go-crc32-asm v0.0.0-20261024205709-cf438531a0f2 h1:jIsbmddbkhw
 github.com/snissn/go-crc32-asm v0.0.0-20261024205709-cf438531a0f2/go.mod h1:PDwKLbWpRDAN2IPbK9PxIgSx0YdwQaSOLWObRawQJ58=
 github.com/snissn/gomap v0.6.2-0.20261025111213-62db9cf30092 h1:DnjSNMYoM2EYTzVuP/JLyIian6+cx6f+/6dsJWJhagQ=
 github.com/snissn/gomap v0.6.2-0.20261025111213-62db9cf30092/go.mod h1:/86JN+lULzYX51sPy9n1WTO+lYQYaoLIjsj2DXoqJNc=
+github.com/snissn/gomap v0.6.2-0.20261025163939-812be6266caf h1:PeMafA67YOtF0HcMpNB7BFpczJVSRXgU1CQ54HHGC/Q=
+github.com/snissn/gomap v0.6.2-0.20261025163939-812be6266caf/go.mod h1:/86JN+lULzYX51sPy9n1WTO+lYQYaoLIjsj2DXoqJNc=
 github.com/soheilhy/cmux v0.1.5 h1:jjzc5WVemNEDTLwv9tlmemhC73tI08BNOIGwBOo10Js=
 github.com/soheilhy/cmux v0.1.5/go.mod h1:T7TcVDs9LWfQgPlPsdngu6I6QIoyIFZDDC6sNE1GqG0=
 github.com/spf13/afero v1.15.0 h1:b/YBCLWAJdFWJTN9cLhiXXcD7mzKn9Dm86dNnfyQw1I=
