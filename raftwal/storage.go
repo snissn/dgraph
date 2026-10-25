@@ -146,7 +146,7 @@ func initStorage(dir string, encKey x.Sensitive, checkpoint bool) (*DiskStorage,
 		}
 		for _, f := range files {
 			if strings.HasSuffix(f.Name(), ".rdc") {
-				return nil, errors.New("Ready fragments lack authoritative root")
+				return nil, errors.New("ready fragments lack authoritative root")
 			}
 		}
 	}

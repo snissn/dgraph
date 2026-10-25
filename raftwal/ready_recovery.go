@@ -68,7 +68,7 @@ func readyIdentity(dir string) (uint64, uint64, error) {
 		return 0, 0, err
 	}
 	if seq == 0 {
-		return 0, 0, fmt.Errorf("Ready root lacks complete base")
+		return 0, 0, fmt.Errorf("ready root lacks complete base")
 	}
 	return id, group, nil
 }
@@ -113,7 +113,7 @@ func (j *readyJournal) recover() error {
 			return fmt.Errorf("invalid Ready cut flags")
 		}
 		if v[1] != binary.BigEndian.Uint64(h[48:56]) || v[2] != binary.BigEndian.Uint64(h[56:64]) {
-			return fmt.Errorf("Ready identity mismatch")
+			return fmt.Errorf("ready identity mismatch")
 		}
 		remaining := uint64(n - readyStateSize)
 		if v[7] > remaining || v[7] > uint64(math.MaxInt) {
@@ -141,7 +141,7 @@ func (j *readyJournal) recover() error {
 				return fmt.Errorf("empty Ready snapshot flag")
 			}
 		} else if v[7] != 0 || v[8] != 0 {
-			return fmt.Errorf("Ready snapshot bytes without flag")
+			return fmt.Errorf("ready snapshot bytes without flag")
 		}
 		if v[9] > remaining/32 || v[9] > uint64(math.MaxInt) {
 			return fmt.Errorf("invalid Ready entry count")
@@ -192,11 +192,11 @@ func (j *readyJournal) recover() error {
 				}
 				i := sort.Search(len(j.entries), func(i int) bool { return j.entries[i].index >= e.index })
 				if i == len(j.entries) || j.entries[i].index != e.index {
-					return fmt.Errorf("Ready replaces compacted committed entry")
+					return fmt.Errorf("ready replaces compacted committed entry")
 				}
 				prev := j.entries[i]
 				if prev.term != e.term || prev.typ != e.typ || prev.value.size != e.value.size {
-					return fmt.Errorf("Ready replaces committed entry")
+					return fmt.Errorf("ready replaces committed entry")
 				}
 				before, err := j.readValue(prev.value)
 				if err != nil {
@@ -207,7 +207,7 @@ func (j *readyJournal) recover() error {
 					return err
 				}
 				if !bytes.Equal(before, after) {
-					return fmt.Errorf("Ready replaces committed payload")
+					return fmt.Errorf("ready replaces committed payload")
 				}
 			}
 		}
@@ -215,7 +215,7 @@ func (j *readyJournal) recover() error {
 		j.persistedIDs = j.ids
 		j.apply(hs, flags, added, &snap, snapshotValue)
 		if j.hs.Commit > j.lastIndex() {
-			return fmt.Errorf("Ready commit exceeds retained log")
+			return fmt.Errorf("ready commit exceeds retained log")
 		}
 		j.seq++
 		return nil

@@ -92,7 +92,7 @@ func readReadyRoot(dir string) (readyRoot, error) {
 		return r, err
 	}
 	if len(data) > 4096 {
-		return r, fmt.Errorf("Ready root too large")
+		return r, fmt.Errorf("ready root too large")
 	}
 	if err = json.Unmarshal(data, &r); err != nil {
 		return r, err
@@ -806,7 +806,7 @@ func (j *readyJournal) readValuePart(v readyValue, off uint64, dst []byte) error
 }
 func (j *readyJournal) readValue(v readyValue) ([]byte, error) {
 	if v.size > uint64(math.MaxInt) {
-		return nil, fmt.Errorf("Ready value too large")
+		return nil, fmt.Errorf("ready value too large")
 	}
 	b := make([]byte, int(v.size))
 	if err := j.readValuePart(v, 0, b); err != nil {
@@ -879,7 +879,7 @@ func (j *readyJournal) replaceCapacity(capacity int64) error {
 	// only this quiescent workspace while the original storage lock excludes
 	// all other users; the predecessor remains the exact base-copy read source.
 	if j.bw.Buffered() != 0 {
-		return j.fail(errors.New("Ready replacement has buffered predecessor output"))
+		return j.fail(errors.New("ready replacement has buffered predecessor output"))
 	}
 	next := &readyJournal{dir: j.dir, registry: j.registry, ids: j.ids, hs: j.hs,
 		testStage: j.testStage, scratch: j.scratch, bw: j.bw}
