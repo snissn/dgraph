@@ -926,6 +926,12 @@ func (n *node) processApplyCh() {
 				_ = ostats.RecordWithTags(context.Background(), tags, x.LatencyMs.M(ms))
 			}
 
+			if stderrors.Is(perr, posting.ErrTreeDBEntryTooLarge) {
+				// commitOrAbort has drained every accepted callback. A terminal
+				// producer failure can leave a materialized prefix, so no mode may
+				// acknowledge this proposal or apply a later Oracle watermark.
+				panic(fmt.Errorf("treedb decision materialization failed at Raft index %d: %w", proposal.Index, perr))
+			}
 			if raftCheckpointEnabled() {
 				if perr != nil && !isRaftSemanticRejection(perr) {
 					glog.Fatalf("raft_checkpoint apply failed; refusing a visibility frontier: %v", perr)
