@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	stderrors "errors"
 	"fmt"
 	"math"
 	"sort"
@@ -988,42 +989,59 @@ func (n *node) processApplyCh() {
 	}
 }
 
+// retryPostingProducer retains the existing retry behavior for unrelated stores
+// and errors. A TreeDB entry that cannot fit an empty native command is terminal:
+// earlier chunks may already be accepted, so restarting CommitToDisk is unsafe.
+func retryPostingProducer(commit func() error) error {
+	var terminal error
+	err := x.ExponentialRetry(int(x.Config.MaxRetries), 20*time.Millisecond, func() error {
+		err := commit()
+		if err == badger.ErrBannedKey {
+			glog.Errorf("Error while writing to banned namespace.")
+			return nil
+		}
+		if stderrors.Is(err, posting.ErrTreeDBEntryTooLarge) {
+			terminal = err
+			return nil // Leave the legacy retry loop without sleeping/restarting a prefix.
+		}
+		return err
+	})
+	if terminal != nil {
+		return terminal
+	}
+	return err
+}
+
 // TODO(Anurag - 4 May 2020): Are we using pkey? Remove if unused.
 func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
 	x.PrintOracleDelta(delta)
 	// First let's commit all mutations to disk.
 	writer := posting.NewTxnWriterForStore(postingStore)
-	toDisk := func(start, commit uint64) {
+	toDisk := func(start, commit uint64) error {
 		txn := posting.Oracle().GetTxn(start)
 		if txn == nil || commit == 0 {
-			return
+			return nil
 		}
-		// If the transaction has failed, we dont need to update it.
-		if commit != 0 {
-			txn.Update()
-		}
-		// We start with 20 ms, so that we end up waiting 5 mins by the end.
-		// If there is any transient issue, it should get fixed within that timeframe.
-		err := x.ExponentialRetry(int(x.Config.MaxRetries),
-			20*time.Millisecond, func() error {
-				err := txn.CommitToDisk(writer, commit)
-				if err == badger.ErrBannedKey {
-					glog.Errorf("Error while writing to banned namespace.")
-					return nil
-				}
-				return err
-			})
-
+		txn.Update()
+		err := retryPostingProducer(func() error { return txn.CommitToDisk(writer, commit) })
 		if err != nil {
-			glog.Errorf("Error while applying txn status to disk (%d -> %d): %v",
-				start, commit, err)
+			if stderrors.Is(err, posting.ErrTreeDBEntryTooLarge) {
+				return err
+			}
+			glog.Errorf("Error while applying txn status to disk (%d -> %d): %v", start, commit, err)
 			panic(err)
 		}
+		return nil
+	}
+	for _, status := range delta.Txns {
+		if err := toDisk(status.StartTs, status.CommitTs); err != nil {
+			// Earlier precommit chunks may already be owned by the storage queue.
+			// Drain every callback before returning the original terminal producer error;
+			// neither its prefix nor any ambiguous storage result may be resubmitted.
+			return stderrors.Join(err, writer.Flush())
+		}
 	}
 
-	for _, status := range delta.Txns {
-		toDisk(status.StartTs, status.CommitTs)
-	}
 	if err := writer.Flush(); err != nil {
 		return errors.Wrapf(err, "while flushing to disk")
 	}

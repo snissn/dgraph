@@ -149,11 +149,20 @@ func OpenTreeDBStore(opts treedb.Options, mode TreeDBCommitMode) (*TreeDBStore, 
 		commitSlots: make(chan struct{}, treeDBCommitOwnershipLimit),
 		commitWake:  make(chan struct{}, 1),
 	}
-	store.writeWorkLimit = db.MVCCWriteWorkLimit()
-	store.writeWorkEstimator = db.NewMVCCWriteWorkEstimator()
+	store.initializeWriteWork()
 	store.stagedCommitGroups = store.mvcc.SupportsCommitGroupStaging()
 	store.mutationPool.New = newTreeDBMutationBatch
 	return store, nil
+}
+
+// initializeWriteWork captures only immutable, options-derived shaping constants.
+// External checkpoint installation reopens with the same options (only Dir
+// changes), so these constants remain valid across root replacement and Close.
+// They are never refreshed concurrently with SetEntry; engine admission still
+// decides whether the current live history/resources fit.
+func (s *TreeDBStore) initializeWriteWork() {
+	s.writeWorkLimit = s.db.MVCCWriteWorkLimit()
+	s.writeWorkEstimator = s.db.NewMVCCWriteWorkEstimator()
 }
 
 func newTreeDBMutationBatch() any {
@@ -483,7 +492,7 @@ func (t *treeDBWriteTxn) Delete(key []byte) error {
 // at the same timestamp. An oversized first entry instead fails terminally.
 func (t *treeDBWriteTxn) admitEntryWork(keyBytes, valueBytes int) error {
 	limit := t.store.writeWorkLimit
-	if limit == 0 || t.store.mode == TreeDBCommitExternallyRecoverable {
+	if limit == 0 {
 		return nil
 	}
 	work := t.store.writeWorkEstimator.Estimate(keyBytes, valueBytes)

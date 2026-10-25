@@ -338,3 +338,31 @@ reuse across certificate rotations. The walks are non-atomic; they do not author
 engine reachability, identify a GC cause, or establish a steady-state bound by themselves. No extra
 GC loop, administrative compact endpoint, background-cadence change or automatic S advance is
 introduced. The driver continues to report `equilibrium_qualified=false`.
+
+### Bounded preparation of decision materialization
+
+The external posting adapter uses the same immutable, engine-derived producer-work estimator as
+ordinary TreeDB construction. `SetEntry`/`Delete` reject work before copying the rejected operand: a
+nonempty fitting prefix reports the existing `ErrTxnTooBig` precommit cursor boundary; an entry that
+cannot fit an empty transaction reports terminal `ErrTreeDBEntryTooLarge`. The estimator shapes
+input; canonical COW admission remains authoritative. The finite queue bounds request count, not a
+claim that all queued adapter arenas are charged to the engine's in-flight budget. Engine limits,
+checkpoint cadence and the serial external `Apply` route are unchanged. The sizing constants contain
+no live engine pointer and remain valid across checkpoint installation, which reopens with the
+original options and a new directory.
+
+One Dgraph transaction may materialize through several independently atomic native storage calls at
+its original commit timestamp. This is not raw multi-chunk atomicity: a read bypassing the Oracle
+may observe a physical prefix. The original OracleDelta success boundary still requires **all**
+posting callbacks to drain before pending/terminal resolution, cache publication, Oracle/checksum
+advancement, semantic progress and subsequent certification/retirement. A terminal oversized later
+entry exits producer retry without resubmitting accepted prefixes and joins all already-owned
+callbacks before propagating its original error. Unrelated Badger retry behavior is preserved. A
+callback/storage error is never a successful visibility or checkpoint boundary.
+
+On failed decision materialization the old certificate and retained original Raft records remain
+recovery authority. A controlled reopen discards uncertified working changes and replays those
+records at their original timestamps; no intermediate prefix is certified. Local controlled reopen
+tests are not claims of process-crash coverage. A single raw oversized native request still refuses
+under the unchanged budgets, and external Checkpoint must never be called recursively from an
+`Apply` callback to make an oversized request appear to fit.
