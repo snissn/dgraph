@@ -19,7 +19,16 @@ jobs:
     uses: ./.github/workflows/detect-changes.yml
 
   dgraph-load-tests:
+    name: dgraph-load-tests (${{ matrix.shard }})
     needs: changes
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: heavy-live
+            package_filter: --pkg=systest/21million/live
+          - shard: remaining-load
+            package_filter: --skip=systest/21million/live
     if: github.event.pull_request.draft == false && needs.changes.outputs.code == 'true'
     runs-on:
       ${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) ==
@@ -74,9 +83,9 @@ jobs:
           # run the load tests
           cd t
           if ${{ github.event.repository.owner.type == 'User' && toJSON(github.event.repository.private) == 'false' }}; then
-            DGRAPH_CI_PUBLIC_NATIVE=1 python3 ../t/ci-native/observe.py --ticks 60 --output "$RUNNER_TEMP/native-load.jsonl" -- ./t --suite=load
+            DGRAPH_CI_PUBLIC_NATIVE=1 python3 ../t/ci-native/observe.py --ticks 60 --output "$RUNNER_TEMP/native-load.jsonl" -- ./t --suite=load ${{ matrix.package_filter }}
           else
-            ./t --suite=load
+            ./t --suite=load ${{ matrix.package_filter }}
           fi
           # clean up docker containers after test execution
           ./t -r
@@ -89,6 +98,6 @@ jobs:
           toJSON(github.event.repository.private) == 'false'
         uses: actions/upload-artifact@v4
         with:
-          name: native-load-${{ github.run_attempt }}
+          name: native-load-${{ matrix.shard }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/native-load.jsonl
           if-no-files-found: warn
