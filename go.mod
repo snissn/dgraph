@@ -40,7 +40,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/profile v1.7.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/snissn/gomap v0.6.2-0.20261025223359-9520f4306c9a
+	github.com/snissn/gomap v0.6.2-0.20261025232508-52b7e715a31c
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cast v1.10.0
 	github.com/spf13/cobra v1.10.2
