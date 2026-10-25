@@ -432,7 +432,11 @@ retained prefix, including prefixes above16MiB; a single larger atomic input sta
 legal. Cold certificate replacement separately bounds normal retained reserve to
 64KiB–16MiB, without discarding live bytes. These are physical sizing policies,
 not legal Ready-size limits or a change to certificate cadence. An oversized
-generation grants no permanent oversized normal reserve after certification. Initialization and root/retirement
-fences remain whole-lifecycle work. The active journal can grow through these
+generation grants no permanent oversized normal reserve after certification. Synchronous replacement borrows only the quiescent journal-owned I/O workspace
+under the original storage lock. Source reads keep the exact predecessor open;
+full in-place encrypted chunks are consumed before reuse. Success rebinds output
+to the installed generation, while failure discards private buffered bytes and
+retains fail-stop poisoning. There is no pooled or recycled entry/index ownership.
+Initialization and root/retirement fences remain whole-lifecycle work. The active journal can grow through these
 replacements while certification is blocked; this is not a new background checkpoint,
 retention cadence, or claim of a bound independent of the existing certificate.

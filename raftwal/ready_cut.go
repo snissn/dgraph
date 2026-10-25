@@ -164,7 +164,7 @@ type readyJournal struct {
 	closed        bool
 	dest          readyDestination
 	bw            *bufio.Writer
-	scratch       [readyScratchSize]byte
+	scratch       *[readyScratchSize]byte
 	// Fault hooks belong to this exact store, never a process-global switch.
 	testWrite func([]byte, int64) (int, error)
 	testSync  func() error
@@ -196,7 +196,7 @@ func (j *readyJournal) check() error {
 	return nil
 }
 func openReadyJournal(dir string, key x.Sensitive, create bool) (j *readyJournal, err error) {
-	j = &readyJournal{dir: dir}
+	j = &readyJournal{dir: dir, scratch: new([readyScratchSize]byte)}
 	if len(key) > 0 {
 		j.registry, err = badger.OpenKeyRegistry(badger.KeyRegistryOptions{Dir: dir, EncryptionKey: key, EncryptionKeyRotationDuration: 10 * 24 * time.Hour})
 		if err != nil {
@@ -250,7 +250,11 @@ func openReadyJournal(dir string, key x.Sensitive, create bool) (j *readyJournal
 		return nil, e
 	}
 	j.dest = readyDestination{f: j.f, off: j.size}
-	j.bw = bufio.NewWriterSize(&j.dest, readyScratchSize)
+	if j.bw == nil {
+		j.bw = bufio.NewWriterSize(&j.dest, readyScratchSize)
+	} else {
+		j.bw.Reset(&j.dest)
+	}
 	return j, nil
 }
 
@@ -333,13 +337,20 @@ func (j *readyJournal) newFile(capacity int64) error {
 	if err != nil {
 		return err
 	}
+	if j.scratch == nil {
+		j.scratch = new([readyScratchSize]byte)
+	}
 	if err := j.initializeCapacity(capacity); err != nil {
 		err = errors.Join(err, j.f.Close())
 		j.f = nil
 		return err
 	}
 	j.dest = readyDestination{f: j.f, off: j.size}
-	j.bw = bufio.NewWriterSize(&j.dest, readyScratchSize)
+	if j.bw == nil {
+		j.bw = bufio.NewWriterSize(&j.dest, readyScratchSize)
+	} else {
+		j.bw.Reset(&j.dest)
+	}
 	return nil
 }
 func (j *readyJournal) publishRoot() error {
@@ -609,6 +620,9 @@ func (j *readyJournal) appendSource(h *raftpb.HardState, es []raftpb.Entry, old 
 			if err := old.readValuePart(v, off, old.scratch[:take]); err != nil {
 				return err
 			}
+			// Shared source/destination scratch is a full in-place CTR alias:
+			// readValuePart finishes before put encrypts the identical prefix.
+			// bufio consumes/copies it before the next exact-file source read.
 			if err := put(old.scratch[:take]); err != nil {
 				return err
 			}
@@ -861,15 +875,26 @@ func (j *readyJournal) replaceCapacity(capacity int64) error {
 	if err := j.check(); err != nil {
 		return err
 	}
-	next := &readyJournal{dir: j.dir, registry: j.registry, ids: j.ids, hs: j.hs, testStage: j.testStage}
-	if err := next.newFile(capacity); err != nil {
-		return j.fail(err)
+	// Every accepted append has consumed its output before returning. Borrow
+	// only this quiescent workspace while the original storage lock excludes
+	// all other users; the predecessor remains the exact base-copy read source.
+	if j.bw.Buffered() != 0 {
+		return j.fail(errors.New("Ready replacement has buffered predecessor output"))
 	}
+	next := &readyJournal{dir: j.dir, registry: j.registry, ids: j.ids, hs: j.hs,
+		testStage: j.testStage, scratch: j.scratch, bw: j.bw}
 	defer func() {
+		// Reset discards failed private output, never flushes it to either file.
+		// On success j.dest names the installed file; on failure it still names
+		// the predecessor. Poison remains latched independently of bufio state.
+		j.bw.Reset(&j.dest)
 		if next.f != nil {
 			next.f.Close()
 		}
 	}()
+	if err := next.newFile(capacity); err != nil {
+		return j.fail(err)
+	}
 	if err := next.appendSource(&j.hs, nil, j, j.entries, nil, true); err != nil {
 		return j.fail(err)
 	}
@@ -892,7 +917,6 @@ func (j *readyJournal) replaceCapacity(capacity int64) error {
 	next.f = nil
 	j.persistedIDs = next.persistedIDs
 	j.dest = readyDestination{f: j.f, off: j.size}
-	j.bw.Reset(&j.dest)
 	j.dirty = false
 	if err := oldFile.Close(); err != nil {
 		return j.fail(err)
