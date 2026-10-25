@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"testing"
 	"time"
-
-	treedb "github.com/snissn/gomap/TreeDB"
 )
 
 // BenchmarkTreeDBStorePersistentExactSeek includes a new read transaction and
