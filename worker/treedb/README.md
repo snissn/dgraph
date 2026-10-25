@@ -188,6 +188,14 @@ fail explicitly at their entry points. TreeDB defaults to `events=true` and reje
 through the restricted Dgraph-owned event bridge. The low-level disabled-event path exists only for
 overhead measurement and defensive shutdown; it is not a valid TreeDB Alpha runtime selection.
 
+Fresh `raft_checkpoint` Raft directories use the Ready-cut log: entries, HardState and snapshot
+state share one recoverable append, followed by one ordinary file sync before application. Cold
+initialization, key and generation publication still require their own durability barriers.
+Existing directories reopen their actual legacy or Ready-cut format; there is no automatic
+conversion. Fresh Badger and Zero Raft directories retain the legacy format. Uncertain Ready-cut
+storage errors stop the node and require reopening, rather than retrying an ambiguous write.
+Startup logs identify the selected Raft format. Performance qualification remains pending.
+
 See [RAFT_RECOVERY_PRODUCTION.md](RAFT_RECOVERY_PRODUCTION.md) for the route's ordered schema/admin,
 retry, pending-state, maintenance and native snapshot contracts and remaining qualification gates.
 The selector does not promote TreeDB to the operational or production capability tier.
