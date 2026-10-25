@@ -97,7 +97,7 @@ func readReadyRoot(dir string) (readyRoot, error) {
 	if err = json.Unmarshal(data, &r); err != nil {
 		return r, err
 	}
-	if r.Version != 1 || len(r.File) != 36 || filepath.Base(r.File) != r.File || filepath.Ext(r.File) != ".rdc" || r.CRC != r.checksum() {
+	if r.Version != 2 || len(r.File) != 36 || filepath.Base(r.File) != r.File || filepath.Ext(r.File) != ".rdc" || r.CRC != r.checksum() {
 		return r, fmt.Errorf("invalid Ready root")
 	}
 	if _, err = hex.DecodeString(r.File[:32]); err != nil {
@@ -136,10 +136,21 @@ func (d *readyDestination) Write(p []byte) (int, error) {
 }
 
 type readyJournal struct {
-	dir           string
-	f             *os.File
-	name          string
-	size          int64
+	dir         string
+	f           *os.File
+	name        string
+	size        int64
+	capacity    int64
+	identity    [16]byte
+	initialized bool
+	tailSum     uint32
+	wire        struct {
+		header  [readyHeaderSize]byte
+		state   [readyStateSize]byte
+		entry   [32]byte
+		footer  [readyFooterSize]byte
+		witness [readyWitnessSize]byte
+	}
 	seq           uint64
 	ids           [3]uint64
 	persistedIDs  [3]uint64
@@ -205,7 +216,7 @@ func openReadyJournal(dir string, key x.Sensitive, create bool) (j *readyJournal
 	}()
 	root, e := readReadyRoot(dir)
 	if os.IsNotExist(e) && create {
-		if e = j.newFile(); e != nil {
+		if e = j.newFile(readyCapacityFloor); e != nil {
 			return nil, e
 		}
 		if e = j.append(nil, nil, nil, true); e != nil {
@@ -230,7 +241,7 @@ func openReadyJournal(dir string, key x.Sensitive, create bool) (j *readyJournal
 		if e != nil {
 			return nil, e
 		}
-		j.size = info.Size()
+		j.capacity = info.Size()
 		if e = j.recover(); e != nil {
 			return nil, e
 		}
@@ -307,23 +318,32 @@ func (j *readyJournal) validateTransition(hs raftpb.HardState, flags, snapIndex,
 	return nil
 }
 
-func (j *readyJournal) newFile() error {
+func (j *readyJournal) newFile(capacity int64) error {
+	checked, err := readyCapacitySize(capacity, 0, false)
+	if err != nil || checked != capacity {
+		return readyInvalid("invalid physical capacity")
+	}
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
 		return err
 	}
 	j.name = hex.EncodeToString(id[:]) + ".rdc"
-	var err error
+	j.identity = id
 	j.f, err = os.OpenFile(filepath.Join(j.dir, j.name), os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
 	if err != nil {
 		return err
 	}
-	j.dest = readyDestination{f: j.f}
+	if err := j.initializeCapacity(capacity); err != nil {
+		err = errors.Join(err, j.f.Close())
+		j.f = nil
+		return err
+	}
+	j.dest = readyDestination{f: j.f, off: j.size}
 	j.bw = bufio.NewWriterSize(&j.dest, readyScratchSize)
 	return nil
 }
 func (j *readyJournal) publishRoot() error {
-	r := readyRoot{Version: 1, File: j.name}
+	r := readyRoot{Version: 2, File: j.name}
 	r.CRC = r.checksum()
 	data, err := json.Marshal(r)
 	if err != nil {
@@ -482,7 +502,28 @@ func (j *readyJournal) appendSource(h *raftpb.HardState, es []raftpb.Entry, old 
 	if j.seq == math.MaxUint64 {
 		return readyInvalid("cut sequence exhausted")
 	}
-	var header [readyHeaderSize]byte
+	frameSize := int64(total) + readyHeaderSize + readyFooterSize
+	if frameSize > j.capacity-j.size {
+		if old != nil {
+			return j.fail(readyInvalid("base exceeds initialized capacity"))
+		}
+		base, err := j.baseFrameSize()
+		if err != nil {
+			return err
+		}
+		if base > math.MaxInt64-readyCapacityHeader-frameSize {
+			return readyInvalid("capacity overflow")
+		}
+		capacity, err := readyCapacitySize(readyCapacityHeader+base+frameSize, j.capacity, true)
+		if err != nil {
+			return err
+		}
+		if err := j.replaceCapacity(capacity); err != nil {
+			return err
+		}
+	}
+	header := &j.wire.header
+	clear(header[:])
 	copy(header[:8], readyMagic[:])
 	binary.BigEndian.PutUint64(header[8:16], total)
 	binary.BigEndian.PutUint64(header[16:24], j.seq+1)
@@ -550,7 +591,7 @@ func (j *readyJournal) appendSource(h *raftpb.HardState, es []raftpb.Entry, old 
 		}
 		return nil
 	}
-	var state [readyStateSize]byte
+	state := &j.wire.state
 	for i, v := range []uint64{flags, j.ids[0], j.ids[1], j.ids[2], hs.Term, hs.Vote, hs.Commit, uint64(len(meta)), sdlen, uint64(n)} {
 		binary.BigEndian.PutUint64(state[i*8:], v)
 	}
@@ -595,7 +636,7 @@ func (j *readyJournal) appendSource(h *raftpb.HardState, es []raftpb.Entry, old 
 			e.value.size = uint64(len(src.Data))
 			data = src.Data
 		}
-		var eh [32]byte
+		eh := &j.wire.entry
 		for k, v := range []uint64{e.index, e.term, uint64(e.typ), e.value.size} {
 			binary.BigEndian.PutUint64(eh[k*8:], v)
 		}
@@ -615,7 +656,8 @@ func (j *readyJournal) appendSource(h *raftpb.HardState, es []raftpb.Entry, old 
 		added = append(added, e)
 		pos += int64(value.size)
 	}
-	var footer [readyFooterSize]byte
+	footer := &j.wire.footer
+	clear(footer[:])
 	binary.BigEndian.PutUint32(footer[:4], sum)
 	copy(footer[8:], readyEnd[:])
 	if err := write(footer[:]); err != nil {
@@ -626,6 +668,7 @@ func (j *readyJournal) appendSource(h *raftpb.HardState, es []raftpb.Entry, old 
 	}
 	j.size = j.dest.off
 	j.seq++
+	j.tailSum = sum
 	j.dirty = true
 	j.persistedIDs = j.ids
 	var owned raftpb.Snapshot
@@ -666,15 +709,24 @@ func (j *readyJournal) sync() error {
 	if !j.dirty {
 		return nil
 	}
+	if err := j.writePrefixWitness(); err != nil {
+		return j.fail(err)
+	}
 	var err error
 	if j.testSync != nil {
 		err = j.testSync()
+	} else if !j.initialized {
+		err = j.stage("before_initialize_sync")
+		if err == nil {
+			err = j.f.Sync()
+		}
 	} else {
-		err = j.f.Sync()
+		err = syncReadyData(j.f)
 	}
 	if err != nil {
 		return j.fail(err)
 	}
+	j.initialized = true
 	j.dirty = false
 	return nil
 }
@@ -792,11 +844,25 @@ func (j *readyJournal) getSnapshot() (raftpb.Snapshot, error) {
 // It holds the original storage lock throughout; saved concurrent suffixes are
 // therefore sampled once, not lost behind a certificate's older index.
 func (j *readyJournal) replace() error {
+	base, err := j.baseFrameSize()
+	if err != nil {
+		return err
+	}
+	if base > math.MaxInt64-readyCapacityHeader {
+		return readyInvalid("capacity overflow")
+	}
+	capacity, err := readyCapacitySize(readyCapacityHeader+base, j.capacity, false)
+	if err != nil {
+		return err
+	}
+	return j.replaceCapacity(capacity)
+}
+func (j *readyJournal) replaceCapacity(capacity int64) error {
 	if err := j.check(); err != nil {
 		return err
 	}
 	next := &readyJournal{dir: j.dir, registry: j.registry, ids: j.ids, hs: j.hs, testStage: j.testStage}
-	if err := next.newFile(); err != nil {
+	if err := next.newFile(capacity); err != nil {
 		return j.fail(err)
 	}
 	defer func() {
@@ -821,6 +887,7 @@ func (j *readyJournal) replace() error {
 	}
 	oldFile, oldName := j.f, j.name
 	j.f, j.name, j.size, j.seq = next.f, next.name, next.size, next.seq
+	j.capacity, j.identity, j.initialized, j.tailSum = next.capacity, next.identity, next.initialized, next.tailSum
 	j.entries, j.snapshot, j.snapshotValue = next.entries, next.snapshot, next.snapshotValue
 	next.f = nil
 	j.persistedIDs = next.persistedIDs

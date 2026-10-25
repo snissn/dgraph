@@ -44,16 +44,6 @@ func readyHeader(f *os.File, off, size int64) ([readyHeaderSize]byte, bool, erro
 	}
 	return h, int64(n) > size-off-readyHeaderSize-readyFooterSize, nil
 }
-func verifyReadyFooter(f *os.File, off int64, sum uint32) error {
-	var footer [readyFooterSize]byte
-	if _, err := f.ReadAt(footer[:], off); err != nil {
-		return err
-	}
-	if binary.BigEndian.Uint32(footer[:4]) != sum || binary.BigEndian.Uint32(footer[4:8]) != 0 || string(footer[8:]) != string(readyEnd[:]) {
-		return fmt.Errorf("corrupt Ready footer at %d", off)
-	}
-	return nil
-}
 
 // readyIdentity is cold and lock-independent. It reads the actual selected root
 // and complete checksummed records, including identity fields covered by each
@@ -69,35 +59,13 @@ func readyIdentity(dir string) (uint64, uint64, error) {
 		return 0, 0, err
 	}
 	defer f.Close()
-	info, err := f.Stat()
+	var id, group uint64
+	_, _, seq, err := scanReadyPhysical(f, func(_ int64, h [readyHeaderSize]byte) error {
+		id, group = binary.BigEndian.Uint64(h[48:56]), binary.BigEndian.Uint64(h[56:64])
+		return nil
+	})
 	if err != nil {
 		return 0, 0, err
-	}
-	var scratch [readyScratchSize]byte
-	var id, group, seq uint64
-	for off := int64(0); off < info.Size(); {
-		h, partial, err := readyHeader(f, off, info.Size())
-		if err != nil {
-			return 0, 0, err
-		}
-		if partial {
-			break
-		}
-		next := binary.BigEndian.Uint64(h[16:24])
-		if next != seq+1 {
-			return 0, 0, fmt.Errorf("Ready sequence discontinuity")
-		}
-		n := int64(binary.BigEndian.Uint64(h[8:16]))
-		hash := crc32.New(readyCRC)
-		if _, err = io.CopyBuffer(hash, io.NewSectionReader(f, off+readyHeaderSize, n), scratch[:]); err != nil {
-			return 0, 0, err
-		}
-		if err = verifyReadyFooter(f, off+readyHeaderSize+n, hash.Sum32()); err != nil {
-			return 0, 0, err
-		}
-		id, group = binary.BigEndian.Uint64(h[48:56]), binary.BigEndian.Uint64(h[56:64])
-		seq = next
-		off += readyHeaderSize + n + readyFooterSize
 	}
 	if seq == 0 {
 		return 0, 0, fmt.Errorf("Ready root lacks complete base")
@@ -105,19 +73,8 @@ func readyIdentity(dir string) (uint64, uint64, error) {
 	return id, group, nil
 }
 func (j *readyJournal) recover() error {
-	limit := j.size
-	off := int64(0)
-	for off < limit {
-		h, partial, err := readyHeader(j.f, off, limit)
-		if err != nil {
-			return err
-		}
-		if partial {
-			break
-		}
-		if binary.BigEndian.Uint64(h[16:24]) != j.seq+1 {
-			return fmt.Errorf("Ready sequence discontinuity at %d", off)
-		}
+	p, end, seq, err := scanReadyPhysical(j.f, func(off int64, h [readyHeaderSize]byte) error {
+		var err error
 		n := int64(binary.BigEndian.Uint64(h[8:16]))
 		frame := &readyFrame{body: off + readyHeaderSize}
 		copy(frame.nonce[:], h[32:48])
@@ -134,15 +91,7 @@ func (j *readyJournal) recover() error {
 		} else if j.registry != nil {
 			return fmt.Errorf("unencrypted Ready journal cannot change encryption policy on reopen")
 		}
-		// Authenticate the full physical envelope before any length-driven
-		// metadata/index allocation or semantic interpretation.
-		hash := crc32.New(readyCRC)
-		if _, err = io.CopyBuffer(hash, io.NewSectionReader(j.f, frame.body, n), j.scratch[:]); err != nil {
-			return err
-		}
-		if err = verifyReadyFooter(j.f, frame.body+n, hash.Sum32()); err != nil {
-			return err
-		}
+		// The shared physical scanner authenticated the envelope before allocation.
 		var r io.Reader = io.NewSectionReader(j.f, frame.body, n)
 		if frame.key != nil {
 			block, err := aes.NewCipher(frame.key)
@@ -269,20 +218,36 @@ func (j *readyJournal) recover() error {
 			return fmt.Errorf("Ready commit exceeds retained log")
 		}
 		j.seq++
-		off += readyHeaderSize + n + readyFooterSize
+		return nil
+	})
+	if err != nil {
+		return err
 	}
-	if j.seq == 0 {
-		return fmt.Errorf("Ready generation has no complete base cut")
+	j.size, j.seq, j.capacity, j.identity, j.initialized = end, seq, p.capacity, p.identity, true
+	var footer [readyFooterSize]byte
+	if _, err = j.f.ReadAt(footer[:], end-readyFooterSize); err != nil {
+		return err
 	}
-	if off != limit {
-		if err := j.f.Truncate(off); err != nil {
-			return err
+	j.tailSum = binary.BigEndian.Uint32(footer[:4])
+	zero, err := readyRangeZero(j.f, end, p.capacity, j.scratch[:])
+	if err != nil {
+		return err
+	}
+	if !zero {
+		// Only the shared verifier can authorize this positively incomplete tail.
+		clear(j.scratch[:])
+		for off := end; off < p.capacity; {
+			n := min(int64(len(j.scratch)), p.capacity-off)
+			if err := readyWriteAt(j.f, j.scratch[:n], off); err != nil {
+				return err
+			}
+			off += n
 		}
 		if err := j.f.Sync(); err != nil {
 			return err
 		}
 	}
-	j.size = off
+	j.dirty = seq > p.seq
 	if j.hs.Commit > j.snapshot.Index {
 		if len(j.entries) == 0 || j.entries[0].index > j.snapshot.Index+1 {
 			return fmt.Errorf("missing Ready replay prefix")

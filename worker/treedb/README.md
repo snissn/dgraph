@@ -173,7 +173,7 @@ The explicit Alpha selector accepts a restricted TreeDB runtime:
 dgraph alpha --posting-store 'backend=badger; tier=production; durability=durable; events=false;'
 dgraph alpha --posting-store 'backend=treedb'
 dgraph alpha --posting-store 'backend=treedb; tier=benchmark_minimal; durability=durable; events=true;'
-dgraph alpha --posting-store 'backend=treedb; tier=benchmark_minimal; durability=raft_checkpoint; events=true;'
+dgraph alpha --survive=filesystem --posting-store 'backend=treedb; tier=benchmark_minimal; durability=raft_checkpoint; events=true;'
 ```
 
 Badger remains the default and continues to open through the existing managed Badger path. TreeDB

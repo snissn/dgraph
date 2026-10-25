@@ -383,7 +383,14 @@ The Ready journal owns one selected append file and a checksummed
 checkpoint hint, optional snapshot metadata/data, and its contiguous entry suffix.
 Header, body and terminal witness checksums bound the complete frame. Save streams
 caller bytes into the file before exposing its derived index; it does not retain
-caller payloads or allocate a second complete Ready image. An ordinary required
+caller payloads or allocate a second complete Ready image. The selected physical format is version2: a fully zero-initialized fixed-capacity
+file with a distinct logical end. Two generation-bound checksummed prefix slots
+carry only sequence/end/integrity evidence for those same Ready frames. A dirty
+required Sync writes one slot and performs one data-persistence barrier (Linux
+fdatasync, full file sync elsewhere). Initial allocation/size and every new base
+are fully synced before root publication. Published files are not resized or
+truncated to logical end on Close. Existing experimental version1 Ready roots
+are explicitly refused; legacy wal.meta directories remain supported. An ordinary required
 Sync flushes that initialized file once. Creating a file, rotating an encryption
 key or replacing a generation also requires its own namespace/key publication
 fences; these are not claimed to be one-barrier ordinary Ready operations.
@@ -397,9 +404,16 @@ proof after writeback EIO. Legacy transient-error retry behavior is unchanged.
 
 Recovery validates each complete physical envelope before length-driven metadata
 allocation and semantic replay. It rejects committed-prefix, election, commit,
-snapshot and contiguous-log regressions. Only an incomplete final append is
-discarded; complete corrupt frames are errors. Accepted snapshot-install intent,
-archive and receiver identity are validated before tail truncation or cleanup.
+snapshot and contiguous-log regressions. Only a positively incomplete, unwitnessed final append is discarded; complete
+corrupt frames, malformed prefix witnesses, unexplained nonzero reserve or a
+valid witness beyond the verified prefix are errors. Cold accepted-install
+identity and normal replay share this physical interpretation. A newer valid
+witness covering damaged bytes never falls back to an older slot: reordered
+unacknowledged persistence and later corruption of acknowledged data cannot be
+distinguished from that image. Conservative refusal is intentional, just as the
+former stream refused a damaged complete frame within physical EOF. No claim
+of detection of arbitrary coordinated whole-file rollback/erasure is made. Accepted snapshot-install intent,
+archive and receiver identity are validated before tail repair or cleanup.
 Encrypted frames use independent random per-record CTR nonces, including when a
 reopen reuses the sequence and byte offset of a discarded tail; encryption keys
 continue to use the maintained key registry.
@@ -412,6 +426,13 @@ Unselected generation files and owned unpublished-root temporary files are recla
 on reopen only after accepted-install and selected-generation validation succeed.
 An unfinished accepted install retains its original archive/intent until exact
 receiver reconciliation and durable completion. Legacy install fault stages remain
-covered separately from new cut/root publication boundaries. The active journal
-can grow while certification is blocked; this is not a new background checkpoint,
+covered separately from new cut/root publication boundaries. Ordinary append stays within initialized space. Capacity pressure uses the same
+private base replacement. Pressure reserves checked geometric headroom for every
+retained prefix, including prefixes above16MiB; a single larger atomic input stays
+legal. Cold certificate replacement separately bounds normal retained reserve to
+64KiB–16MiB, without discarding live bytes. These are physical sizing policies,
+not legal Ready-size limits or a change to certificate cadence. An oversized
+generation grants no permanent oversized normal reserve after certification. Initialization and root/retirement
+fences remain whole-lifecycle work. The active journal can grow through these
+replacements while certification is blocked; this is not a new background checkpoint,
 retention cadence, or claim of a bound independent of the existing certificate.

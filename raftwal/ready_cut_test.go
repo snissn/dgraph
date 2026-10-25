@@ -141,7 +141,7 @@ func TestReadyCutPartialFrameAtomicityAndCorruption(t *testing.T) {
 	require.NoError(t, s.Close())
 	f, err := os.OpenFile(filepath.Join(dir, name), os.O_RDWR, 0)
 	require.NoError(t, err)
-	_, err = f.WriteAt([]byte{255}, readyHeaderSize+1)
+	_, err = f.WriteAt([]byte{255}, readyCapacityHeader+readyHeaderSize+1)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 	_, err = InitCheckpointEncrypted(dir, nil)
@@ -414,6 +414,15 @@ func TestReadyCutRecoveryTransitionAndPrewriteValidation(t *testing.T) {
 			}
 			n := int64(binary.BigEndian.Uint64(raw[off+8:]))
 			binary.BigEndian.PutUint32(raw[body+n:], crc32.Checksum(raw[body:body+n], readyCRC))
+			// Keep physical evidence intact so this control reaches semantic
+			// transition validation, rather than merely the prefix checksum.
+			for _, slot := range readyWitnessOffsets {
+				w := raw[slot : slot+readyWitnessSize]
+				if binary.BigEndian.Uint64(w[32:40]) == s.ready.seq {
+					binary.BigEndian.PutUint32(w[48:52], crc32.Checksum(raw[body:body+n], readyCRC))
+					binary.BigEndian.PutUint32(w[92:96], crc32.Checksum(w[:92], readyCRC))
+				}
+			}
 			require.NoError(t, os.WriteFile(filepath.Join(dir, name), raw, 0600))
 			_, err = InitEncrypted(dir, nil)
 			require.Error(t, err, "valid checksum does not authorize an invalid transition")
@@ -427,9 +436,9 @@ func TestReadyCutInvalidIntentPreservesTailAndAbandonedGeneration(t *testing.T) 
 	saveReady(t, s, 1, []byte("A"))
 	require.NoError(t, s.Close())
 	path := filepath.Join(dir, s.ready.name)
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
 	require.NoError(t, err)
-	_, err = f.Write([]byte("incomplete"))
+	_, err = f.WriteAt([]byte("D"), s.ready.size)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 	before, err := os.ReadFile(path)
@@ -453,7 +462,7 @@ func TestReadyCutInvalidIntentPreservesTailAndAbandonedGeneration(t *testing.T) 
 	require.NoError(t, os.Remove(filepath.Join(dir, snapshotInstallFile)))
 	reopened := readyStore(t, dir)
 	defer reopened.Close()
-	require.Equal(t, int64(len(before)-len("incomplete")), reopened.ready.size)
+	require.Equal(t, s.ready.size, reopened.ready.size)
 	_, err = os.Stat(abandoned)
 	require.True(t, os.IsNotExist(err))
 	_, err = os.Stat(rootTemp)
