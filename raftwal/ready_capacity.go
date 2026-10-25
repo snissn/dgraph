@@ -217,7 +217,7 @@ func scanReadyPhysical(f *os.File, visit func(int64, [readyHeaderSize]byte) erro
 		n := int64(binary.BigEndian.Uint64(header[8:16]))
 		next := binary.BigEndian.Uint64(header[16:24])
 		if seq == math.MaxUint64 || next != seq+1 {
-			return p, 0, 0, fmt.Errorf("Ready sequence discontinuity")
+			return p, 0, 0, fmt.Errorf("ready sequence discontinuity")
 		}
 		end := off + readyHeaderSize + n + readyFooterSize
 		hash := crc32.New(readyCRC)
@@ -240,10 +240,10 @@ func scanReadyPhysical(f *os.File, visit func(int64, [readyHeaderSize]byte) erro
 		}
 		for _, bound := range p.bounds {
 			if end > bound.end && off < bound.end {
-				return p, 0, 0, fmt.Errorf("Ready witness is not a frame boundary")
+				return p, 0, 0, fmt.Errorf("ready witness is not a frame boundary")
 			}
 			if end == bound.end && (next != bound.seq || sum != bound.sum) {
-				return p, 0, 0, fmt.Errorf("Ready witness contradicts frame")
+				return p, 0, 0, fmt.Errorf("ready witness contradicts frame")
 			}
 		}
 		if end == p.end {
@@ -257,7 +257,7 @@ func scanReadyPhysical(f *os.File, visit func(int64, [readyHeaderSize]byte) erro
 		off, seq = end, next
 	}
 	if !mandatorySeen || seq == 0 {
-		return p, 0, 0, fmt.Errorf("Ready witnessed prefix is missing")
+		return p, 0, 0, fmt.Errorf("ready witnessed prefix is missing")
 	}
 	return p, off, seq, nil
 }
