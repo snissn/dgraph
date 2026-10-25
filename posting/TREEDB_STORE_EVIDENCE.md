@@ -137,11 +137,11 @@ timestamp do observe newly published state, matching managed Badger. Reopening o
 rejected after a directional run measured roughly 4.5x direct seek latency.
 
 Exact-key iterators use gomap's maintained `ExactKey` bounds, including nonnil empty and
-codec-maximum keys. Their first forward `Seek` reuses the position established by construction
-only when its target equals the exact key. Different targets retain normal key validation;
-subsequent seeks and reverse iteration retain normal repositioning. The
-`ExactKeyAllVersions/TreeDBStoreInitialSeek` adapter benchmark includes a new read transaction,
-the initial seek, all eight retained versions, and iterator/transaction close on every operation.
+codec-maximum keys. Their first forward `Seek` reuses the position established by construction only
+when its target equals the exact key. Different targets retain normal key validation; subsequent
+seeks and reverse iteration retain normal repositioning. The
+`ExactKeyAllVersions/TreeDBStoreInitialSeek` adapter benchmark includes a new read transaction, the
+initial seek, all eight retained versions, and iterator/transaction close on every operation.
 
 Nonzero TTL is rejected before any staged transaction mutation can publish. Stream import/export,
 subscriptions, Badger protobuf operational workflows, cache controls, encryption/key registry, and
