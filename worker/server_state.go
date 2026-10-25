@@ -103,6 +103,7 @@ func setBadgerOptions(opt badger.Options) badger.Options {
 
 func (s *ServerState) InitStorage() {
 	var err error
+	x.Check(normalizePostingStorageSelection())
 
 	if x.WorkerConfig.EncryptionKey != nil {
 		glog.Infof("Encryption feature enabled.")
@@ -111,7 +112,11 @@ func (s *ServerState) InitStorage() {
 	{
 		// Write Ahead Log directory
 		x.Checkf(os.MkdirAll(Config.WALDir, 0700), "Error while creating WAL dir.")
-		s.WALstore, err = raftwal.InitEncrypted(Config.WALDir, x.WorkerConfig.EncryptionKey)
+		if raftCheckpointEnabled() {
+			s.WALstore, err = raftwal.InitCheckpointEncrypted(Config.WALDir, x.WorkerConfig.EncryptionKey)
+		} else {
+			s.WALstore, err = raftwal.InitEncrypted(Config.WALDir, x.WorkerConfig.EncryptionKey)
+		}
 		x.Check(err)
 	}
 	{
@@ -140,18 +145,11 @@ func (s *ServerState) openPostingStore() error {
 	if err := os.MkdirAll(Config.PostingDir, 0o700); err != nil {
 		return err
 	}
-	backend, err := NormalizePostingStoreBackend(Config.PostingStoreBackend)
-	if err != nil {
+	if err := normalizePostingStorageSelection(); err != nil {
 		return err
 	}
-	if err := ValidatePostingStoreSelection(backend, Config.PostingStoreTier,
-		Config.PostingStoreDurability, x.WorkerConfig.EncryptionKey != nil,
-		Config.PostingStoreEvents); err != nil {
-		return err
-	}
-	// Validation accepts selector values case-insensitively. Persist the same
-	// normalized value used for runtime profile selection and status reporting.
-	Config.PostingStoreDurability = normalizePostingStoreDurability(Config.PostingStoreDurability)
+	backend := Config.PostingStoreBackend
+	var err error
 	glog.Infof("%s; tier=%s; durability=%s; post_commit_events=%t",
 		PostingStoreBackendStatus(backend), Config.PostingStoreTier,
 		Config.PostingStoreDurability, Config.PostingStoreEvents)
@@ -403,4 +401,27 @@ type tsReq struct {
 	readOnly bool
 	// A one-shot chan which we can send a txn timestamp upon.
 	ch chan uint64
+}
+
+// Resolve selection before opening either authority. Direct posting-store tests
+// and InitStorage share this validation; invalid selectors cannot create WALs.
+func normalizePostingStorageSelection() error {
+	backend, err := NormalizePostingStoreBackend(Config.PostingStoreBackend)
+	if err != nil {
+		return err
+	}
+	if err = ValidatePostingStoreSelection(backend, Config.PostingStoreTier, Config.PostingStoreDurability, x.WorkerConfig.EncryptionKey != nil, Config.PostingStoreEvents); err != nil {
+		return err
+	}
+	durability := normalizePostingStoreDurability(Config.PostingStoreDurability)
+	if backend == PostingStoreBackendTreeDB && durability == PostingStoreDurabilityRaftCheckpoint {
+		if x.WorkerConfig.AclEnabled || cdcEnabled(Config.ChangeDataConf) {
+			return fmt.Errorf("raft_checkpoint prototype does not support ACL or CDC")
+		}
+		if !x.WorkerConfig.HardSync {
+			return fmt.Errorf("raft_checkpoint requires --survive=filesystem for Alpha and a filesystem-durable Zero")
+		}
+	}
+	Config.PostingStoreBackend, Config.PostingStoreDurability = backend, durability
+	return nil
 }

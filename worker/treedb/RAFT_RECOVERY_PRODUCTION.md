@@ -366,3 +366,52 @@ records at their original timestamps; no intermediate prefix is certified. Local
 tests are not claims of process-crash coverage. A single raw oversized native request still refuses
 under the unchanged budgets, and external Checkpoint must never be called recursively from an
 `Apply` callback to make an oversized request appear to fit.
+
+### Ready durable cuts
+
+A fresh, explicitly selected TreeDB `raft_checkpoint` Alpha uses the Ready-cut
+Raft storage format. Backend and durability selectors are normalized and validated
+before either storage authority is opened. Fresh Badger and Zero directories keep
+the legacy format. Existing directories are opened by their actual format: an
+existing legacy directory is not converted by selecting `raft_checkpoint`, and an
+existing Ready directory is not reinterpreted as legacy. Competing format roots or
+orphan Ready fragments without an authoritative root fail closed. Startup logs the
+actual format; this cold receipt is separate from posting-store sync counters.
+
+The Ready journal owns one selected append file and a checksummed
+`raft-ready.current` root. A complete cut contains full HardState, identity and
+checkpoint hint, optional snapshot metadata/data, and its contiguous entry suffix.
+Header, body and terminal witness checksums bound the complete frame. Save streams
+caller bytes into the file before exposing its derived index; it does not retain
+caller payloads or allocate a second complete Ready image. An ordinary required
+Sync flushes that initialized file once. Creating a file, rotating an encryption
+key or replacing a generation also requires its own namespace/key publication
+fences; these are not claimed to be one-barrier ordinary Ready operations.
+
+Alpha and Zero keep their synchronous Ready/Save/required-Sync/apply/Advance
+ordering. The shared required-Sync helper returns a terminal new-format error
+before apply or Advance. Invalid pre-write input is terminal without poisoning;
+uncertain append, sync, close, generation or namespace failures poison the owner
+and require reopen. A later successful same-descriptor sync is not a recovery
+proof after writeback EIO. Legacy transient-error retry behavior is unchanged.
+
+Recovery validates each complete physical envelope before length-driven metadata
+allocation and semantic replay. It rejects committed-prefix, election, commit,
+snapshot and contiguous-log regressions. Only an incomplete final append is
+discarded; complete corrupt frames are errors. Accepted snapshot-install intent,
+archive and receiver identity are validated before tail truncation or cleanup.
+Encrypted frames use independent random per-record CTR nonces, including when a
+reopen reuses the sequence and byte offset of a discarded tail; encryption keys
+continue to use the maintained key registry.
+
+Only the posting owner's durable certificate authorizes retention. Cold generation
+replacement streams the certified snapshot and **all** newer saved entries and
+HardState into one complete base, syncs it, publishes and syncs the root, then
+retires the predecessor and syncs the directory. It never dual-writes `wal.meta`.
+Unselected generation files and owned unpublished-root temporary files are reclaimed
+on reopen only after accepted-install and selected-generation validation succeed.
+An unfinished accepted install retains its original archive/intent until exact
+receiver reconciliation and durable completion. Legacy install fault stages remain
+covered separately from new cut/root publication boundaries. The active journal
+can grow while certification is blocked; this is not a new background checkpoint,
+retention cadence, or claim of a bound independent of the existing certificate.

@@ -325,10 +325,27 @@ func (n *Node) Snapshot() (raftpb.Snapshot, error) {
 func (n *Node) SaveToStorage(h *raftpb.HardState, es []raftpb.Entry, s *raftpb.Snapshot) {
 	for {
 		if err := n.Store.Save(h, es, s); err != nil {
+			if raftwal.PermanentStorageError(err) {
+				x.Check(err)
+			}
 			glog.Errorf("While trying to save Raft update: %v. Retrying...", err)
 		} else {
 			return
 		}
+	}
+}
+
+// SyncToStorage is the synchronous required-Ready barrier shared by Alpha
+// and Zero. Legacy transient failures retain their retry policy; terminal new
+// format failures return before either caller may schedule apply or Advance.
+func SyncToStorage(store interface{ Sync() error }) error {
+	for {
+		err := store.Sync()
+		if err == nil || raftwal.PermanentStorageError(err) {
+			return err
+		}
+		glog.Errorf("Error while calling Store.Sync: %v", err)
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

@@ -19,7 +19,18 @@ import (
 
 func installIntentFixture(t *testing.T, dir string) (*DiskStorage, AcceptedSnapshotInstall) {
 	t.Helper()
-	w := Init(dir)
+	return installIntentFixtureWithFormat(t, dir, false)
+}
+func installIntentFixtureWithFormat(t *testing.T, dir string, ready bool) (*DiskStorage, AcceptedSnapshotInstall) {
+	t.Helper()
+	var w *DiskStorage
+	if ready {
+		var err error
+		w, err = InitCheckpointEncrypted(dir, nil)
+		require.NoError(t, err)
+	} else {
+		w = Init(dir)
+	}
 	w.SetUint(RaftId, 1)
 	w.SetUint(GroupId, 1)
 	w.RequireCheckpointCertificate()

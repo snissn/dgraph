@@ -1583,14 +1583,9 @@ func (n *node) Run() {
 				raft.IsEmptySnap(rd.Snapshot),
 				raft.IsEmptyHardState(rd.HardState)))
 
-			for x.WorkerConfig.HardSync && (rd.MustSync || (raftCheckpointEnabled() && len(rd.CommittedEntries) > 0)) {
-				if err := n.Store.Sync(); err != nil {
-					glog.Errorf("Error while calling Store.Sync: %+v", err)
-					time.Sleep(10 * time.Millisecond)
-					continue
-				}
+			if x.WorkerConfig.HardSync && (rd.MustSync || (raftCheckpointEnabled() && len(rd.CommittedEntries) > 0)) {
+				x.Check(conn.SyncToStorage(n.Store))
 				timer.Record("sync")
-				break
 			}
 
 			// Now schedule or apply committed entries.

@@ -1057,14 +1057,9 @@ func (n *node) Run() {
 			n.SaveToStorage(&rd.HardState, rd.Entries, &rd.Snapshot)
 			timer.Record("disk")
 			span.AddEvent("Saved to storage")
-			for x.WorkerConfig.HardSync && rd.MustSync {
-				if err := n.Store.Sync(); err != nil {
-					glog.Errorf("Error while calling Store.Sync: %v", err)
-					time.Sleep(10 * time.Millisecond)
-					continue
-				}
+			if x.WorkerConfig.HardSync && rd.MustSync {
+				x.Check(conn.SyncToStorage(n.Store))
 				timer.Record("sync")
-				break
 			}
 
 			if !raft.IsEmptySnap(rd.Snapshot) {
