@@ -131,7 +131,7 @@ func readReadyPhysical(f *os.File) (readyPhysical, error) {
 	p.capacity = int64(binary.BigEndian.Uint64(h[24:32]))
 	copy(p.identity[:], h[8:24])
 	if filepath.Base(f.Name()) != hex.EncodeToString(p.identity[:])+".rdc" {
-		return p, fmt.Errorf("Ready generation identity mismatch")
+		return p, fmt.Errorf("ready generation identity mismatch")
 	}
 	if p.capacity != info.Size() || p.capacity < readyCapacityFloor || p.capacity&63 != 0 {
 		return p, fmt.Errorf("invalid Ready physical capacity")
@@ -161,7 +161,7 @@ func readReadyPhysical(f *os.File) (readyPhysical, error) {
 		}
 	}
 	if p.seq == 0 {
-		return p, fmt.Errorf("Ready generation lacks witnessed base")
+		return p, fmt.Errorf("ready generation lacks witnessed base")
 	}
 	return p, nil
 }
@@ -212,7 +212,7 @@ func scanReadyPhysical(f *os.File, visit func(int64, [readyHeaderSize]byte) erro
 			return p, 0, 0, e
 		}
 		if partial {
-			return p, 0, 0, fmt.Errorf("Ready frame exceeds initialized capacity")
+			return p, 0, 0, fmt.Errorf("ready frame exceeds initialized capacity")
 		}
 		n := int64(binary.BigEndian.Uint64(header[8:16]))
 		next := binary.BigEndian.Uint64(header[16:24])

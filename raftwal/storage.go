@@ -609,7 +609,7 @@ func (w *DiskStorage) TruncateEntriesUntil(lastIdx uint64) {
 			}
 		}
 		if err := w.ready.replace(); err != nil {
-			w.ready.fail(err)
+			_ = w.ready.fail(err)
 		}
 		return
 	}
