@@ -1065,7 +1065,16 @@ func (it *treeDBIterator) Seek(key []byte) {
 	// watermark excludes late publication below an active read timestamp, and
 	// reopening every seek adds material overhead. Reverse seek of an empty key
 	// is Badger's rewind-to-end special case and requires a fresh reverse view.
-	if (it.raw == nil || (it.opts.Reverse && len(key) == 0)) && !it.openRawLocked() {
+	opened := it.raw == nil
+	if (opened || (it.opts.Reverse && len(key) == 0)) && !it.openRawLocked() {
+		return
+	}
+	// IterateVersions already positions a newly opened exact-key view. Reuse
+	// that position only for the identical forward target; other targets must
+	// still pass Seek's key validation, and later seeks must reposition.
+	if opened && !it.opts.Reverse && it.hasExactKey && bytes.Equal(key, it.exactKey) {
+		it.valid = false
+		it.positionLocked()
 		return
 	}
 	timestamp := uint64(math.MaxUint64)
@@ -1157,19 +1166,11 @@ func (it *treeDBIterator) openRawLocked() bool {
 	}
 	if it.hasExactKey {
 		options.Prefix = nil
-		options.LowerBound = append([]byte(nil), it.exactKey...)
-		options.UpperBound = append(append([]byte(nil), it.exactKey...), 0)
+		// Preserve a nonnil empty key, which means exact empty-key iteration.
+		options.ExactKey = make([]byte, len(it.exactKey))
+		copy(options.ExactKey, it.exactKey)
 	}
 	raw, err := it.store.mvcc.IterateVersions(options)
-	if it.hasExactKey && errors.Is(err, mvcc.ErrInvalidKey) {
-		// A codec-maximum logical key cannot be extended with the synthetic NUL
-		// upper bound. Fall back to the codec's prefix bounds; the adapter's exact
-		// key filter below excludes longer logical siblings.
-		options.Prefix = append([]byte(nil), it.exactKey...)
-		options.LowerBound = append([]byte(nil), it.exactKey...)
-		options.UpperBound = nil
-		raw, err = it.store.mvcc.IterateVersions(options)
-	}
 	if err != nil {
 		it.err = fmt.Errorf("open posting TreeDB iterator: %w", err)
 		return false

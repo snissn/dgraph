@@ -431,6 +431,28 @@ func benchmarkTreeDBStoreExactKey(b *testing.B, store *TreeDBStore) {
 			it.Close()
 		}
 	})
+	b.Run("ExactKeyAllVersions/TreeDBStoreInitialSeek", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			read := store.NewReadTxn(math.MaxUint64)
+			it := read.NewKeyIterator(target, IteratorOptions{})
+			versions := 0
+			for it.Seek(target); it.Valid(); it.Next() {
+				if err := it.Item().Value(captureTreeDBAdapterBenchValue); err != nil {
+					b.Fatal(err)
+				}
+				versions++
+			}
+			if err := it.Error(); err != nil {
+				b.Fatal(err)
+			}
+			it.Close()
+			read.Discard()
+			if versions != 8 {
+				b.Fatalf("exact history: got %d versions, want 8", versions)
+			}
+		}
+	})
 }
 
 func benchmarkTreeDBStoreReopen(b *testing.B) {
