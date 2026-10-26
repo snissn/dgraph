@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -43,6 +44,9 @@ var (
 	ErrTreeDBTxnClosed = errors.New("posting treedb: transaction is closed")
 	// ErrTreeDBCommitMode identifies an unsupported adapter commit mode.
 	ErrTreeDBCommitMode = errors.New("posting treedb: invalid commit mode")
+	// ErrTreeDBEntryTooLarge is terminal: retrying an empty storage transaction
+	// cannot make its first entry fit the producer's bounded work envelope.
+	ErrTreeDBEntryTooLarge = errors.New("posting treedb: entry exceeds storage preparation limit")
 )
 
 const (
@@ -58,14 +62,11 @@ const (
 	// backpressure before owned mutation batches can grow without limit.
 	treeDBCommitQueueCapacity = 64
 	// The active commit plus this queue is the adapter's ownership bound. The
-	// dispatcher must retain the same total bound when it moves requests from
-	// the channel into its dependency-aware pending set.
+	// dispatcher retains this bound while collecting a durable cohort.
 	treeDBCommitOwnershipLimit = treeDBCommitQueueCapacity + 1
-	// A small fixed window gives independent durable commits an opportunity to
-	// join TreeDB's command-WAL group commit without creating one goroutine per
-	// admitted request. Batches that touch a key already in flight remain FIFO
-	// behind that dependency.
-	treeDBCommitConcurrency = 8
+	// An oversized individual transaction remains atomic; following requests
+	// wait for the next cohort rather than growing that transaction's batch.
+	treeDBCommitCohortBytes = 4 << 20
 )
 
 // TreeDBStore owns exactly one TreeDB handle and exactly one external-MVCC
@@ -78,24 +79,37 @@ type TreeDBStore struct {
 	mode       TreeDBCommitMode
 	durability string
 
-	lifecycleMu       sync.Mutex
-	rootGate          sync.RWMutex // external snapshot install drains read handles
-	rootEpoch         atomic.Uint64
-	raftReadMu        sync.Mutex
-	raftReadPins      uint64
-	raftReadChanged   chan struct{}
-	raftReadDraining  bool
-	raftSemanticFloor uint64
-	raftPending       RaftPendingManifest
-	commitWG          sync.WaitGroup
-	workerWG          sync.WaitGroup
-	queueActive       bool
-	commitQueue       chan treeDBCommitRequest
-	commitSlots       chan struct{}
-	mutationPool      sync.Pool
-	closeOnce         sync.Once
-	closeErr          error
-	closed            atomic.Bool
+	lifecycleMu        sync.Mutex
+	rootGate           sync.RWMutex // external snapshot install drains read handles
+	rootEpoch          atomic.Uint64
+	raftReadMu         sync.Mutex
+	raftReadPins       uint64
+	raftReadChanged    chan struct{}
+	raftReadDraining   bool
+	raftSemanticFloor  uint64
+	raftPending        RaftPendingManifest
+	commitWG           sync.WaitGroup
+	workerWG           sync.WaitGroup
+	queueActive        bool
+	commitQueue        chan treeDBCommitRequest
+	commitSlots        chan struct{}
+	commitWake         chan struct{}
+	commitSequence     atomic.Uint64
+	commitSeal         atomic.Uint64
+	commitCompleted    atomic.Uint64
+	commitStagedBytes  atomic.Int64
+	writeWorkLimit     uint64
+	writeWorkEstimator treedb.MVCCWriteWorkEstimator
+	stagedCommitGroups bool
+	mutationPool       sync.Pool
+	closeOnce          sync.Once
+	closeErr           error
+	closed             atomic.Bool
+	durableCohorts     atomic.Uint64
+	durableRequests    atomic.Uint64
+	durableCohortMax   atomic.Uint64
+	durableOverlap     atomic.Uint64
+	durableSeals       atomic.Uint64
 
 	// beforeCommitForTest lets adapter tests hold an admitted commit without
 	// depending on storage timing. Production stores leave it nil.
@@ -107,6 +121,9 @@ type TreeDBStore struct {
 	// commitFinishedForTest observes the storage result before the scheduler
 	// delivers an acknowledgement. Production stores leave it nil.
 	commitFinishedForTest func(uint64, error)
+	// commitGroupsForTest injects the storage result at the ambiguity boundary.
+	// Production stores always use the owned MVCC store.
+	commitGroupsForTest func([]mvcc.CommitGroup, mvcc.CommitMode) error
 }
 
 // OpenTreeDBStore opens and owns a TreeDB posting store. The adapter commit
@@ -130,9 +147,22 @@ func OpenTreeDBStore(opts treedb.Options, mode TreeDBCommitMode) (*TreeDBStore, 
 		durability:  db.DurabilityMode(),
 		commitQueue: make(chan treeDBCommitRequest, treeDBCommitQueueCapacity),
 		commitSlots: make(chan struct{}, treeDBCommitOwnershipLimit),
+		commitWake:  make(chan struct{}, 1),
 	}
+	store.initializeWriteWork()
+	store.stagedCommitGroups = store.mvcc.SupportsCommitGroupStaging()
 	store.mutationPool.New = newTreeDBMutationBatch
 	return store, nil
+}
+
+// initializeWriteWork captures only immutable, options-derived shaping constants.
+// External checkpoint installation reopens with the same options (only Dir
+// changes), so these constants remain valid across root replacement and Close.
+// They are never refreshed concurrently with SetEntry; engine admission still
+// decides whether the current live history/resources fit.
+func (s *TreeDBStore) initializeWriteWork() {
+	s.writeWorkLimit = s.db.MVCCWriteWorkLimit()
+	s.writeWorkEstimator = s.db.NewMVCCWriteWorkEstimator()
 }
 
 func newTreeDBMutationBatch() any {
@@ -181,6 +211,9 @@ func (s *TreeDBStore) Close() error {
 		s.lifecycleMu.Lock()
 		s.closed.Store(true)
 		s.lifecycleMu.Unlock()
+		// Seal an open native successor before waiting for its completion. The
+		// input channel stays open until every admitted commit has drained.
+		s.wakeCommitSubmitter()
 
 		// No new commit can be admitted after closed is published. Wait for every
 		// commit accepted before that boundary before closing the owned DB.
@@ -237,8 +270,21 @@ func (s *TreeDBStore) Stats() (map[string]string, error) {
 	if s.IsClosed() || s.db == nil {
 		return nil, fmt.Errorf("stats posting TreeDB: %w", treedb.ErrClosed)
 	}
-	stats := s.db.Stats()
-	return cloneTreeDBStats(stats), nil
+	stats := cloneTreeDBStats(s.db.Stats())
+	stats["dgraph.treedb.durable_cohorts_total"] = strconv.FormatUint(s.durableCohorts.Load(), 10)
+	stats["dgraph.treedb.durable_requests_total"] = strconv.FormatUint(s.durableRequests.Load(), 10)
+	stats["dgraph.treedb.durable_cohort_size_max"] = strconv.FormatUint(s.durableCohortMax.Load(), 10)
+	stats["dgraph.treedb.commit_pipeline"] = "serial"
+	if s.mode == TreeDBCommitDurable {
+		stats["dgraph.treedb.commit_pipeline"] = "fifo"
+		if s.stagedCommitGroups {
+			stats["dgraph.treedb.commit_pipeline"] = "pressure_v4"
+		}
+	}
+	stats["dgraph.treedb.durable_staged_input_bytes"] = strconv.FormatInt(s.commitStagedBytes.Load(), 10)
+	stats["dgraph.treedb.durable_overlap_submissions_total"] = strconv.FormatUint(s.durableOverlap.Load(), 10)
+	stats["dgraph.treedb.durable_producer_seals_total"] = strconv.FormatUint(s.durableSeals.Load(), 10)
+	return stats, nil
 }
 
 func cloneTreeDBStats(stats map[string]string) map[string]string {
@@ -380,6 +426,7 @@ type treeDBWriteTxn struct {
 type treeDBMutationBatch struct {
 	mutations []mvcc.Mutation
 	arena     []byte
+	work      uint64
 	// chunks retains every previous arena backing array after growth. Staged
 	// mutations still point into those arrays, and release must scrub all of
 	// them rather than only the final arena.
@@ -410,6 +457,9 @@ func (t *treeDBWriteTxn) SetEntry(entry Entry) error {
 		t.stickyErr = fmt.Errorf("%w: key %x expires at %d", ErrTreeDBTTLUnsupported, entry.Key, entry.ExpiresAt)
 		return t.stickyErr
 	}
+	if err := t.admitEntryWork(len(entry.Key), treeDBEnvelopeHeader+len(entry.Value)); err != nil {
+		return err
+	}
 	// One arena region owns both the key and envelope while preserving the
 	// caller-copy boundary. The pooled arena avoids per-mutation allocations on
 	// Dgraph's common small managed transactions.
@@ -428,9 +478,36 @@ func (t *treeDBWriteTxn) Delete(key []byte) error {
 	if t.closed {
 		return ErrTreeDBTxnClosed
 	}
+	if err := t.admitEntryWork(len(key), 0); err != nil {
+		return err
+	}
 	owned := t.batch.ownBytes(len(key))
 	copy(owned, key)
 	t.setMutation(mvcc.Mutation{Key: owned, Delete: true})
+	return nil
+}
+
+// Check before copying or mutating the current transaction. CommitToDisk
+// already commits a nonempty prefix on ErrTxnTooBig and retries the next key
+// at the same timestamp. An oversized first entry instead fails terminally.
+func (t *treeDBWriteTxn) admitEntryWork(keyBytes, valueBytes int) error {
+	limit := t.store.writeWorkLimit
+	if limit == 0 {
+		return nil
+	}
+	work := t.store.writeWorkEstimator.Estimate(keyBytes, valueBytes)
+	if work > limit {
+		t.stickyErr = ErrTreeDBEntryTooLarge
+		return t.stickyErr
+	}
+	if t.batch.work > limit-work {
+		if len(t.batch.mutations) == 0 {
+			t.stickyErr = ErrTreeDBEntryTooLarge
+			return t.stickyErr
+		}
+		return badger.ErrTxnTooBig
+	}
+	t.batch.work += work
 	return nil
 }
 
@@ -521,6 +598,7 @@ func (s *TreeDBStore) releaseMutationBatch(batch *treeDBMutationBatch) {
 		batch.mutations = batch.mutations[:0]
 		batch.arena = batch.arena[:0]
 		batch.chunks = batch.chunks[:0]
+		batch.work = 0
 		s.mutationPool.Put(batch)
 	}
 }
@@ -529,23 +607,20 @@ func (s *TreeDBStore) enqueueCommit(request treeDBCommitRequest) error {
 	if s == nil {
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
 	}
-	// Holding lifecycleMu across the bounded send gives concurrent callers one
-	// admission order and prevents Close from closing the queue between the
-	// closed check and send. The storage worker never takes lifecycleMu, so a
-	// full queue still makes progress and deliberately backpressures the caller.
+	// Wait for ownership outside lifecycleMu. A saturated durable queue must
+	// not hold the lifecycle gate throughout somebody else's disk wait. The
+	// subsequent closed check and Add/send share Close's admission authority.
+	s.acquireTreeDBCommitSlot()
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	if s.closed.Load() || s.db == nil {
+		s.releaseTreeDBCommitSlot()
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
 	}
 	if request.rootEpoch != s.rootEpoch.Load() {
+		s.releaseTreeDBCommitSlot()
 		return fmt.Errorf("commit across posting root install: %w", ErrTreeDBTxnClosed)
 	}
-	// Retain the previous one-active-plus-64-queued ownership bound even though
-	// the scheduler may move queued requests into its own pending set. Holding
-	// lifecycleMu while this blocks is safe: completion never needs that lock,
-	// and Close cannot race a request between its closed check and admission.
-	s.acquireTreeDBCommitSlot()
 	if !s.queueActive {
 		// Direct synchronous commits admitted before callback mode was activated
 		// must publish before the first queued request. lifecycleMu prevents a new
@@ -556,8 +631,29 @@ func (s *TreeDBStore) enqueueCommit(request treeDBCommitRequest) error {
 		go s.runCommitQueue()
 	}
 	s.commitWG.Add(1)
+	request.sequence = s.commitSequence.Add(1)
 	s.commitQueue <- request
 	return nil
+}
+
+// SealCommitWindow publishes an admitted FIFO endpoint without waiting for
+// storage or claiming completion. The endpoint coalesces duplicate producer
+// wakeups; collection still follows the predecessor completion or capacity boundary and original bounds.
+func (s *TreeDBStore) SealCommitWindow() {
+	if s == nil || s.mode != TreeDBCommitDurable {
+		return
+	}
+	endpoint := s.commitSequence.Load()
+	for previous := s.commitSeal.Load(); endpoint > previous; previous = s.commitSeal.Load() {
+		if s.commitSeal.CompareAndSwap(previous, endpoint) {
+			s.durableSeals.Add(1)
+			select {
+			case s.commitWake <- struct{}{}:
+			default:
+			}
+			return
+		}
+	}
 }
 
 func (s *TreeDBStore) runCommitQueue() {
@@ -576,143 +672,138 @@ func (s *TreeDBStore) runCommitQueue() {
 func (s *TreeDBStore) runSerialCommitQueue() {
 	for request := range s.commitQueue {
 		err := s.commitAtAdmitted(request.commitTs, request.batch.mutations)
-		s.completeTreeDBCommit(treeDBCommitCompletion{request: request, err: err}, nil, nil)
+		s.completeTreeDBCommit(treeDBCommitCompletion{request: request, err: err})
 		s.deliverTreeDBCommit(treeDBCommitCompletion{request: request, err: err})
 	}
 }
 
-func (s *TreeDBStore) runDurableCommitQueue() {
-	completed := make(chan treeDBCommitCompletion, treeDBCommitConcurrency)
-	pending := make([]treeDBCommitRequest, 0, treeDBCommitQueueCapacity)
-	inFlightKeys := make(map[string]struct{})
-	finished := make(map[uint64]treeDBCommitCompletion)
-	inFlight := 0
-	nextSequence := uint64(1)
-	nextDelivery := uint64(1)
+// runDurableCommitQueue drains work that accumulated during the previous disk
+// wait into one timestamp-preserving MVCC publication. There is no batching
+// timer, per-request goroutine, conflict map or out-of-order completion queue.
+// Versions of the same key at different timestamps can share the same sync.
+func (s *TreeDBStore) runDurableCommitQueueFIFO() {
+	var requests [treeDBCommitOwnershipLimit]treeDBCommitRequest
+	var groups [treeDBCommitOwnershipLimit]mvcc.CommitGroup
+	var results [treeDBCommitOwnershipLimit]error
+	var carried treeDBCommitRequest
+	hasCarried := false
 	queue := s.commitQueue
-
-	for queue != nil || len(pending) != 0 || inFlight != 0 {
-		// Admit as much FIFO work as the bounded window permits. A blocked
-		// request does not prevent a later independent request from joining the
-		// current group; a conflicting request remains pending until its earlier
-		// dependency completes.
-		for inFlight < treeDBCommitConcurrency {
-			index := nextIndependentTreeDBCommit(pending, inFlightKeys)
-			if index < 0 {
-				break
-			}
-			request := pending[index]
-			pending = append(pending[:index], pending[index+1:]...)
-			reserveTreeDBCommitKeys(request.batch.mutations, inFlightKeys)
-			inFlight++
-			go func(request treeDBCommitRequest) {
-				err := s.commitAtAdmitted(request.commitTs, request.batch.mutations)
-				completed <- treeDBCommitCompletion{request: request, err: err}
-			}(request)
-		}
-
-		if queue == nil {
-			completion := <-completed
-			s.completeTreeDBCommit(completion, inFlightKeys, finished)
-			inFlight--
-			nextDelivery = s.deliverTreeDBCommits(finished, nextDelivery)
-			continue
-		}
-		select {
-		case request, ok := <-queue:
+	for {
+		first := carried
+		if !hasCarried {
+			var ok bool
+			first, ok = <-queue
 			if !ok {
-				queue = nil
-				continue
-			}
-			request.sequence = nextSequence
-			nextSequence++
-			pending = append(pending, request)
-		case completion := <-completed:
-			s.completeTreeDBCommit(completion, inFlightKeys, finished)
-			inFlight--
-			nextDelivery = s.deliverTreeDBCommits(finished, nextDelivery)
-		}
-	}
-}
-
-func nextIndependentTreeDBCommit(pending []treeDBCommitRequest, inFlightKeys map[string]struct{}) int {
-	for i := range pending {
-		if treeDBCommitConflictsWithInFlight(pending[i], inFlightKeys) {
-			continue
-		}
-		// A later request must also remain behind every earlier pending request
-		// that shares a logical key, even when that earlier request is itself
-		// blocked on an in-flight predecessor. Otherwise A(x), B(x,y), C(y)
-		// could run A+C before B and violate the transitive FIFO dependency.
-		blockedByEarlierPending := false
-		for earlier := 0; earlier < i; earlier++ {
-			if treeDBCommitsShareKey(pending[earlier], pending[i]) {
-				blockedByEarlierPending = true
-				break
+				return
 			}
 		}
-		if !blockedByEarlierPending {
-			return i
-		}
-	}
-	return -1
-}
-
-func treeDBCommitConflictsWithInFlight(request treeDBCommitRequest, inFlightKeys map[string]struct{}) bool {
-	for _, mutation := range request.batch.mutations {
-		if _, exists := inFlightKeys[string(mutation.Key)]; exists {
-			return true
-		}
-	}
-	return false
-}
-
-func treeDBCommitsShareKey(left, right treeDBCommitRequest) bool {
-	for _, leftMutation := range left.batch.mutations {
-		for _, rightMutation := range right.batch.mutations {
-			if bytes.Equal(leftMutation.Key, rightMutation.Key) {
-				return true
+		carried = treeDBCommitRequest{}
+		hasCarried = false
+		requests[0] = first
+		n := 1
+		ownedBytes := first.batch.ownedBytes()
+		work := first.batch.work
+	collect:
+		for n < len(requests) && ownedBytes < treeDBCommitCohortBytes {
+			select {
+			case request, ok := <-queue:
+				if !ok {
+					queue = nil
+					break collect
+				}
+				size := request.batch.ownedBytes()
+				if size > treeDBCommitCohortBytes-ownedBytes ||
+					(s.writeWorkLimit != 0 && (work > s.writeWorkLimit || request.batch.work > s.writeWorkLimit-work)) {
+					carried, hasCarried = request, true
+					break collect
+				}
+				requests[n] = request
+				n++
+				ownedBytes += size
+				work += request.batch.work
+			default:
+				break collect
 			}
 		}
-	}
-	return false
-}
-
-func reserveTreeDBCommitKeys(mutations []mvcc.Mutation, inFlightKeys map[string]struct{}) {
-	for _, mutation := range mutations {
-		inFlightKeys[string(mutation.Key)] = struct{}{}
-	}
-}
-
-func (s *TreeDBStore) completeTreeDBCommit(
-	completion treeDBCommitCompletion, inFlightKeys map[string]struct{}, finished map[uint64]treeDBCommitCompletion,
-) {
-	for _, mutation := range completion.request.batch.mutations {
-		if inFlightKeys != nil {
-			delete(inFlightKeys, string(mutation.Key))
+		s.durableCohorts.Add(1)
+		s.durableRequests.Add(uint64(n))
+		if uint64(n) > s.durableCohortMax.Load() {
+			s.durableCohortMax.Store(uint64(n)) // only this worker writes it
+		}
+		if n == 1 {
+			results[0] = s.commitAtAdmitted(first.commitTs, first.batch.mutations)
+		} else {
+			for i := range n {
+				request := &requests[i]
+				if s.beforeCommitForTest != nil {
+					s.beforeCommitForTest()
+				}
+				if s.commitStartedForTest != nil {
+					s.commitStartedForTest(request.commitTs, request.batch.mutations)
+				}
+				groups[i] = mvcc.CommitGroup{Timestamp: request.commitTs, Mutations: request.batch.mutations}
+			}
+			s.commitDurableGroups(groups[:n], results[:n])
+			if s.commitFinishedForTest != nil {
+				for i := range n {
+					s.commitFinishedForTest(requests[i].commitTs, results[i])
+				}
+			}
+		}
+		for i := range n {
+			completion := treeDBCommitCompletion{request: requests[i], err: results[i]}
+			s.completeTreeDBCommit(completion)
+			s.deliverTreeDBCommit(completion)
+			requests[i] = treeDBCommitRequest{}
+			groups[i] = mvcc.CommitGroup{}
+			results[i] = nil
+		}
+		if queue == nil && !hasCarried {
+			return
 		}
 	}
+}
+
+func (b *treeDBMutationBatch) ownedBytes() int {
+	n := len(b.arena)
+	for _, chunk := range b.chunks {
+		n += len(chunk)
+	}
+	return n
+}
+
+// CommitGroupAt validates timestamps, keys, duplicate physical versions and the
+// discard floor before storage admission. Only these explicit validation errors
+// permit subdivision: one invalid request must not poison valid neighbours,
+// and two successive writes of the same key at the same timestamp must retain
+// FIFO last-write semantics. Storage errors can be ambiguous and are NEVER
+// retried, even when a joined error also contains a validation sentinel.
+func (s *TreeDBStore) commitDurableGroups(groups []mvcc.CommitGroup, results []error) {
+	var err error
+	if s.commitGroupsForTest != nil {
+		err = s.commitGroupsForTest(groups, s.commitMode)
+	} else {
+		err = s.mvcc.CommitGroupAt(groups, s.commitMode)
+	}
+	validation := errors.Is(err, mvcc.ErrZeroTimestamp) || errors.Is(err, mvcc.ErrInvalidKey) ||
+		errors.Is(err, mvcc.ErrDuplicateKey) || errors.Is(err, mvcc.ErrVersionBelowDiscardFloor)
+	if len(groups) > 1 && validation && !errors.Is(err, mvcc.ErrStorage) {
+		middle := len(groups) / 2
+		s.commitDurableGroups(groups[:middle], results[:middle])
+		s.commitDurableGroups(groups[middle:], results[middle:])
+		return
+	}
+	if err != nil {
+		err = fmt.Errorf("commit posting TreeDB transaction: %w", err)
+	}
+	for i := range results {
+		results[i] = err
+	}
+}
+
+func (s *TreeDBStore) completeTreeDBCommit(completion treeDBCommitCompletion) {
 	s.releaseMutationBatch(completion.request.batch)
 	s.commitWG.Done()
-	if finished != nil {
-		finished[completion.request.sequence] = completion
-	}
-}
-
-// deliverTreeDBCommits preserves the original queue's externally observable
-// acknowledgement order even when the underlying independent commits complete
-// in a different order. A later synchronous caller therefore cannot return or
-// receive an error ahead of an earlier admitted request.
-func (s *TreeDBStore) deliverTreeDBCommits(finished map[uint64]treeDBCommitCompletion, next uint64) uint64 {
-	for {
-		completion, ok := finished[next]
-		if !ok {
-			return next
-		}
-		delete(finished, next)
-		s.deliverTreeDBCommit(completion)
-		next++
-	}
 }
 
 func (s *TreeDBStore) deliverTreeDBCommit(completion treeDBCommitCompletion) {
@@ -725,10 +816,8 @@ func (s *TreeDBStore) deliverTreeDBCommit(completion treeDBCommitCompletion) {
 	if completion.request.callback != nil {
 		go completion.request.callback(completion.err)
 	}
-	// Admission ownership lasts through FIFO acknowledgement delivery. Durable
-	// commits may finish storage out of order and wait in the scheduler's
-	// finished map; releasing here prevents that map from becoming an unbounded
-	// second queue while the earliest result is held.
+	// Admission ownership lasts through FIFO acknowledgement delivery, including
+	// requests retained in the active cohort and its carried successor.
 	s.releaseTreeDBCommitSlot()
 }
 
@@ -736,18 +825,32 @@ func (s *TreeDBStore) commitSync(commitTs uint64, batch *treeDBMutationBatch, ro
 	if s == nil {
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
 	}
+	if s.mode == TreeDBCommitDurable {
+		done := make(chan error, 1)
+		err := s.enqueueCommit(treeDBCommitRequest{commitTs: commitTs, batch: batch, done: done, rootEpoch: rootEpoch})
+		if err != nil {
+			s.releaseMutationBatch(batch)
+			return err
+		}
+		s.SealCommitWindow()
+		return <-done
+	}
+	// Every admission path reserves capacity before lifecycleMu. Callback
+	// callers can already own every slot while waiting for this mutex.
+	s.acquireTreeDBCommitSlot()
 	s.lifecycleMu.Lock()
 	if s.closed.Load() || s.db == nil {
 		s.lifecycleMu.Unlock()
+		s.releaseTreeDBCommitSlot()
 		s.releaseMutationBatch(batch)
 		return fmt.Errorf("commit posting TreeDB transaction: %w", treedb.ErrClosed)
 	}
 	if rootEpoch != s.rootEpoch.Load() {
 		s.lifecycleMu.Unlock()
+		s.releaseTreeDBCommitSlot()
 		s.releaseMutationBatch(batch)
 		return fmt.Errorf("commit across posting root install: %w", ErrTreeDBTxnClosed)
 	}
-	s.acquireTreeDBCommitSlot()
 	if !s.queueActive {
 		s.commitWG.Add(1)
 		s.lifecycleMu.Unlock()
@@ -962,7 +1065,16 @@ func (it *treeDBIterator) Seek(key []byte) {
 	// watermark excludes late publication below an active read timestamp, and
 	// reopening every seek adds material overhead. Reverse seek of an empty key
 	// is Badger's rewind-to-end special case and requires a fresh reverse view.
-	if (it.raw == nil || (it.opts.Reverse && len(key) == 0)) && !it.openRawLocked() {
+	opened := it.raw == nil
+	if (opened || (it.opts.Reverse && len(key) == 0)) && !it.openRawLocked() {
+		return
+	}
+	// IterateVersions already positions a newly opened exact-key view. Reuse
+	// that position only for the identical forward target; other targets must
+	// still pass Seek's key validation, and later seeks must reposition.
+	if opened && !it.opts.Reverse && it.hasExactKey && bytes.Equal(key, it.exactKey) {
+		it.valid = false
+		it.positionLocked()
 		return
 	}
 	timestamp := uint64(math.MaxUint64)
@@ -1054,19 +1166,11 @@ func (it *treeDBIterator) openRawLocked() bool {
 	}
 	if it.hasExactKey {
 		options.Prefix = nil
-		options.LowerBound = append([]byte(nil), it.exactKey...)
-		options.UpperBound = append(append([]byte(nil), it.exactKey...), 0)
+		// Preserve a nonnil empty key, which means exact empty-key iteration.
+		options.ExactKey = make([]byte, len(it.exactKey))
+		copy(options.ExactKey, it.exactKey)
 	}
 	raw, err := it.store.mvcc.IterateVersions(options)
-	if it.hasExactKey && errors.Is(err, mvcc.ErrInvalidKey) {
-		// A codec-maximum logical key cannot be extended with the synthetic NUL
-		// upper bound. Fall back to the codec's prefix bounds; the adapter's exact
-		// key filter below excludes longer logical siblings.
-		options.Prefix = append([]byte(nil), it.exactKey...)
-		options.LowerBound = append([]byte(nil), it.exactKey...)
-		options.UpperBound = nil
-		raw, err = it.store.mvcc.IterateVersions(options)
-	}
 	if err != nil {
 		it.err = fmt.Errorf("open posting TreeDB iterator: %w", err)
 		return false

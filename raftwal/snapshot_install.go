@@ -103,21 +103,11 @@ func ReadAcceptedSnapshotInstall(dir string) (*AcceptedSnapshotInstall, error) {
 	if err != nil {
 		return nil, err
 	}
-	meta, err := os.Open(filepath.Join(dir, metaName))
+	id, group, err := readRaftIdentity(dir)
 	if err != nil {
 		return nil, err
 	}
-	var identity [16]byte
-	_, readErr = io.ReadFull(meta, identity[:])
-	closeErr = meta.Close()
-	if readErr != nil {
-		return nil, readErr
-	}
-	if closeErr != nil {
-		return nil, closeErr
-	}
-	if binary.BigEndian.Uint64(identity[:8]) != intent.RaftID ||
-		binary.BigEndian.Uint64(identity[8:]) != uint64(intent.Group) {
+	if id != intent.RaftID || group != uint64(intent.Group) {
 		return nil, fmt.Errorf("snapshot install WAL identity mismatch")
 	}
 	return intent, nil
@@ -185,17 +175,17 @@ func decodeAcceptedSnapshotInstall(dir string, data []byte) (*AcceptedSnapshotIn
 func (w *DiskStorage) AcceptSnapshotInstall(intent AcceptedSnapshotInstall) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
-	if !w.checkpointGuard || intent.RaftID != w.meta.Uint(RaftId) || uint64(intent.Group) != w.meta.Uint(GroupId) {
+	if !w.checkpointGuard || intent.RaftID != w.uintLocked(RaftId) || uint64(intent.Group) != w.uintLocked(GroupId) {
 		return fmt.Errorf("snapshot install receiver identity mismatch")
 	}
 	if err := w.syncLocked(); err != nil {
 		return err
 	}
-	current, err := w.meta.HardState()
+	current, err := w.hardStateLocked()
 	if err != nil {
 		return err
 	}
-	previous, err := w.meta.snapshot()
+	previous, err := w.snapshotLocked()
 	if err != nil {
 		return err
 	}
@@ -223,12 +213,15 @@ func (w *DiskStorage) AcceptSnapshotInstall(intent AcceptedSnapshotInstall) erro
 	syncErr := archive.Sync()
 	closeErr := archive.Close()
 	if syncErr != nil {
-		return syncErr
+		return w.installStorageFailure(syncErr)
 	}
 	if closeErr != nil {
-		return closeErr
+		return w.installStorageFailure(closeErr)
 	}
 	if err := syncInstallDir(w.dir); err != nil {
+		if w.ready != nil {
+			return w.ready.fail(err)
+		}
 		return err
 	}
 	old, err := ReadAcceptedSnapshotInstall(w.dir)
@@ -243,27 +236,33 @@ func (w *DiskStorage) AcceptSnapshotInstall(intent AcceptedSnapshotInstall) erro
 	}
 	file, err := os.CreateTemp(w.dir, ".snapshot-install-intent-")
 	if err != nil {
-		return err
+		return w.installStorageFailure(err)
 	}
 	name := file.Name()
 	defer os.Remove(name)
 	if _, err := file.Write(data); err != nil {
 		file.Close()
-		return err
+		return w.installStorageFailure(err)
 	}
 	if err := file.Sync(); err != nil {
 		file.Close()
-		return err
+		return w.installStorageFailure(err)
 	}
 	if err := file.Close(); err != nil {
-		return err
+		return w.installStorageFailure(err)
 	}
 	// The archive and checksummed candidate have both been validated and synced
 	// before this atomic namespace edge can authorize a posting CURRENT switch.
 	if err := os.Rename(name, filepath.Join(w.dir, snapshotInstallFile)); err != nil {
+		if w.ready != nil {
+			return w.ready.fail(&snapshotInstallPublicationError{err})
+		}
 		return &snapshotInstallPublicationError{err}
 	}
 	if err := syncInstallDir(w.dir); err != nil {
+		if w.ready != nil {
+			return w.ready.fail(&snapshotInstallPublicationError{err})
+		}
 		return &snapshotInstallPublicationError{err}
 	}
 	if w.installStageForTest != nil {
@@ -283,14 +282,14 @@ func (w *DiskStorage) CompleteSnapshotInstall(receiverMetadata []byte) error {
 		return err
 	}
 	if !w.checkpointGuard || intent == nil || !bytes.Equal(intent.ReceiverMetadata, receiverMetadata) ||
-		intent.RaftID != w.meta.Uint(RaftId) || uint64(intent.Group) != w.meta.Uint(GroupId) {
+		intent.RaftID != w.uintLocked(RaftId) || uint64(intent.Group) != w.uintLocked(GroupId) {
 		return fmt.Errorf("snapshot install lacks matching receiver certificate")
 	}
-	current, err := w.meta.HardState()
+	current, err := w.hardStateLocked()
 	if err != nil {
 		return err
 	}
-	snapshot, err := w.meta.snapshot()
+	snapshot, err := w.snapshotLocked()
 	if err != nil {
 		return err
 	}
@@ -317,6 +316,23 @@ func (w *DiskStorage) CompleteSnapshotInstall(receiverMetadata []byte) error {
 			return fmt.Errorf("snapshot install would change an existing vote")
 		}
 		hardState.Vote = current.Vote
+	}
+	if w.ready != nil {
+		if err := w.ready.append(&hardState, nil, &intent.Snapshot, true); err != nil {
+			return err
+		}
+		if err := w.ready.stage("install_cut_written"); err != nil {
+			return w.ready.fail(err)
+		}
+		if err := w.ready.sync(); err != nil {
+			return err
+		}
+		if err := w.ready.stage("install_cut_synced"); err != nil {
+			return w.ready.fail(err)
+		}
+		w.certifiedIndex = index
+		// Atomic cut has already replaced both election state and divergent suffix.
+		return w.ready.replace()
 	}
 	if err := w.meta.StoreSnapshot(&intent.Snapshot); err != nil {
 		return err
@@ -356,15 +372,15 @@ func (w *DiskStorage) FinishSnapshotInstall(expectedDigest string) error {
 	if intent == nil || intent.Digest != expectedDigest || w.certifiedIndex != intent.Snapshot.Metadata.Index {
 		return fmt.Errorf("snapshot install completion identity mismatch")
 	}
-	snapshot, err := w.meta.snapshot()
+	snapshot, err := w.snapshotLocked()
 	if err != nil {
 		return err
 	}
-	hs, err := w.meta.HardState()
+	hs, err := w.hardStateLocked()
 	if err != nil {
 		return err
 	}
-	last := w.wal.LastIndex()
+	last := w.lastIndexLocked()
 	if last < snapshot.Metadata.Index {
 		last = snapshot.Metadata.Index
 	}
@@ -375,13 +391,52 @@ func (w *DiskStorage) FinishSnapshotInstall(expectedDigest string) error {
 		return err
 	}
 	if err := os.Remove(filepath.Join(w.dir, snapshotInstallFile)); err != nil {
+		if w.ready != nil {
+			return w.ready.fail(err)
+		}
 		return err
 	}
 	if err := syncInstallDir(w.dir); err != nil {
+		if w.ready != nil {
+			return w.ready.fail(err)
+		}
 		return err
 	}
 	if err := os.Remove(filepath.Join(w.dir, intent.ArchiveName)); err != nil {
-		return err
+		return w.installStorageFailure(err)
 	}
-	return syncInstallDir(w.dir)
+	return w.installStorageFailure(syncInstallDir(w.dir))
+}
+
+// Called only at storage I/O boundaries, never for semantic intent rejection.
+func (w *DiskStorage) installStorageFailure(err error) error {
+	if err != nil && w.ready != nil {
+		return w.ready.fail(err)
+	}
+	return err
+}
+
+// readRaftIdentity is used while an existing DiskStorage lock may already be
+// held. It performs cold actual-format reads and never calls locking accessors.
+func readRaftIdentity(dir string) (uint64, uint64, error) {
+	if _, err := os.Stat(filepath.Join(dir, readyRootName)); err == nil {
+		if _, err = os.Stat(filepath.Join(dir, metaName)); err == nil {
+			return 0, 0, fmt.Errorf("competing Raft identities")
+		} else if !os.IsNotExist(err) {
+			return 0, 0, err
+		}
+		return readyIdentity(dir)
+	} else if !os.IsNotExist(err) {
+		return 0, 0, err
+	}
+	f, err := os.Open(filepath.Join(dir, metaName))
+	if err != nil {
+		return 0, 0, err
+	}
+	defer f.Close()
+	var b [16]byte
+	if _, err = io.ReadFull(f, b[:]); err != nil {
+		return 0, 0, err
+	}
+	return binary.BigEndian.Uint64(b[:8]), binary.BigEndian.Uint64(b[8:]), nil
 }

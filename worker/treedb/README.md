@@ -4,9 +4,17 @@ This package is the Dgraph-side TreeDB entry point for the posting-store replace
 and compile-tests current TreeDB APIs and supports an explicit restricted benchmark-minimal Alpha
 runtime. Badger remains the default and production backend.
 
+Durable posting writes use the bounded timestamp-preserving scheduler described in
+[Durable posting commit cohorts](DURABLE_COMMIT_COHORTS.md).
+
 The exact `github.com/snissn/gomap` dependency is pinned in the repository's [go.mod](../../go.mod).
 Resolve it with `GOWORK=off go list -m -json github.com/snissn/gomap`; qualification must record
 that version, checksum and any local replacement rather than reuse a historical source label here.
+The public pin includes the ordinary command-WAL append-capture owner and its fail-stop error
+handling; the Dgraph `pressure_v4` adapter remains unchanged. The CRC assembly dependency is also
+pinned to a published revision, so this configuration needs no local Gomap or CRC replacement.
+Throughput, memory and recovery qualification of this public dependency snapshot remains pending;
+dependency resolution and owning-package checks alone do not qualify those gates.
 
 What is wired here:
 
@@ -87,6 +95,29 @@ The restricted Alpha runtime uses that seam for basic posting and schema paths. 
 must use `CheckFeatureAvailable(...)` and fail at invocation rather than silently dropping TTL,
 stream/import/export, subscription, protobuf, monitoring, or encryption semantics.
 
+The ordinary durable command-WAL COW path uses one ordered submitter, two reusable aggregate records
+and one completion owner. Idle groups drain ready requests and use known-size ordered submission
+without opening an incremental builder or delaying first work. While a disk barrier runs, the
+successor stages native operands without preparing a root or assigning a WAL command. It seals on an
+actual physical-work/byte/request/shared-staging bound, predecessor completion or shutdown. There is
+no adapter collection timer. Sealed submission never starts an engine collection wait. Temporary
+queue emptiness and producer completion fences do not split an open successor. `TxnWriter.Wait`
+forwards a progress wake through the commit-event decorator before waiting. Both records share a 4
+MiB staged-input allowance; oversized atomic inputs stage alone. The original 65 request credits and
+TreeDB's own resource admission remain in force. Append and COW installation stay ordered, and
+callbacks/events wait for the original captured durable prefix. Unsupported profiles retain the
+synchronous FIFO implementation.
+
+TreeDB estimates conservative physical work before copying each posting entry. A nonempty write
+transaction reports `badger.ErrTxnTooBig` before changing its accepted prefix, so Dgraph's existing
+`CommitToDisk` loop commits bounded chunks at the original timestamp. An oversized first entry is a
+terminal error. The adapter also bounds combined cohorts so it cannot recombine those chunks into an
+oversized command. Each assigned TreeDB command remains atomic; Dgraph advances Oracle visibility
+and success-only cache publication only after all chunk callbacks succeed. If a later chunk fails,
+the pending transaction keeps its original Raft mutation and decision available for replay even when
+the attempted-apply marker has advanced. Storage errors never authorize adapter subdivision or retry
+of an assigned command.
+
 ### Snapshot publication and discard floors
 
 Applying a Raft snapshot preserves Badger's `SetDiscardTs` hint. It does not advance TreeDB's
@@ -142,7 +173,7 @@ The explicit Alpha selector accepts a restricted TreeDB runtime:
 dgraph alpha --posting-store 'backend=badger; tier=production; durability=durable; events=false;'
 dgraph alpha --posting-store 'backend=treedb'
 dgraph alpha --posting-store 'backend=treedb; tier=benchmark_minimal; durability=durable; events=true;'
-dgraph alpha --posting-store 'backend=treedb; tier=benchmark_minimal; durability=raft_checkpoint; events=true;'
+dgraph alpha --survive=filesystem --posting-store 'backend=treedb; tier=benchmark_minimal; durability=raft_checkpoint; events=true;'
 ```
 
 Badger remains the default and continues to open through the existing managed Badger path. TreeDB
@@ -156,6 +187,14 @@ fail explicitly at their entry points. TreeDB defaults to `events=true` and reje
 `events=false`, because ACL and GraphQL schema caches depend on matching future successful commits
 through the restricted Dgraph-owned event bridge. The low-level disabled-event path exists only for
 overhead measurement and defensive shutdown; it is not a valid TreeDB Alpha runtime selection.
+
+Fresh `raft_checkpoint` Raft directories use the Ready-cut log: entries, HardState and snapshot
+state share one recoverable append, followed by one ordinary file sync before application. Cold
+initialization, key and generation publication still require their own durability barriers. Existing
+directories reopen their actual legacy or Ready-cut format; there is no automatic conversion. Fresh
+Badger and Zero Raft directories retain the legacy format. Uncertain Ready-cut storage errors stop
+the node and require reopening, rather than retrying an ambiguous write. Startup logs identify the
+selected Raft format. Performance qualification remains pending.
 
 See [RAFT_RECOVERY_PRODUCTION.md](RAFT_RECOVERY_PRODUCTION.md) for the route's ordered schema/admin,
 retry, pending-state, maintenance and native snapshot contracts and remaining qualification gates.

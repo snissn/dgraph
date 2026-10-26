@@ -31,6 +31,7 @@ import (
 )
 
 var (
+	limiterInit  sync.Once
 	pstore       *badger.DB
 	postingStore posting.Store
 	workerServer *grpc.Server
@@ -57,8 +58,7 @@ func InitForPostingStore(ps *badger.DB, store posting.Store) {
 	pstore = ps
 	postingStore = store
 	// needs to be initialized after group config
-	limiter = rateLimiter{c: sync.NewCond(&sync.Mutex{}), max: int(x.WorkerConfig.Raft.GetInt64("pending-proposals"))}
-	go limiter.bleed()
+	configureRateLimiter(int(x.WorkerConfig.Raft.GetInt64("pending-proposals")))
 
 	grpcOpts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(x.GrpcMaxSize),
@@ -70,6 +70,19 @@ func InitForPostingStore(ps *badger.DB, store posting.Store) {
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(x.WorkerConfig.TLSServerConfig)))
 	}
 	workerServer = grpc.NewServer(grpcOpts...)
+}
+
+// Reinitializing a worker must not replace a condition or erase outstanding
+// proposal debt under the process-lifetime bleeder and in-flight requests.
+func configureRateLimiter(max int) {
+	limiterInit.Do(func() {
+		limiter.c = sync.NewCond(&sync.Mutex{})
+		go limiter.bleed()
+	})
+	limiter.c.L.Lock()
+	limiter.max = max
+	limiter.c.Broadcast()
+	limiter.c.L.Unlock()
 }
 
 // SchemaStore exposes the current owner through schema's cycle-safe contract.

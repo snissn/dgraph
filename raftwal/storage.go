@@ -6,8 +6,11 @@
 package raftwal
 
 import (
+	stdErrors "errors"
 	"math"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/golang/glog"
@@ -20,7 +23,9 @@ import (
 )
 
 // DiskStorage handles disk access and writing for the RAFT write-ahead log.
-// Dir contains wal.meta file and <start idx zero padded>.wal files.
+// Fresh explicit checkpoint directories use the atomic Ready-cut journal.
+// Existing actual format is authoritative. The layout below describes only the
+// legacy wal.meta and <start idx zero padded>.wal format.
 //
 // === wal.meta file ===
 // This file is generally around 4KB, so it can fit nicely in one Linux page.
@@ -62,9 +67,10 @@ type DiskStorage struct {
 	dir  string
 	elog trace.EventLog
 
-	meta *metaFile
-	wal  *wal
-	lock sync.Mutex
+	meta  *metaFile
+	wal   *wal
+	ready *readyJournal
+	lock  sync.Mutex
 
 	// External materialized stores may compact only a certified durable prefix.
 	checkpointGuard     bool
@@ -83,6 +89,71 @@ func Init(dir string) *DiskStorage {
 // InitEncrypted initializes returns a properly initialized instance of DiskStorage.
 // To gracefully shutdown DiskStorage, store.Closer.SignalAndWait() should be called.
 func InitEncrypted(dir string, encKey x.Sensitive) (*DiskStorage, error) {
+	return initStorage(dir, encKey, false)
+}
+
+// InitCheckpointEncrypted chooses the Ready-cut format only for a fresh
+// explicit external-checkpoint directory. Existing actual formats remain
+// authoritative, regardless of the constructor used to reopen them.
+func InitCheckpointEncrypted(dir string, encKey x.Sensitive) (*DiskStorage, error) {
+	return initStorage(dir, encKey, true)
+}
+
+func initStorage(dir string, encKey x.Sensitive, checkpoint bool) (*DiskStorage, error) {
+	_, rootErr := os.Stat(filepath.Join(dir, readyRootName))
+	_, metaErr := os.Stat(filepath.Join(dir, metaName))
+	if rootErr != nil && !os.IsNotExist(rootErr) {
+		return nil, rootErr
+	}
+	if metaErr != nil && !os.IsNotExist(metaErr) {
+		return nil, metaErr
+	}
+	if rootErr == nil && metaErr == nil {
+		return nil, errors.New("competing Raft storage formats")
+	}
+	// Validate accepted authority before creation, tail truncation or orphan cleanup.
+	if _, err := ReadAcceptedSnapshotInstall(dir); err != nil {
+		return nil, err
+	}
+	if rootErr == nil || (checkpoint && os.IsNotExist(metaErr)) {
+		if rootErr != nil {
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				return nil, err
+			}
+			files, err := os.ReadDir(dir)
+			if err != nil {
+				return nil, err
+			}
+			// Do not initialize over legacy fragments or a failed new creation.
+			for _, f := range files {
+				if strings.HasSuffix(f.Name(), logSuffix) || strings.HasSuffix(f.Name(), ".rdc") {
+					return nil, errors.New("Raft directory lacks authoritative format root")
+				}
+			}
+		}
+		journal, err := openReadyJournal(dir, encKey, rootErr != nil)
+		if err != nil {
+			return nil, err
+		}
+		w := &DiskStorage{dir: dir, ready: journal, elog: trace.NewEventLog("ReadyCut", "RaftStorage")}
+		glog.Infof("Raft storage opened: format=ready_cut directory=%s", dir)
+		return w, nil
+	}
+	if os.IsNotExist(metaErr) {
+		files, err := os.ReadDir(dir)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+		for _, f := range files {
+			if strings.HasSuffix(f.Name(), ".rdc") {
+				return nil, errors.New("ready fragments lack authoritative root")
+			}
+		}
+	}
+	return initLegacyStorage(dir, encKey)
+}
+
+func initLegacyStorage(dir string, encKey x.Sensitive) (*DiskStorage, error) {
 	intent, err := ReadAcceptedSnapshotInstall(dir)
 	if err != nil {
 		return nil, err
@@ -103,6 +174,7 @@ func InitEncrypted(dir string, encKey x.Sensitive) (*DiskStorage, error) {
 	}
 
 	w.elog = trace.NewEventLog("Badger", "RaftStorage")
+	glog.Infof("Raft storage opened: format=legacy directory=%s", dir)
 	if intent != nil {
 		// The durable archive plus accepted intent owns this transition. Normal
 		// snapshot/log alignment and pruning must wait until the posting owner
@@ -131,8 +203,57 @@ func InitEncrypted(dir string, encKey x.Sensitive) (*DiskStorage, error) {
 	return w, nil
 }
 
-func (w *DiskStorage) SetUint(info MetaInfo, id uint64) { w.meta.SetUint(info, id) }
-func (w *DiskStorage) Uint(info MetaInfo) uint64        { return w.meta.Uint(info) }
+func (w *DiskStorage) SetUint(info MetaInfo, id uint64) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	if w.ready != nil {
+		if info < RaftId || info > CheckpointIndex {
+			panic("invalid writable Ready metadata")
+		}
+		if w.ready.check() == nil {
+			w.ready.ids[int(info)] = id
+			w.ready.dirty = true
+		}
+		return
+	}
+	w.meta.SetUint(info, id)
+}
+func (w *DiskStorage) Uint(info MetaInfo) uint64 {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	return w.uintLocked(info)
+}
+func (w *DiskStorage) uintLocked(info MetaInfo) uint64 {
+	if w.ready != nil {
+		switch info {
+		case SnapshotIndex:
+			return w.ready.snapshot.Index
+		case SnapshotTerm:
+			return w.ready.snapshot.Term
+		default:
+			return w.ready.ids[int(info)]
+		}
+	}
+	return w.meta.Uint(info)
+}
+func (w *DiskStorage) hardStateLocked() (raftpb.HardState, error) {
+	if w.ready != nil {
+		return w.ready.hs, nil
+	}
+	return w.meta.HardState()
+}
+func (w *DiskStorage) snapshotLocked() (raftpb.Snapshot, error) {
+	if w.ready != nil {
+		return w.ready.getSnapshot()
+	}
+	return w.meta.snapshot()
+}
+func (w *DiskStorage) lastIndexLocked() uint64 {
+	if w.ready != nil {
+		return w.ready.lastIndex()
+	}
+	return max(w.wal.LastIndex(), w.meta.Uint(SnapshotIndex))
+}
 
 // reset resets the entries. Used for testing.
 func (w *DiskStorage) reset(es []raftpb.Entry) error {
@@ -146,6 +267,9 @@ func (w *DiskStorage) reset(es []raftpb.Entry) error {
 func (w *DiskStorage) HardState() (raftpb.HardState, error) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
+	if w.ready != nil {
+		return w.ready.hs, nil
+	}
 	if w.meta == nil {
 		return raftpb.HardState{}, errors.Errorf("uninitialized meta file")
 	}
@@ -154,6 +278,11 @@ func (w *DiskStorage) HardState() (raftpb.HardState, error) {
 
 // Checkpoint returns the Raft index corresponding to the checkpoint.
 func (w *DiskStorage) Checkpoint() (uint64, error) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	if w.ready != nil {
+		return w.ready.ids[2], nil
+	}
 	if w.meta == nil {
 		return 0, errors.Errorf("uninitialized meta file")
 	}
@@ -170,12 +299,12 @@ func (w *DiskStorage) InitialState() (hs raftpb.HardState, cs raftpb.ConfState, 
 
 	w.elog.Printf("InitialState")
 	defer w.elog.Printf("Done")
-	hs, err = w.meta.HardState()
+	hs, err = w.hardStateLocked()
 	if err != nil {
 		return
 	}
 	var snap raftpb.Snapshot
-	snap, err = w.meta.snapshot()
+	snap, err = w.snapshotLocked()
 	if err != nil {
 		return
 	}
@@ -186,6 +315,9 @@ func (w *DiskStorage) NumEntries() int {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
+	if w.ready != nil {
+		return len(w.ready.entries)
+	}
 	start := w.wal.firstIndex()
 
 	var count int
@@ -209,6 +341,9 @@ func (w *DiskStorage) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, rerr e
 
 	// glog.Infof("Entries after lock: [%d, %d) maxSize:%d", lo, hi, maxSize)
 
+	if w.ready != nil {
+		return w.ready.getEntries(lo, hi, maxSize)
+	}
 	first := w.wal.firstIndex()
 	if lo < first {
 		glog.Errorf("lo: %d <first: %d\n", lo, first)
@@ -230,6 +365,9 @@ func (w *DiskStorage) Term(idx uint64) (uint64, error) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
+	if w.ready != nil {
+		return w.ready.term(idx)
+	}
 	si := w.meta.Uint(SnapshotIndex)
 	if idx < si {
 		glog.Errorf("TERM for %d = %v\n", idx, raft.ErrCompacted)
@@ -251,6 +389,9 @@ func (w *DiskStorage) LastIndex() (uint64, error) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
+	if w.ready != nil {
+		return w.ready.lastIndex(), nil
+	}
 	li := w.wal.LastIndex()
 	si := w.meta.Uint(SnapshotIndex)
 	if li < si {
@@ -260,7 +401,10 @@ func (w *DiskStorage) LastIndex() (uint64, error) {
 }
 
 func (w *DiskStorage) firstIndex() uint64 {
-	if si := w.Uint(SnapshotIndex); si > 0 {
+	if w.ready != nil {
+		return w.ready.firstIndex()
+	}
+	if si := w.uintLocked(SnapshotIndex); si > 0 {
 		return si + 1
 	}
 	return w.wal.firstIndex()
@@ -282,7 +426,7 @@ func (w *DiskStorage) Snapshot() (raftpb.Snapshot, error) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	return w.meta.snapshot()
+	return w.snapshotLocked()
 }
 
 // ---------------- Raft.Storage interface complete.
@@ -296,6 +440,9 @@ func (w *DiskStorage) RequireCheckpointCertificate() {
 	defer w.lock.Unlock()
 	w.checkpointGuard = true
 	w.certifiedIndex = 0
+	if w.ready != nil {
+		return
+	}
 	w.wal.dirty = make(map[*logFile]struct{})
 	// One open-time pass also covers Ready writes made before the owner opted in.
 	for _, file := range w.wal.files {
@@ -310,7 +457,7 @@ func (w *DiskStorage) RequireCheckpointCertificate() {
 func (w *DiskStorage) AuthorizeCheckpoint(index uint64) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
-	hs, err := w.meta.HardState()
+	hs, err := w.hardStateLocked()
 	if err != nil {
 		return err
 	}
@@ -337,6 +484,24 @@ func (w *DiskStorage) CreateSnapshot(i uint64, cs *raftpb.ConfState, data []byte
 		return raft.ErrSnapOutOfDate
 	}
 
+	if w.ready != nil {
+		term, err := w.ready.term(i)
+		if err != nil {
+			return err
+		}
+		if cs == nil {
+			return readyInvalid("nil snapshot configuration")
+		}
+		snap := raftpb.Snapshot{Metadata: raftpb.SnapshotMetadata{Index: i, Term: term, ConfState: *cs}, Data: data}
+		if err = w.ready.append(nil, nil, &snap, false); err != nil {
+			return err
+		}
+		// The durable base contains every saved suffix, not only the older certificate.
+		if err = w.ready.replace(); err != nil {
+			return err
+		}
+		return nil
+	}
 	e, err := w.wal.seekEntry(i)
 	if err != nil {
 		return err
@@ -376,7 +541,13 @@ func (w *DiskStorage) Save(h *raftpb.HardState, es []raftpb.Entry, snap *raftpb.
 	defer w.lock.Unlock()
 
 	if w.checkpointGuard && snap != nil && !raft.IsEmptySnap(*snap) && snap.Metadata.Index > w.certifiedIndex {
+		if w.ready != nil {
+			return readyInvalid("snapshot installation requires a certified TreeDB install protocol")
+		}
 		return errors.Errorf("snapshot installation requires a certified TreeDB install protocol")
+	}
+	if w.ready != nil {
+		return w.ready.append(h, es, snap, false)
 	}
 	if err := w.wal.AddEntries(es); err != nil {
 		return err
@@ -420,17 +591,41 @@ func (w *DiskStorage) addEntries(entries []raftpb.Entry) error {
 // truncateEntriesUntil deletes the data field of every raft entry
 // of type EntryNormal and index ∈ [0, lastIdx).
 func (w *DiskStorage) TruncateEntriesUntil(lastIdx uint64) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	if w.checkpointGuard {
 		return
 	} // Only certificate-owned snapshot pruning is authorized.
+	if w.ready != nil {
+		// Destructive debug/legacy operation: represent it as a complete generation,
+		// retaining entry identities while replacing only normal payloads.
+		for i := range w.ready.entries {
+			e := &w.ready.entries[i]
+			if e.index >= lastIdx {
+				break
+			}
+			if e.typ == raftpb.EntryNormal {
+				e.value.size = 0
+			}
+		}
+		if err := w.ready.replace(); err != nil {
+			_ = w.ready.fail(err)
+		}
+		return
+	}
 	w.wal.truncateEntriesUntil(lastIdx)
 }
 
 func (w *DiskStorage) NumLogFiles() int {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	if w.ready != nil {
+		return 0
+	} // One active generation; no sealed legacy files.
 	return len(w.wal.files)
 }
 
-// Sync calls the Sync method in the underlying badger instance to write all the contents to disk.
+// Sync establishes the selected format's required durable boundary.
 func (w *DiskStorage) Sync() error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
@@ -440,6 +635,25 @@ func (w *DiskStorage) Sync() error {
 // syncLocked seals every dirty dependency before explicitly syncing metadata
 // with its new commit frontier. Ready and certificate publication share this order.
 func (w *DiskStorage) syncLocked() error {
+	if w.ready != nil {
+		if err := w.ready.check(); err != nil {
+			return err
+		}
+		// SetUint has no error return. Serialize its bounded staged fields before
+		// the barrier, including identity set before the first Ready.
+		if w.ready.ids != w.ready.persistedIDs {
+			if err := w.ready.append(nil, nil, nil, false); err != nil {
+				return err
+			}
+		}
+		if err := w.ready.sync(); err != nil {
+			return err
+		}
+		if w.syncStageForTest != nil {
+			w.syncStageForTest("ready")
+		}
+		return nil
+	}
 	if w.checkpointGuard {
 		for file := range w.wal.dirty {
 			if err := file.Sync(); err != nil {
@@ -487,5 +701,11 @@ func (w *DiskStorage) syncLocked() error {
 
 // Close closes the DiskStorage.
 func (w *DiskStorage) Close() error {
-	return w.Sync()
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	if w.ready != nil {
+		err := w.syncLocked()
+		return stdErrors.Join(err, w.ready.close())
+	}
+	return w.syncLocked()
 }

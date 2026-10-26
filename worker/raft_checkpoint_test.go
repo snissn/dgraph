@@ -53,7 +53,15 @@ func TestRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T) {
 	}
 }
 
+func TestRaftCheckpointReadyCut(t *testing.T) {
+	for _, cut := range []string{"after_retention", "pending_commit_certificate", "failed_native_snapshot_restart"} {
+		t.Run(cut, func(t *testing.T) { testRaftCheckpointReplayWithFormat(t, cut, true) })
+	}
+}
 func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string) {
+	testRaftCheckpointReplayWithFormat(t, cut, false)
+}
+func testRaftCheckpointReplayWithFormat(t *testing.T, cut string, ready bool) {
 	oldConfig, oldState, oldPstore, oldPostingStore, oldHardSync := Config, State, pstore, postingStore, x.WorkerConfig.HardSync
 	oldNode := gr.Node
 	oldRetries := x.Config.MaxRetries
@@ -77,7 +85,14 @@ func testRaftCheckpointRealMutationDeltaExactRootReplay(t *testing.T, cut string
 	Config = Options{PostingDir: dir + "/p", WALDir: dir + "/w", PostingStoreBackend: PostingStoreBackendTreeDB, PostingStoreTier: PostingStoreTierBenchmarkMinimal, PostingStoreDurability: PostingStoreDurabilityRaftCheckpoint, PostingStoreEvents: true}
 	x.WorkerConfig.HardSync = true
 	require.NoError(t, os.MkdirAll(Config.WALDir, 0700))
-	wal := raftwal.Init(Config.WALDir)
+	var wal *raftwal.DiskStorage
+	if ready {
+		var err error
+		wal, err = raftwal.InitCheckpointEncrypted(Config.WALDir, nil)
+		require.NoError(t, err)
+	} else {
+		wal = raftwal.Init(Config.WALDir)
+	}
 	defer wal.Close()
 	open := func() *node {
 		current = &ServerState{}

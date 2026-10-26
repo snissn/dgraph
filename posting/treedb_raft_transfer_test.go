@@ -38,6 +38,8 @@ func TestRaftTreeDBTransferDrainsReadersAndRejectsStaleWriters(t *testing.T) {
 	var archive bytes.Buffer
 	require.NoError(t, source.ExportRaftCheckpoint(context.Background(), &archive, cert.Generation, cert.Digest))
 	receiver := openRaftTransferStore(t, "receiver")
+	initialWorkLimit := receiver.writeWorkLimit
+	initialWorkEstimate := receiver.writeWorkEstimator.Estimate(8, 64)
 	commitStoreEntry(t, receiver, 1, Entry{Key: []byte("key"), Value: []byte("old")})
 	oldRead := receiver.NewReadTxn(math.MaxUint64)
 	t.Cleanup(oldRead.Discard)
@@ -98,6 +100,10 @@ func TestRaftTreeDBTransferDrainsReadersAndRejectsStaleWriters(t *testing.T) {
 	close(releaseCommit)
 	require.NoError(t, <-callback)
 	require.NoError(t, <-done)
+	require.Equal(t, initialWorkLimit, receiver.db.MVCCWriteWorkLimit())
+	require.Equal(t, initialWorkEstimate, receiver.db.NewMVCCWriteWorkEstimator().Estimate(8, 64))
+	require.Equal(t, initialWorkLimit, receiver.writeWorkLimit)
+	require.Equal(t, initialWorkEstimate, receiver.writeWorkEstimator.Estimate(8, 64))
 	<-authorized
 	require.ErrorIs(t, stale.CommitAt(2, nil), ErrTreeDBTxnClosed)
 	read := receiver.NewReadTxn(math.MaxUint64)

@@ -254,6 +254,14 @@ type eventStore struct {
 	bus *CommitEventBus
 }
 
+// Preserve the producer's scheduling fence through the production decorator.
+// Events and callbacks still wait for the underlying durable result.
+func (s eventStore) SealCommitWindow() {
+	if sealer, ok := s.Store.(commitWindowSealer); ok {
+		sealer.SealCommitWindow()
+	}
+}
+
 func (s eventStore) NewWriteTxn() WriteTxn {
 	// Define the subscription boundary at transaction creation so the enabled
 	// but unsubscribed path remains allocation-free.

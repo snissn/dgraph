@@ -21,6 +21,13 @@ type TxnWriter struct {
 	che   chan error
 }
 
+// commitWindowSealer is an optional scheduling boundary. It declares that the
+// producer has submitted its current input window; it does not wait for or
+// certify durability. Stores without a staged commit pipeline need no fence.
+type commitWindowSealer interface {
+	SealCommitWindow()
+}
+
 // NewTxnWriter returns a new TxnWriter instance backed by Badger.
 func NewTxnWriter(db *badger.DB) *TxnWriter {
 	return NewTxnWriterForStore(NewBadgerStore(db))
@@ -99,6 +106,9 @@ func (w *TxnWriter) Flush() error {
 }
 
 func (w *TxnWriter) Wait() error {
+	if sealer, ok := w.store.(commitWindowSealer); ok {
+		sealer.SealCommitWindow()
+	}
 	w.wg.Wait()
 	select {
 	case err := <-w.che:

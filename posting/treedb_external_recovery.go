@@ -28,6 +28,7 @@ func OpenRaftTreeDBStore(opts td.Options, identity string) (*TreeDBStore, error)
 		durability: "raft_checkpoint", commitQueue: make(chan treeDBCommitRequest, treeDBCommitQueueCapacity),
 		commitSlots: make(chan struct{}, treeDBCommitOwnershipLimit),
 	}
+	s.initializeWriteWork()
 	s.mutationPool.New = newTreeDBMutationBatch
 	if err := s.loadRaftPendingManifest(); err != nil {
 		return nil, errors.Join(err, owner.Close())
@@ -103,6 +104,8 @@ func (s *TreeDBStore) InstallRaftCheckpoint(ctx context.Context, src io.Reader,
 		}
 		return cert, err
 	}
+	// Install retains the original engine options and changes only its directory;
+	// the immutable producer-work constants remain valid for new and stale handles.
 	s.db = s.external.DB()
 	s.mvcc = mvcc.New(s.db)
 	return cert, nil

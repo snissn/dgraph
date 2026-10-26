@@ -236,195 +236,6 @@ func TestTreeDBStoreTxnWriterPipelinesAndCloseWaitsForAdmittedCommit(t *testing.
 	require.NoError(t, <-closeDone)
 }
 
-func TestTreeDBStoreDurableSchedulerOverlapsIndependentCommitsForGroupCommit(t *testing.T) {
-	store, opts := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
-	before, err := store.Stats()
-	require.NoError(t, err)
-
-	const commits = 4
-	started := make(chan struct{}, commits)
-	release := make(chan struct{})
-	store.commitStartedForTest = func(_ uint64, _ []mvcc.Mutation) {
-		started <- struct{}{}
-		<-release
-	}
-
-	done := make(chan error, commits)
-	for i := 0; i < commits; i++ {
-		txn := store.NewWriteTxn()
-		require.NoError(t, txn.SetEntry(Entry{
-			Key: []byte(fmt.Sprintf("independent-%d", i)), Value: []byte("value"),
-		}))
-		require.NoError(t, txn.CommitAt(uint64(i+1), func(err error) { done <- err }))
-	}
-
-	// This is a scheduler barrier, not a timing assertion: every independent
-	// request must reach the MVCC admission hook before any is allowed to enter
-	// Gomap's durable group-commit barrier. The timeout only detects a deadlock.
-	for i := 0; i < commits; i++ {
-		select {
-		case <-started:
-		case <-time.After(5 * time.Second):
-			t.Fatalf("only %d/%d independent commits reached the admission barrier", i, commits)
-		}
-	}
-	close(release)
-	for i := 0; i < commits; i++ {
-		require.NoError(t, <-done)
-	}
-
-	after, err := store.Stats()
-	require.NoError(t, err)
-	groups := treeDBStatDelta(t, before, after, "treedb.command_wal.group_commit.groups_total")
-	participants := treeDBStatDelta(t, before, after, "treedb.command_wal.group_commit.participants_total")
-	syncs := treeDBStatDelta(t, before, after, "treedb.command_wal.file_sync.calls_total")
-	require.Greater(t, groups, uint64(0), "independent durable commits must form a Gomap group")
-	require.Greater(t, participants, uint64(1), "the adapter must create a multi-commit group")
-	require.Less(t, syncs, uint64(commits), "a grouped durable acknowledgement must share command-WAL syncs")
-	require.Greater(t, treeDBStatUint(t, after, "treedb.command_wal.group_commit.group_size_max"), uint64(1))
-	require.NoError(t, store.Close())
-	reopened, err := OpenTreeDBStore(opts, TreeDBCommitDurable)
-	require.NoError(t, err)
-	defer func() { require.NoError(t, reopened.Close()) }()
-	read := reopened.NewReadTxn(math.MaxUint64)
-	defer read.Discard()
-	for i := 0; i < commits; i++ {
-		item, err := read.Get([]byte(fmt.Sprintf("independent-%d", i)))
-		require.NoError(t, err, "acknowledged grouped key %d must survive reopen", i)
-		value, err := item.ValueCopy(nil)
-		require.NoError(t, err)
-		require.Equal(t, []byte("value"), value)
-	}
-}
-
-func TestTreeDBStoreSchedulerOnlyOvertakesIndependentMultiKeyBatches(t *testing.T) {
-	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
-	started := make(chan uint64, 4)
-	release := make(chan struct{})
-	store.commitStartedForTest = func(timestamp uint64, _ []mvcc.Mutation) {
-		started <- timestamp
-		<-release
-	}
-
-	commit := func(timestamp uint64, keys ...string) <-chan error {
-		t.Helper()
-		txn := store.NewWriteTxn()
-		for _, key := range keys {
-			require.NoError(t, txn.SetEntry(Entry{Key: []byte(key), Value: []byte(key)}))
-		}
-		done := make(chan error, 1)
-		require.NoError(t, txn.CommitAt(timestamp, func(err error) { done <- err }))
-		return done
-	}
-
-	// The first admitted batch owns both a and b. Later batches touching either
-	// key must remain behind it, while the independent c batch may enter the
-	// bounded window. This defines the only permitted scheduler overtaking.
-	first := commit(1, "a", "b")
-	second := commit(2, "a")
-	third := commit(3, "b")
-	fourth := commit(4, "c")
-	seen := map[uint64]bool{}
-	for len(seen) != 2 {
-		select {
-		case timestamp := <-started:
-			seen[timestamp] = true
-		case <-time.After(5 * time.Second):
-			t.Fatalf("started commits=%v, want exactly first multi-key batch and independent batch", seen)
-		}
-	}
-	require.Equal(t, map[uint64]bool{1: true, 4: true}, seen)
-	select {
-	case timestamp := <-started:
-		t.Fatalf("dependent batch %d overtook its multi-key predecessor", timestamp)
-	default:
-	}
-	close(release)
-	for _, done := range []<-chan error{first, second, third, fourth} {
-		require.NoError(t, <-done)
-	}
-	require.NoError(t, store.Close())
-}
-
-func TestTreeDBStoreSchedulerPreservesTransitivePendingKeyDependencies(t *testing.T) {
-	store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
-	started := make(chan uint64, 4)
-	releaseA := make(chan struct{})
-	releaseB := make(chan struct{})
-	var releaseAOnce, releaseBOnce sync.Once
-	t.Cleanup(func() {
-		releaseAOnce.Do(func() { close(releaseA) })
-		releaseBOnce.Do(func() { close(releaseB) })
-	})
-	store.commitStartedForTest = func(timestamp uint64, _ []mvcc.Mutation) {
-		started <- timestamp
-		switch timestamp {
-		case 1:
-			<-releaseA
-		case 2:
-			<-releaseB
-		}
-	}
-
-	commit := func(timestamp uint64, keys ...string) <-chan error {
-		t.Helper()
-		txn := store.NewWriteTxn()
-		for _, key := range keys {
-			require.NoError(t, txn.SetEntry(Entry{Key: []byte(key), Value: []byte(key)}))
-		}
-		done := make(chan error, 1)
-		require.NoError(t, txn.CommitAt(timestamp, func(err error) { done <- err }))
-		return done
-	}
-
-	// B shares x with A and y with C. C must not bypass B merely because B is
-	// pending behind A. Only independent D may overlap A.
-	a := commit(1, "x")
-	b := commit(2, "x", "y")
-	c := commit(3, "y")
-	d := commit(4, "z")
-	seen := map[uint64]bool{}
-	for len(seen) != 2 {
-		select {
-		case timestamp := <-started:
-			seen[timestamp] = true
-		case <-time.After(5 * time.Second):
-			t.Fatalf("started commits=%v, want only A(x) and D(z)", seen)
-		}
-	}
-	require.Equal(t, map[uint64]bool{1: true, 4: true}, seen)
-
-	releaseAOnce.Do(func() { close(releaseA) })
-	select {
-	case timestamp := <-started:
-		require.Equal(t, uint64(2), timestamp, "B(x,y) must start before C(y)")
-	case <-time.After(5 * time.Second):
-		t.Fatal("B(x,y) did not start after A(x) completed")
-	}
-	select {
-	case timestamp := <-started:
-		t.Fatalf("C(y) bypassed pending B(x,y): started %d", timestamp)
-	default:
-	}
-
-	releaseBOnce.Do(func() { close(releaseB) })
-	select {
-	case timestamp := <-started:
-		require.Equal(t, uint64(3), timestamp, "C(y) must start after B(x,y) completes")
-	case <-time.After(5 * time.Second):
-		t.Fatal("C(y) did not start after B(x,y) completed")
-	}
-	for _, done := range []<-chan error{a, b, c, d} {
-		select {
-		case err := <-done:
-			require.NoError(t, err)
-		case <-time.After(5 * time.Second):
-			t.Fatal("admitted callback did not complete")
-		}
-	}
-	require.NoError(t, store.Close())
-}
-
 func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t *testing.T) {
 	t.Run("callback", func(t *testing.T) {
 		store, _ := openTreeDBPostingStore(t, t.TempDir(), TreeDBCommitDurable)
@@ -460,9 +271,8 @@ func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t 
 		require.NoError(t, second.CommitAt(2, func(err error) { secondDone <- err }))
 		select {
 		case err := <-secondFinished:
-			require.NoError(t, err)
-		case <-time.After(5 * time.Second):
-			t.Fatal("later independent callback commit did not physically complete")
+			t.Fatalf("later cohort physically passed its held predecessor: %v", err)
+		default:
 		}
 		select {
 		case err := <-secondDone:
@@ -508,16 +318,9 @@ func TestTreeDBStoreSchedulerWithholdsLaterAcknowledgementsUntilEarlierResult(t 
 		go func() { secondReturned <- second.CommitAt(2, nil) }()
 		select {
 		case err := <-secondFinished:
-			require.NoError(t, err)
-		case <-time.After(5 * time.Second):
-			t.Fatal("later independent synchronous commit did not physically complete")
+			t.Fatalf("synchronous successor physically passed held predecessor: %v", err)
+		default:
 		}
-		read := store.NewReadTxn(2)
-		item, err := read.Get([]byte("good"))
-		require.NoError(t, err, "later independent commit must have physically published")
-		_, err = item.ValueCopy(nil)
-		require.NoError(t, err)
-		read.Discard()
 		select {
 		case err := <-secondReturned:
 			t.Fatalf("later synchronous acknowledgement escaped before earlier error delivery: %v", err)
@@ -536,18 +339,10 @@ func TestTreeDBStoreFIFOAcknowledgementRetainsAdmissionOwnership(t *testing.T) {
 	var releaseOnce sync.Once
 	t.Cleanup(func() { releaseOnce.Do(func() { close(releaseFirst) }) })
 
-	var laterFinished atomic.Int32
-	laterPhysicalComplete := make(chan struct{})
-	var completedOnce sync.Once
 	store.commitStartedForTest = func(timestamp uint64, _ []mvcc.Mutation) {
 		if timestamp == 1 {
 			close(firstStarted)
 			<-releaseFirst
-		}
-	}
-	store.commitFinishedForTest = func(timestamp uint64, _ error) {
-		if timestamp != 1 && laterFinished.Add(1) == treeDBCommitOwnershipLimit-1 {
-			completedOnce.Do(func() { close(laterPhysicalComplete) })
 		}
 	}
 
@@ -570,13 +365,9 @@ func TestTreeDBStoreFIFOAcknowledgementRetainsAdmissionOwnership(t *testing.T) {
 			}
 		}
 	}
-	select {
-	case <-laterPhysicalComplete:
-	case <-time.After(5 * time.Second):
-		t.Fatal("later durable commits did not physically complete behind held acknowledgement")
-	}
+
 	require.Equal(t, treeDBCommitOwnershipLimit, len(store.commitSlots),
-		"physically completed but withheld results must retain admission ownership")
+		"the active cohort and queued successors must retain admission ownership")
 
 	overflow := store.NewWriteTxn()
 	require.NoError(t, overflow.SetEntry(Entry{Key: []byte("held-ack-overflow"), Value: []byte("value")}))

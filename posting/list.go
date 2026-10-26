@@ -1551,20 +1551,28 @@ func MarshalPostingList(plist *pb.PostingList, alloc *z.Allocator) *bpb.KV {
 		kv.UserMeta = alloc.Copy([]byte{BitEmptyPosting})
 		return kv
 	}
-	ref := plist.Pack.GetAllocRef()
-	if plist.Pack != nil {
-		// Set allocator to zero for marshal.
-		plist.Pack.AllocRef = 0
+	if plist.Pack != nil && plist.Pack.AllocRef != 0 {
+		// The immutable list can be shared by cached copies and concurrent
+		// marshals. Only the wire headers differ; keep borrowing the payload.
+		plist = copyPostingListHeader(plist)
+		pack := &pb.UidPack{BlockSize: plist.Pack.BlockSize, Blocks: plist.Pack.Blocks}
+		pack.ProtoReflect().SetUnknown(plist.Pack.ProtoReflect().GetUnknown())
+		plist.Pack = pack
 	}
-
 	out, err := x.MarshalToSizedBuffer(alloc.Allocate(proto.Size(plist)), plist)
 	x.Check(err)
-	if plist.Pack != nil {
-		plist.Pack.AllocRef = ref
-	}
 	kv.Value = out
 	kv.UserMeta = alloc.Copy([]byte{BitCompletePosting})
 	return kv
+}
+
+// copyPostingListHeader owns mutable header fields without cloning immutable
+// blocks, postings, splits or unknown wire payload. Do not copy MessageState.
+func copyPostingListHeader(plist *pb.PostingList) *pb.PostingList {
+	out := &pb.PostingList{Pack: plist.Pack, Postings: plist.Postings,
+		CommitTs: plist.CommitTs, Splits: plist.Splits}
+	out.ProtoReflect().SetUnknown(plist.ProtoReflect().GetUnknown())
+	return out
 }
 
 const blockSize int = 256
@@ -1573,13 +1581,28 @@ type rollupOutput struct {
 	plist    *pb.PostingList
 	parts    map[uint64]*pb.PostingList
 	newMinTs uint64
+	// Encoder ownership is independent of the final headers: splitting aliases
+	// packs and empty-part removal can discard them altogether.
+	ownedAllocs []*z.Allocator
 }
 
 func (out *rollupOutput) free() {
-	codec.FreePack(out.plist.Pack)
-	for _, part := range out.parts {
-		codec.FreePack(part.Pack)
+	for i, alloc := range out.ownedAllocs {
+		alloc.Release()
+		out.ownedAllocs[i] = nil
 	}
+	out.ownedAllocs = nil
+}
+
+// finishEncoder transfers the allocator exactly once when its pack is created.
+// Later pack headers (including binSplit views) do not confer ownership.
+func (out *rollupOutput) finishEncoder(enc *codec.Encoder) *pb.UidPack {
+	pack := enc.Done()
+	if enc.Alloc != nil {
+		out.ownedAllocs = append(out.ownedAllocs, enc.Alloc)
+		enc.Alloc = nil
+	}
+	return pack
 }
 
 /*
@@ -1618,6 +1641,13 @@ func (l *List) encode(out *rollupOutput, readTs uint64, split bool) error {
 	var startUid, endUid uint64
 	var splitIdx int
 	enc := codec.Encoder{BlockSize: blockSize}
+	// An iterator error can leave the current encoder unfinished. Completed
+	// encoders have already transferred their allocators to out.
+	defer func() {
+		if enc.Alloc != nil {
+			enc.Alloc.Release()
+		}
+	}()
 
 	// Method to properly initialize the variables above
 	// when a multi-part list boundary is crossed.
@@ -1645,7 +1675,7 @@ func (l *List) encode(out *rollupOutput, readTs uint64, split bool) error {
 
 	err := l.iterate(readTs, 0, func(p *pb.Posting) error {
 		if p.Uid > endUid && split {
-			plist.Pack = enc.Done()
+			plist.Pack = out.finishEncoder(&enc)
 			out.parts[startUid] = plist
 
 			splitIdx++
@@ -1662,7 +1692,7 @@ func (l *List) encode(out *rollupOutput, readTs uint64, split bool) error {
 	if err != nil {
 		return errors.Wrapf(err, "cannot iterate through the list")
 	}
-	plist.Pack = enc.Done()
+	plist.Pack = out.finishEncoder(&enc)
 	if plist.Pack != nil {
 		if plist.Pack.BlockSize != uint32(blockSize) {
 			return errors.Errorf("actual block size %d is different from expected value %d",
@@ -1698,12 +1728,13 @@ func (l *List) rollup(readTs uint64, split bool) (*rollupOutput, error) {
 		// In case there were splits, this would read all the splits from
 		// Badger.
 		if err := l.encode(out, readTs, split); err != nil {
+			out.free()
 			return nil, errors.Wrapf(err, "while encoding")
 		}
 	} else {
 		// We already have a nicely packed posting list. Just use it.
 		x.VerifyPack(l.plist)
-		out.plist = l.plist
+		out.plist = copyPostingListHeader(l.plist)
 	}
 
 	maxCommitTs := l.minTs

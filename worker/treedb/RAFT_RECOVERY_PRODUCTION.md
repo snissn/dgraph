@@ -338,3 +338,97 @@ reuse across certificate rotations. The walks are non-atomic; they do not author
 engine reachability, identify a GC cause, or establish a steady-state bound by themselves. No extra
 GC loop, administrative compact endpoint, background-cadence change or automatic S advance is
 introduced. The driver continues to report `equilibrium_qualified=false`.
+
+### Bounded preparation of decision materialization
+
+The external posting adapter uses the same immutable, engine-derived producer-work estimator as
+ordinary TreeDB construction. `SetEntry`/`Delete` reject work before copying the rejected operand: a
+nonempty fitting prefix reports the existing `ErrTxnTooBig` precommit cursor boundary; an entry that
+cannot fit an empty transaction reports terminal `ErrTreeDBEntryTooLarge`. The estimator shapes
+input; canonical COW admission remains authoritative. The finite queue bounds request count, not a
+claim that all queued adapter arenas are charged to the engine's in-flight budget. Engine limits,
+checkpoint cadence and the serial external `Apply` route are unchanged. The sizing constants contain
+no live engine pointer and remain valid across checkpoint installation, which reopens with the
+original options and a new directory.
+
+One Dgraph transaction may materialize through several independently atomic native storage calls at
+its original commit timestamp. This is not raw multi-chunk atomicity: a read bypassing the Oracle
+may observe a physical prefix. The original OracleDelta success boundary still requires **all**
+posting callbacks to drain before pending/terminal resolution, cache publication, Oracle/checksum
+advancement, semantic progress and subsequent certification/retirement. A terminal oversized later
+entry exits producer retry without resubmitting accepted prefixes and joins all already-owned
+callbacks before propagating its original error. Unrelated Badger retry behavior is preserved. A
+callback/storage error is never a successful visibility or checkpoint boundary.
+
+On failed decision materialization the old certificate and retained original Raft records remain
+recovery authority. A controlled reopen discards uncertified working changes and replays those
+records at their original timestamps; no intermediate prefix is certified. Local controlled reopen
+tests are not claims of process-crash coverage. A single raw oversized native request still refuses
+under the unchanged budgets, and external Checkpoint must never be called recursively from an
+`Apply` callback to make an oversized request appear to fit.
+
+### Ready durable cuts
+
+A fresh, explicitly selected TreeDB `raft_checkpoint` Alpha uses the Ready-cut Raft storage format.
+Backend and durability selectors are normalized and validated before either storage authority is
+opened. Fresh Badger and Zero directories keep the legacy format. Existing directories are opened by
+their actual format: an existing legacy directory is not converted by selecting `raft_checkpoint`,
+and an existing Ready directory is not reinterpreted as legacy. Competing format roots or orphan
+Ready fragments without an authoritative root fail closed. Startup logs the actual format; this cold
+receipt is separate from posting-store sync counters.
+
+The Ready journal owns one selected append file and a checksummed `raft-ready.current` root. A
+complete cut contains full HardState, identity and checkpoint hint, optional snapshot metadata/data,
+and its contiguous entry suffix. Header, body and terminal witness checksums bound the complete
+frame. Save streams caller bytes into the file before exposing its derived index; it does not retain
+caller payloads or allocate a second complete Ready image. The selected physical format is version2:
+a fully zero-initialized fixed-capacity file with a distinct logical end. Two generation-bound
+checksummed prefix slots carry only sequence/end/integrity evidence for those same Ready frames. A
+dirty required Sync writes one slot and performs one data-persistence barrier (Linux fdatasync, full
+file sync elsewhere). Initial allocation/size and every new base are fully synced before root
+publication. Published files are not resized or truncated to logical end on Close. Existing
+experimental version1 Ready roots are explicitly refused; legacy wal.meta directories remain
+supported. An ordinary required Sync flushes that initialized file once. Creating a file, rotating
+an encryption key or replacing a generation also requires its own namespace/key publication fences;
+these are not claimed to be one-barrier ordinary Ready operations.
+
+Alpha and Zero keep their synchronous Ready/Save/required-Sync/apply/Advance ordering. The shared
+required-Sync helper returns a terminal new-format error before apply or Advance. Invalid pre-write
+input is terminal without poisoning; uncertain append, sync, close, generation or namespace failures
+poison the owner and require reopen. A later successful same-descriptor sync is not a recovery proof
+after writeback EIO. Legacy transient-error retry behavior is unchanged.
+
+Recovery validates each complete physical envelope before length-driven metadata allocation and
+semantic replay. It rejects committed-prefix, election, commit, snapshot and contiguous-log
+regressions. Only a positively incomplete, unwitnessed final append is discarded; complete corrupt
+frames, malformed prefix witnesses, unexplained nonzero reserve or a valid witness beyond the
+verified prefix are errors. Cold accepted-install identity and normal replay share this physical
+interpretation. A newer valid witness covering damaged bytes never falls back to an older slot:
+reordered unacknowledged persistence and later corruption of acknowledged data cannot be
+distinguished from that image. Conservative refusal is intentional, just as the former stream
+refused a damaged complete frame within physical EOF. No claim of detection of arbitrary coordinated
+whole-file rollback/erasure is made. Accepted snapshot-install intent, archive and receiver identity
+are validated before tail repair or cleanup. Encrypted frames use independent random per-record CTR
+nonces, including when a reopen reuses the sequence and byte offset of a discarded tail; encryption
+keys continue to use the maintained key registry.
+
+Only the posting owner's durable certificate authorizes retention. Cold generation replacement
+streams the certified snapshot and **all** newer saved entries and HardState into one complete base,
+syncs it, publishes and syncs the root, then retires the predecessor and syncs the directory. It
+never dual-writes `wal.meta`. Unselected generation files and owned unpublished-root temporary files
+are reclaimed on reopen only after accepted-install and selected-generation validation succeed. An
+unfinished accepted install retains its original archive/intent until exact receiver reconciliation
+and durable completion. Legacy install fault stages remain covered separately from new cut/root
+publication boundaries. Ordinary append stays within initialized space. Capacity pressure uses the
+same private base replacement. Pressure reserves checked geometric headroom for every retained
+prefix, including prefixes above16MiB; a single larger atomic input stays legal. Cold certificate
+replacement separately bounds normal retained reserve to 64KiB–16MiB, without discarding live bytes.
+These are physical sizing policies, not legal Ready-size limits or a change to certificate cadence.
+An oversized generation grants no permanent oversized normal reserve after certification.
+Synchronous replacement borrows only the quiescent journal-owned I/O workspace under the original
+storage lock. Source reads keep the exact predecessor open; full in-place encrypted chunks are
+consumed before reuse. Success rebinds output to the installed generation, while failure discards
+private buffered bytes and retains fail-stop poisoning. There is no pooled or recycled entry/index
+ownership. Initialization and root/retirement fences remain whole-lifecycle work. The active journal
+can grow through these replacements while certification is blocked; this is not a new background
+checkpoint, retention cadence, or claim of a bound independent of the existing certificate.
