@@ -30,7 +30,7 @@ import (
 
 // This test exercises the original producer, real List.Rollup, production event
 // wrapper, FIFO admission and native durable backend, not a concatenation helper.
-func TestR10RollupProcessNativeRoute(t *testing.T) {
+func TestRollupProcessNativeRoute(t *testing.T) {
 	store, _ := openPipelinePostingStore(t, t.TempDir())
 	oldStore, oldOracle := postingStore, o
 	bus := NewCommitEventBus(1)
@@ -78,7 +78,7 @@ func TestR10RollupProcessNativeRoute(t *testing.T) {
 	}
 }
 
-func TestR10RollupNativeVersionsDuplicatesAndReopen(t *testing.T) {
+func TestRollupNativeVersionsDuplicatesAndReopen(t *testing.T) {
 	for _, backend := range []string{"treedb", "badger"} {
 		t.Run(backend, func(t *testing.T) {
 			var store Store
@@ -134,7 +134,7 @@ func TestR10RollupNativeVersionsDuplicatesAndReopen(t *testing.T) {
 	}
 }
 
-func TestR10RollupChunkBackpressureAndAmbiguousError(t *testing.T) {
+func TestRollupChunkBackpressureAndAmbiguousError(t *testing.T) {
 	s := &rollupFakeBulk{Store: newFakeCommitStore(), entered: make(chan int, 2), release: make(chan struct{}), err: errors.New("ambiguous sync")}
 	w := &rollupWriter{store: s}
 	done := make(chan error, 1)
@@ -175,7 +175,7 @@ func (s *rollupFakeBulk) writeRollupBatch(kvs []*bpb.KV, _ uint64) error {
 	return s.err
 }
 
-func TestR10RollupEventDepthOneAndCreationBoundary(t *testing.T) {
+func TestRollupEventDepthOneAndCreationBoundary(t *testing.T) {
 	s, _ := openPipelinePostingStore(t, t.TempDir())
 	bus := NewCommitEventBus(1)
 	defer bus.Close()
@@ -202,7 +202,7 @@ func TestR10RollupEventDepthOneAndCreationBoundary(t *testing.T) {
 	}
 }
 
-func TestR10RollupFIFOFailureNoRetry(t *testing.T) {
+func TestRollupFIFOFailureNoRetry(t *testing.T) {
 	s, _ := openPipelinePostingStore(t, t.TempDir())
 	want := errors.New("storage refused")
 	var calls atomic.Int32
@@ -218,7 +218,7 @@ func TestR10RollupFIFOFailureNoRetry(t *testing.T) {
 	require.Zero(t, s.commitStagedBytes.Load())
 }
 
-func TestR10RollupWorkBoundAndRootFence(t *testing.T) {
+func TestRollupWorkBoundAndRootFence(t *testing.T) {
 	s, _ := openPipelinePostingStore(t, t.TempDir())
 	s.writeWorkLimit = s.writeWorkEstimator.Estimate(1, treeDBEnvelopeHeader+1)
 	w := &rollupWriter{store: s}
@@ -232,7 +232,7 @@ func TestR10RollupWorkBoundAndRootFence(t *testing.T) {
 	require.Zero(t, s.commitStagedBytes.Load())
 }
 
-func TestR10RollupValidationPartialPrefixAndClose(t *testing.T) {
+func TestRollupValidationPartialPrefixAndClose(t *testing.T) {
 	s, _ := openPipelinePostingStore(t, t.TempDir())
 	w := &rollupWriter{store: s}
 	require.NoError(t, w.Write(&bpb.KVList{Kv: []*bpb.KV{{Key: []byte("good"), Value: []byte("v"), Version: 1}, {Key: make([]byte, 65536), Version: 2}, {Key: []byte("later"), Value: []byte("v"), Version: 3}}}))
@@ -246,7 +246,7 @@ func TestR10RollupValidationPartialPrefixAndClose(t *testing.T) {
 	require.Zero(t, len(s.commitSlots))
 }
 
-func TestR10RollupFIFOOwnCompletionAndClose(t *testing.T) {
+func TestRollupFIFOOwnCompletionAndClose(t *testing.T) {
 	s, _ := openPipelinePostingStore(t, t.TempDir())
 	release := holdTreeDBCohortRequest(t, s, 1)
 	done := make(chan error, 1)
@@ -281,7 +281,7 @@ func TestR10RollupFIFOOwnCompletionAndClose(t *testing.T) {
 	require.Zero(t, s.commitStagedBytes.Load())
 }
 
-func TestR10RollupSplitRootsPreserveWireAndVersions(t *testing.T) {
+func TestRollupSplitRootsPreserveWireAndVersions(t *testing.T) {
 	s, _ := openPipelinePostingStore(t, t.TempDir())
 	oldMax := maxListSize
 	maxListSize = 64
@@ -310,7 +310,7 @@ func TestR10RollupSplitRootsPreserveWireAndVersions(t *testing.T) {
 	}
 }
 
-func TestR10RollupUnsupportedScalarAndEventFailure(t *testing.T) {
+func TestRollupUnsupportedScalarAndEventFailure(t *testing.T) {
 	s, _ := openPipelinePostingStore(t, t.TempDir())
 	unsupported := &rollupUnsupported{Store: s}
 	w := &rollupWriter{store: unsupported}
@@ -324,7 +324,8 @@ func TestR10RollupUnsupportedScalarAndEventFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.Close())
 	w = &rollupWriter{store: WithCommitEvents(unsupported, bus)}
-	require.Error(t, w.Write(&bpb.KVList{Kv: []*bpb.KV{{Key: []byte("closed"), Version: 3}}}))
+	require.NoError(t, w.Write(&bpb.KVList{Kv: []*bpb.KV{{Key: []byte("closed"), Version: 3}}}))
+	require.Error(t, w.Flush(), "original scalar fallback reports asynchronous completion errors at Flush")
 	select {
 	case e := <-events:
 		t.Fatalf("failed event published: %+v", e)
@@ -339,7 +340,7 @@ type rollupUnsupported struct {
 
 func (s *rollupUnsupported) NewWriteTxn() WriteTxn { s.created.Add(1); return s.Store.NewWriteTxn() }
 
-func TestR10RollupEncodedByteBound(t *testing.T) {
+func TestRollupEncodedByteBound(t *testing.T) {
 	s := &rollupCountingBulk{Store: newFakeCommitStore()}
 	w := &rollupWriter{store: s}
 	value := make([]byte, rollupChunkPayloadBytes/2)
@@ -370,8 +371,12 @@ func (s *rollupCountingBulk) writeRollupBatch(kvs []*bpb.KV, _ uint64) error {
 	return nil
 }
 
-func TestR10RollupNativePhysicalSyncCompletion(t *testing.T) {
+func TestRollupNativePhysicalSyncCompletion(t *testing.T) {
 	s, opts := openPipelinePostingStore(t, t.TempDir())
+	bus := NewCommitEventBus(8)
+	defer bus.Close()
+	events, err := bus.Subscribe(context.Background(), 4)
+	require.NoError(t, err)
 	entered, release := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	unblock := func() { once.Do(func() { close(release) }) }
@@ -389,7 +394,7 @@ func TestR10RollupNativePhysicalSyncCompletion(t *testing.T) {
 	defer restore()
 	done := make(chan error, 1)
 	go func() {
-		w := &rollupWriter{store: s}
+		w := &rollupWriter{store: WithCommitEvents(s, bus)}
 		err := w.Write(&bpb.KVList{Kv: []*bpb.KV{{Key: []byte("shared"), Value: []byte("one"), Version: 1}, {Key: []byte("shared"), Value: []byte("two"), Version: 2}}})
 		if err == nil {
 			err = w.Flush()
@@ -406,15 +411,28 @@ func TestR10RollupNativePhysicalSyncCompletion(t *testing.T) {
 		t.Fatalf("native rollup ACK before sync: %v", err)
 	default:
 	}
+	select {
+	case e := <-events:
+		t.Fatalf("event before physical sync: %+v", e)
+	default:
+	}
 	require.Equal(t, uint64(1), s.durableRequests.Load())
 	require.NotZero(t, s.commitStagedBytes.Load())
 	unblock()
 	require.NoError(t, <-done)
 	require.Equal(t, int32(1), syncs.Load())
+	for _, ts := range []uint64{1, 2} {
+		select {
+		case e := <-events:
+			require.Equal(t, ts, e.CommitTs)
+		case <-time.After(time.Second):
+			t.Fatal("missing durable rollup event")
+		}
+	}
 	require.Equal(t, "two", pointSnapshot(t, s, 2, []byte("shared")).Value)
 }
 
-func TestR10RollupNativeGroupBoundWithForegroundNeighbours(t *testing.T) {
+func TestRollupNativeGroupBoundWithForegroundNeighbours(t *testing.T) {
 	s, _ := openPipelinePostingStore(t, t.TempDir())
 	release := holdTreeDBCohortRequest(t, s, 1)
 	s.commitGroupsForTest = func(groups []mvcc.CommitGroup, mode mvcc.CommitMode) error {
@@ -456,26 +474,72 @@ func TestR10RollupNativeGroupBoundWithForegroundNeighbours(t *testing.T) {
 	require.Empty(t, s.commitSlots)
 }
 
-func TestR10RollupReadinessDrainsBeforeCancellation(t *testing.T) {
+func TestTreeDBRollupPreparationCancellationHasNoAdmission(t *testing.T) {
 	oldOracle := o
 	o = &oracle{}
 	o.init()
 	defer func() { o = oldOracle }()
-	s := &rollupFakeBulk{Store: newFakeCommitStore(), entered: make(chan int, 1), release: make(chan struct{})}
-	w := &rollupWriter{store: s}
-	require.NoError(t, w.Write(&bpb.KVList{Kv: []*bpb.KV{{Key: []byte("pending"), Version: 1}}}))
 	closeRun := z.NewCloser(0)
 	ir := &incrRollupi{getNewTs: func(bool) uint64 { return 100 }, closer: closeRun}
 	done := make(chan error, 1)
-	go func() { done <- ir.rollUpKey(w, x.DataKey(x.AttrInRootNamespace("cancel-rollup"), 1)) }()
-	require.Equal(t, 1, <-s.entered)
+	go func() { _, err := ir.prepareRollup(); done <- err }()
+	awaitTreeDBCohort(t, "real waiter", func() bool { o.RLock(); defer o.RUnlock(); return len(o.waiters[100]) > 0 })
 	closeRun.Signal()
-	select {
-	case err := <-done:
-		t.Fatalf("abandoned accepted chunk: %v", err)
-	default:
-	}
-	close(s.release)
 	require.ErrorIs(t, <-done, ErrHighPriorityOp)
-	require.Zero(t, w.n)
+}
+
+func TestTreeDBRollupProcessSubscribedDelayedReadiness(t *testing.T) {
+	store, _ := openPipelinePostingStore(t, t.TempDir())
+	oldStore, oldOracle := postingStore, o
+	bus := NewCommitEventBus(256)
+	postingStore = WithCommitEvents(store, bus)
+	defer bus.Close()
+	events, err := bus.Subscribe(context.Background(), 64)
+	require.NoError(t, err)
+	_ = events
+	o = &oracle{}
+	o.init()
+	o.ProcessDelta(&pb.OracleDelta{MaxAssigned: 10})
+	defer func() { postingStore = oldStore; o = oldOracle }()
+	keys := make([][]byte, 16)
+	for i := range keys {
+		keys[i] = x.DataKey(x.AttrInRootNamespace("native-rollup"), uint64(i+1))
+		pack := codec.Encode([]uint64{uint64(i + 1)}, blockSize)
+		wire := MarshalPostingList(&pb.PostingList{Pack: pack}, nil).Value
+		commitStoreEntry(t, store, 10, Entry{Key: keys[i], Value: wire, UserMeta: BitCompletePosting})
+		codec.FreePack(pack)
+	}
+	before := store.durableRequests.Load()
+	producedBefore, completedBefore := rollupWork.producedKVs.Load(), rollupWork.completedKVs.Load()
+	ir := &incrRollupi{priorityKeys: make([]*pooledKeys, 2)}
+	for i := range ir.priorityKeys {
+		ir.priorityKeys[i] = &pooledKeys{keysCh: make(chan *[][]byte, 1), keysPool: &sync.Pool{New: func() interface{} { return new([][]byte) }}}
+	}
+	sent := append([][]byte(nil), keys...)
+	ir.priorityKeys[0].keysCh <- &sent
+	closeRun := z.NewCloser(1)
+	var timestamps atomic.Int32
+	go ir.Process(closeRun, func(readonly bool) uint64 {
+		if readonly {
+			panic("read-only rollup timestamp")
+		}
+		return 100 + uint64(timestamps.Add(1))
+	})
+	for i := uint64(101); i <= 116; i++ {
+		awaitTreeDBCohort(t, "actual per-key Oracle waiter", func() bool { o.RLock(); defer o.RUnlock(); return len(o.waiters[i]) > 0 })
+		require.Empty(t, bus.admissionSlots, "readiness phase must reserve no event slots")
+		require.Equal(t, before, store.durableRequests.Load(), "readiness phase must admit no maintenance storage")
+		o.ProcessDelta(&pb.OracleDelta{MaxAssigned: i})
+	}
+	// Completion is visible only once the producer has returned its original batch.
+	awaitTreeDBCohort(t, "completed original batch", func() bool { return len(store.commitSlots) == 0 && store.durableRequests.Load() > before })
+	closeRun.SignalAndWait()
+	require.Equal(t, int32(16), timestamps.Load())
+	require.Equal(t, uint64(16), rollupWork.producedKVs.Load()-producedBefore)
+	require.Equal(t, uint64(16), rollupWork.completedKVs.Load()-completedBefore)
+	require.Equal(t, uint64(1), store.durableRequests.Load()-before, "16 rolled-up roots must be one native FIFO request")
+	for _, key := range keys {
+		snap := pointSnapshot(t, store, 1000, key)
+		require.Equal(t, uint64(11), snap.Version)
+	}
 }

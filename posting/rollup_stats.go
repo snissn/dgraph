@@ -17,6 +17,8 @@ import (
 var rollupWork struct {
 	producedKVs, producedBytes, submittedKVs, submittedBytes       atomic.Uint64
 	completedKVs, completedBytes, unconfirmedKVs, unconfirmedBytes atomic.Uint64
+	nativeCompletedKVs, eventPressureCuts, readDependencyCuts      atomic.Uint64
+	readinessWaits, nativeKVs                                      atomic.Uint64
 	nativeChunks, nativeCompleted                                  atomic.Uint64
 }
 
@@ -62,6 +64,11 @@ func RollupStats() map[string]string {
 		{"completed_bytes", &rollupWork.completedBytes},
 		{"unconfirmed_kvs", &rollupWork.unconfirmedKVs},
 		{"unconfirmed_bytes", &rollupWork.unconfirmedBytes},
+		{"readiness_waits", &rollupWork.readinessWaits},
+		{"native_completed_kvs", &rollupWork.nativeCompletedKVs},
+		{"event_pressure_cuts", &rollupWork.eventPressureCuts},
+		{"read_dependency_cuts", &rollupWork.readDependencyCuts},
+		{"native_kvs", &rollupWork.nativeKVs},
 		{"native_chunks", &rollupWork.nativeChunks},
 		{"native_completed_chunks", &rollupWork.nativeCompleted},
 	}

@@ -87,7 +87,7 @@ func subscribeToTreeDBCommitEvents(
 	if err != nil {
 		return err
 	}
-	events, err := bus.Subscribe(ctx, 16)
+	events, err := bus.SubscribeMatching(ctx, 16, matcher.matches)
 	if err != nil {
 		return err
 	}

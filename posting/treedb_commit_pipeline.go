@@ -95,7 +95,7 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 		}
 		carried, hasCarried = treeDBCommitRequest{}, false
 		aggregate.requests[0], aggregate.n = first, 1
-		ownedBytes, work := first.batch.ownedBytes(), first.batch.work
+		ownedBytes, work := first.ownedBytes(), first.batch.work
 		groupCount := first.groupCount()
 		for !s.reserveCommitStaging(ownedBytes) {
 			<-s.commitWake
@@ -129,7 +129,7 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 				queue = nil
 				break collect
 			}
-			size := request.batch.ownedBytes()
+			size := request.ownedBytes()
 			if groupCount+request.groupCount() > treeDBCommitOwnershipLimit || size > treeDBCommitCohortBytes-ownedBytes || work > s.writeWorkLimit || request.batch.work > s.writeWorkLimit-work || !s.reserveCommitStaging(size) {
 				carried, hasCarried = request, true
 				break collect
@@ -279,6 +279,7 @@ func (s *TreeDBStore) commitAggregateGroups(a *treeDBCommitAggregate) {
 	s.commitDurableGroups(a.groups[:a.groupN], results[:a.groupN])
 	from := 0
 	for i := range a.n {
+		a.requests[i].setGroupResults(results[from:a.groupEnds[i]])
 		for _, err := range results[from:a.groupEnds[i]] {
 			if a.results[i] == nil {
 				a.results[i] = err

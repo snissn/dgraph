@@ -40,6 +40,7 @@ type commitSubscriber struct {
 	ctx        context.Context
 	ch         chan CommitEvent
 	registered chan struct{}
+	matches    func([]byte) bool
 }
 
 // CommitEventBus is an in-process, non-durable post-commit broadcaster owned by
@@ -89,12 +90,29 @@ func (b *CommitEventBus) SubscriberCount() int64 {
 	return b.subscribers.Load()
 }
 
+// tryAdmit never waits for another event's publication. The false result means
+// pressure: a producer with buffered admissions must submit them before waiting.
+func (b *CommitEventBus) tryAdmit(commitTs uint64, mutations []CommitMutation) (CommitEvent, bool) {
+	select {
+	case b.admissionSlots <- struct{}{}:
+		return b.admitReserved(commitTs, mutations), true
+	case <-b.ctx.Done():
+		return CommitEvent{}, true
+	default:
+		return CommitEvent{}, false
+	}
+}
+
 func (b *CommitEventBus) admit(commitTs uint64, mutations []CommitMutation) CommitEvent {
 	select {
 	case b.admissionSlots <- struct{}{}:
+		return b.admitReserved(commitTs, mutations)
 	case <-b.ctx.Done():
 		return CommitEvent{}
 	}
+}
+
+func (b *CommitEventBus) admitReserved(commitTs uint64, mutations []CommitMutation) CommitEvent {
 	b.admissionMu.Lock()
 	defer b.admissionMu.Unlock()
 	if b.closing {
@@ -102,12 +120,7 @@ func (b *CommitEventBus) admit(commitTs uint64, mutations []CommitMutation) Comm
 		return CommitEvent{}
 	}
 	b.inflight.Add(1)
-	return CommitEvent{
-		Sequence:  b.nextSequence.Add(1) - 1,
-		CommitTs:  commitTs,
-		Mutations: mutations,
-		admitted:  true,
-	}
+	return CommitEvent{Sequence: b.nextSequence.Add(1) - 1, CommitTs: commitTs, Mutations: mutations, admitted: true}
 }
 
 func (b *CommitEventBus) complete(completion commitCompletion) {
@@ -125,11 +138,18 @@ func (b *CommitEventBus) complete(completion commitCompletion) {
 // Subscribe registers an ordered subscriber. The returned channel is closed
 // after ctx cancellation or bus shutdown.
 func (b *CommitEventBus) Subscribe(ctx context.Context, buffer int) (<-chan CommitEvent, error) {
+	return b.SubscribeMatching(ctx, buffer, nil)
+}
+
+// SubscribeMatching evaluates an immutable, nonblocking key predicate only at
+// publication. It does not narrow transaction creation or late-join eligibility.
+// A nil predicate receives every successful event, as Subscribe always has.
+func (b *CommitEventBus) SubscribeMatching(ctx context.Context, buffer int, matches func([]byte) bool) (<-chan CommitEvent, error) {
 	if buffer < 0 {
 		buffer = 0
 	}
 	sub := &commitSubscriber{
-		ctx: ctx, ch: make(chan CommitEvent, buffer), registered: make(chan struct{}),
+		ctx: ctx, ch: make(chan CommitEvent, buffer), registered: make(chan struct{}), matches: matches,
 	}
 	select {
 	case b.add <- sub:
@@ -199,6 +219,18 @@ func (b *CommitEventBus) run() {
 	}
 	publish := func(event CommitEvent) bool {
 		for sub := range subs {
+			if sub.matches != nil {
+				matched := false
+				for _, mutation := range event.Mutations {
+					if sub.matches(mutation.Entry.Key) {
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					continue
+				}
+			}
 			select {
 			case sub.ch <- event:
 			case <-sub.ctx.Done():
@@ -272,16 +304,14 @@ func (s eventStore) SealCommitWindow() {
 	}
 }
 
-// Capture the same per-logical-transaction subscription boundary as NewWriteTxn.
-// The producer drains a native chunk before an instrumented scalar commit, so
-// even a one-slot event bus cannot deadlock on admissions awaiting that chunk.
-func (s eventStore) rollupEntryTarget() (rollupBulkStore, WriteTxn) {
-	if s.bus.subscribers.Load() != 0 {
-		return nil, &eventWriteTxn{WriteTxn: s.Store.NewWriteTxn(), bus: s.bus}
-	}
+// Capture event eligibility separately from backend eligibility. The writer
+// retains this creation boundary even if subscribers join before publication.
+func (s eventStore) rollupEntryTarget() rollupBulkStore {
 	target, _ := s.Store.(rollupBulkStore)
-	return target, nil
+	return target
 }
+
+func (s eventStore) rollupEvents() *CommitEventBus { return s.bus }
 
 func (s eventStore) NewWriteTxn() WriteTxn {
 	// Define the subscription boundary at transaction creation so the enabled

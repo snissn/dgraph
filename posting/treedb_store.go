@@ -449,12 +449,14 @@ type treeDBMutationBatch struct {
 }
 
 type treeDBCommitRequest struct {
-	sequence  uint64
-	commitTs  uint64
-	batch     *treeDBMutationBatch
-	callback  func(error)
-	done      chan error
-	rootEpoch uint64
+	sequence          uint64
+	commitTs          uint64
+	batch             *treeDBMutationBatch
+	callback          func(error)
+	done              chan error
+	groupResults      []error // caller-owned bounded vector, retained until done
+	groupResultsKnown bool
+	rootEpoch         uint64
 }
 
 type treeDBCommitCompletion struct {
@@ -721,7 +723,7 @@ func (s *TreeDBStore) runDurableCommitQueueFIFO() {
 		requests[0] = first
 		n := 1
 		groupCount := first.groupCount()
-		ownedBytes := first.batch.ownedBytes()
+		ownedBytes := first.ownedBytes()
 		work := first.batch.work
 	collect:
 		for n < len(requests) && ownedBytes < treeDBCommitCohortBytes {
@@ -731,7 +733,7 @@ func (s *TreeDBStore) runDurableCommitQueueFIFO() {
 					queue = nil
 					break collect
 				}
-				size := request.batch.ownedBytes()
+				size := request.ownedBytes()
 				if groupCount+request.groupCount() > treeDBCommitOwnershipLimit || size > treeDBCommitCohortBytes-ownedBytes ||
 					(s.writeWorkLimit != 0 && (work > s.writeWorkLimit || request.batch.work > s.writeWorkLimit-work)) {
 					carried, hasCarried = request, true
@@ -771,6 +773,7 @@ func (s *TreeDBStore) runDurableCommitQueueFIFO() {
 			s.commitDurableGroups(groups[:ng], groupResults[:ng])
 			from := 0
 			for i := range n {
+				requests[i].setGroupResults(groupResults[from:ends[i]])
 				for _, err := range groupResults[from:ends[i]] {
 					if results[i] == nil {
 						results[i] = err
@@ -840,6 +843,11 @@ func (s *TreeDBStore) completeTreeDBCommit(completion treeDBCommitCompletion) {
 }
 
 func (s *TreeDBStore) deliverTreeDBCommit(completion treeDBCommitCompletion) {
+	if !completion.request.groupResultsKnown && completion.err != nil {
+		for i := range completion.request.groupResults {
+			completion.request.groupResults[i] = completion.err
+		}
+	}
 	if completion.request.done != nil {
 		completion.request.done <- completion.err
 	}

@@ -1,72 +1,117 @@
 # Bounded incremental-rollup writes
 
-Incremental rollup keeps its original received key batches, priority selection,
-hash throttle, per-key non-readonly timestamps, Oracle readiness waits and
-`List.Rollup` versions. Only completed rollup output uses the optional native
-multi-version write route. Foreground `TxnWriter` behavior is unchanged.
+Only TreeDB's native incremental-rollup route changes batching. Badger and
+unsupported stores retain the original asynchronous `TxnWriter`: per-key
+readiness, per-KV callbacks, and the original process-end completion drain.
+Foreground `TxnWriter` behavior is unchanged.
 
-One producer holds at most 64 KV references in its output chunk. The 4 MiB bound
-reserves space for the maximum 64 TreeDB group descriptors; payload charges key,
-value and posting-envelope bytes. A single oversized entry follows the original
-backend atomic-entry admission/error rule. A large split list is consumed in
-order through successive chunks, retaining its original output ownership and
-partial-write semantics. Completion is drained before another chunk is produced,
-before a real Oracle readiness wait, at the received batch boundary, and at
-producer shutdown. No list/root/lifecycle lock is held during the drain.
+TreeDB uses the original received key batch, priorities, hash throttle, distinct
+per-key non-readonly timestamps and Oracle waits. It first prepares at most 16
+borrowed key/timestamp descriptors, in order, without receiving ahead. No List or
+root lock, materialized output, event reservation or storage request spans this
+readiness phase. It then materializes one key at a time using the original
+`GetNoStore` and `List.Rollup(readTs)` included-version-plus-one rules. Root epoch
+is captured before reading, not after output was computed. Pending root/part
+writes drain before a read in that same physical-key family. Unrelated keys do
+not force this dependency cut. All admitted output drains and its event outcomes
+are handed to the bus before the next readiness phase; subscriber publication
+need not finish and the bus need not become empty.
 
-TreeDB admits each native part as one original FIFO request containing explicit
-per-version groups. It uses the existing mutation pool, copied arena, root epoch,
-request slots, two aggregate records, shared staging allowance and completion
-owner. Cohort collection caps both requests and native groups at 65, in addition
-to existing byte/work limits. Descriptor backing capacity is charged to the byte
-allowance, cleared on release and retained only within the existing pool's
-64-entry limit. Physical-key duplicates split before admission; distinct versions
-of the same logical key survive. Work-limit shaping splits only an unsubmitted
-suffix. Buffered entries retain the root epoch captured at logical creation and
-are refused after a root install.
+One producer holds at most 64 KV references and their completion/event metadata.
+The 4-MiB chunk allowance reserves maximum group, completion and event descriptor
+headroom; operands charge key/value/envelope bytes plus independent event-owned
+key/value and mutation metadata where instrumented. This is a bounded logical
+payload allowance, not an exact Go heap-capacity or process-RSS claim. One
+oversized entry follows the existing atomic-entry admission/error rule. A large
+single-key split output is consumed in order through successive bounded chunks;
+this does not materialize all 16 keys at once. During submission the original Rollup KV payload remains live while the native
+mutation arena copies its key/value data; instrumented entries also retain an
+independent event copy. If A denotes original charged operand bytes and E denotes
+charged event bytes, the producer cutoff bounds A+E plus reserved descriptors to
+4 MiB, while submission can temporarily retain 2A+E: below 8 MiB of these logical
+payload bytes for ordinary bounded chunks. This does not bound allocation
+capacity, engine copies or total heap. Arena growth can retain unused capacity;
+the existing pool retains only its established small-capacity backings. The
+current single-key List.Rollup output can exceed one chunk and remains live
+while its successive chunks drain, and the existing oversized atomic-entry
+exception remains. Completed event payloads can outlive the producer chunk under
+the original independently bounded event-slot budget. No new pool or lifetime
+owner combines these separate bounds.
 
-Badger uses its managed write batch, `SetEntryAt`, the existing metadata/discard
-flags, one pending native transaction and `Flush`. `Cancel` drains unfinished
-error paths. A native batch can already have committed a prefix when it fails;
-neither backend promises cross-backend all-or-nothing behavior. Only the existing
-TreeDB pre-storage validation subdivision can retry smaller groups. Storage or
-ambiguous errors never cause scalar fallback or replay.
+Count, byte, duplicate key/version, read-dependency, root transition,
+event-pressure and received-window boundaries can cut native work. No lock spans
+storage completion.
 
-The commit-event decorator captures subscription state for each logical entry.
-Uninstrumented entries can share native work. Before an instrumented entry it
-drains native work and commits through the original decorated scalar transaction,
-then waits for completion before another event admission. A one-slot event bus
-therefore works without reserving slots that depend on an unsubmitted batch.
-Joining after an entry's creation does not retroactively instrument that entry.
-Unsupported stores likewise use scalar transactions, selected before submission.
+TreeDB admits each native part as one original FIFO request with explicit
+per-version groups, reusing its mutation pool/arena, root epoch, slots, two
+aggregate records and original completion owner. Shared staging counts group
+backing and the bounded completion-vector bytes. Cohorts still cap both native
+groups and requests at65 and retain byte/work limits. Only an unsubmitted suffix
+can split to meet work limits. Only wholly pre-storage validation refusals allow
+the existing subgroup validation retry; storage/ambiguous failures never retry.
+A bounded vector preserves each independently confirmed outcome in durable,
+FIFO, relaxed and external recovery modes. The producer sees the first error;
+successful neighboring groups still complete successfully. Root installation
+cannot bless old materialized data with the replacement root's epoch.
+
+## Events and backpressure
+
+The original global subscriber count is sampled at each logical entry's creation,
+before a drain can allow a subscriber to join. Instrumented entries own independent
+mutation copies. A raw or matching subscriber joining before publication still
+receives such an entry even if only a nonmatching subscriber existed at creation.
+Entries created before the first subscriber remain uninstrumented.
+
+The original bus owns one admission slot and sequence per event. A producer
+tries the next slot; on pressure it submits/completes its existing native prefix
+before blocking for another. Depth1 can legitimately produce native singletons;
+depth256 admits larger prefixes when available. No aggregate-slot multiplier,
+new event queue, sequence owner or per-entry goroutine exists. Every reserved
+event is completed exactly once with its own storage result, including refused
+and unsubmitted error holes. Ambiguous storage outcomes publish no guessed
+success. Bus ordering and slot release remain governed by its original run loop.
+
+`SubscribeMatching` optionally stores an immutable, nonblocking key predicate on
+the existing subscriber and filters only at publication. Raw `Subscribe` remains
+match-all. The Worker schema subscription uses this capability but retains its
+own authoritative per-mutation KV conversion. Registration acknowledgement,
+late joins, cancellation and store-before-bus shutdown stay intact. Storage
+completion does not wait for subscriber delivery. Creation-time union-negative
+filtering is deliberately absent because it could miss a later subscriber.
 
 ## Activation and limits
 
-Both backends expose process-cumulative `dgraph.rollup.*_total` diagnostics through
-the existing `/debug/store` statistics map:
+The existing `/debug/store` map exposes process-cumulative
+`dgraph.rollup.*_total` counters. Reads are individually atomic, not a coherent
+conservation cut. The native counters are TreeDB-specific; Badger's restored
+async route does not gain completion-accounting callback closures.
 
-- `produced_kvs`, `produced_bytes`: output from successful `List.Rollup` preparation.
-- `submitted_kvs`, `submitted_bytes`: operands passed to a storage attempt.
-- `completed_kvs`, `completed_bytes`: operands whose original completion returned
-  success; native errors leave the whole attempted part unconfirmed even if a
-  prefix was stored.
-- `unconfirmed_kvs`, `unconfirmed_bytes`: attempted operands returning an error.
-- `native_chunks`, `native_completed_chunks`: attempted/completed native backend
-  parts, not physical syncs or engine cohorts. Work shaping can split one producer
-  chunk into multiple native parts.
+- `produced_kvs/bytes`: output of successful per-key materialization, both routes.
+- `submitted_kvs/bytes`, `completed_kvs/bytes`, `unconfirmed_kvs/bytes`: native
+  producer operands and their per-logical outcomes; direct unsupported-writer
+  fallback completion is not instrumented by these counters.
+- `native_chunks`, `native_kvs`: accepted original native FIFO parts and their
+  operand count. Work shaping can turn one producer chunk into multiple parts.
+- `native_completed_chunks`: native parts whose entire original completion
+  succeeded. `native_completed_kvs` counts independently successful operands,
+  including successes from a partially failed validation subdivision. These
+  counts are not physical syncs, engine cohorts or total rollup completion.
+- `readiness_waits`: actual per-key Oracle waits, including scalar fallback.
+  `event_pressure_cuts` and `read_dependency_cuts`: attempts to cut pending native
+  work at these producer boundaries; a pressure observation with an empty prefix
+  does not imply a submitted chunk.
 
-Byte counters charge key + value + the five-byte posting envelope; they are not
-heap capacities or physical WAL bytes. Counters are individually atomic, not a
-coherent transaction or final-drain barrier. Existing TreeDB cohort/sync counters
-retain their own broader scopes. The producer logs `Rollup accepted-work drain`
-after its original shutdown Flush, including its error and counters; there is no
-extra endpoint wait or flush. Unconsumed channel/pool keys remain unmeasured and
-the counters cannot prove equal total maintenance merely from zero pending work.
-No public latency, throughput, tail or capacity improvement is established by
-these counters or by focused correctness tests.
+Byte counters charge key/value/envelope operands, not physical WAL or heap bytes.
+The existing producer shutdown log follows its original final Flush and retains
+its error. Native accepted work is drained; unconsumed pool/channel keys and
+prepared-but-unmaterialized work after cancellation remain outside that receipt.
+Counters cannot establish equivalent maintenance work or public performance.
 
-`posting/rollup_bulk_test.go` covers the real producer/backend route, explicit
-versions and duplicate cuts, split outputs, durable reopen, completion and byte
-backpressure, errors without retry, event creation/failure/depth one, cancellation,
-work shaping, FIFO foreground neighbours and Close. The existing real Raft
-checkpoint-install test also rejects rollup output buffered before root replacement.
+Owning controls separately cover the actual Worker subscription and a
+deterministically received 16-key batch with real delayed per-key readiness and
+multi-entry native activation, raw/filtered late joins,
+depth-one saturation/cancellation, exact validation outcomes in all completion
+modes, storage ambiguity without retry, physical sync before event publication,
+reopen, root replacement after reading, discard floors, and split/repeated-key
+parity against the maintained asynchronous writer. Public adoption still requires
+the unchanged workload/durability/latency and recovery gates.

@@ -99,26 +99,34 @@ func (ir *incrRollupi) rollUpKey(writer rollupOutputWriter, key []byte) error {
 	// ts, overwriting some data. Wait to read the Posting list until ts-1 have been applied
 	// to badger. This helps us prevent issues with wal replay, as we now have a timestamp
 	// where nothing was writen to dgraph.
-	ts := ir.getNewTs(false)
+	ts, err := ir.prepareRollup()
+	if err != nil {
+		return err
+	}
+	return ir.materializeRollup(writer, key, ts)
+}
 
-	// Get a wait channel from oracle. Can't use WaitFromTs as we also need to check if other
-	// operations need to start. If ok is not true, that means we have already passed the ts,
-	// and we don't need to wait.
-	waitCh, ok := o.addToWaiters(ts)
-	if ok {
-		// Buffered maintenance must not become a dependency of the watermark
-		// we are about to wait for. Drain without retaining a List/root lock.
-		if err := writer.Flush(); err != nil {
-			return err
-		}
+// Readiness never holds an event reservation, storage request or List/root lock.
+func (ir *incrRollupi) prepareRollup() (uint64, error) {
+	ts := ir.getNewTs(false)
+	if waitCh, ok := o.addToWaiters(ts); ok {
+		rollupWork.readinessWaits.Add(1)
 		select {
 		case <-ir.closer.HasBeenClosed():
-			return ErrHighPriorityOp
-
+			return 0, ErrHighPriorityOp
 		case <-waitCh:
 		}
 	}
+	return ts, nil
+}
 
+func (ir *incrRollupi) materializeRollup(writer rollupOutputWriter, key []byte, ts uint64) error {
+	if native, ok := writer.(*rollupWriter); ok {
+		if err := native.beforeRead(key); err != nil {
+			return err
+		}
+		native.bindReadEpoch()
+	}
 	l, err := GetNoStore(key, ts)
 	if err != nil {
 		return err
@@ -172,7 +180,11 @@ func (ir *incrRollupi) Process(closer *z.Closer, getNewTs func(bool) uint64) {
 
 	defer closer.Done()
 
-	writer := &rollupWriter{store: postingStore}
+	native := &rollupWriter{store: postingStore}
+	var writer rollupOutputWriter = native
+	if !native.native() {
+		writer = NewTxnWriterForStore(postingStore)
+	}
 	defer func() {
 		err := writer.Flush()
 		if err != nil {
@@ -187,23 +199,57 @@ func (ir *incrRollupi) Process(closer *z.Closer, getNewTs func(bool) uint64) {
 	forceRollupTick := time.Tick(500 * time.Millisecond)
 
 	doRollup := func(batch *[][]byte, priority int) {
+		defer func() { *batch = (*batch)[:0]; ir.priorityKeys[priority].keysPool.Put(batch) }()
 		currTs := time.Now().Unix()
-		for _, key := range *batch {
-			hash := z.MemHash(key)
-			if elem := m[hash]; currTs-elem >= 10 {
-				// Key not present or Key present but last roll up was more than 2 sec ago.
-				// Add/Update map and rollup.
-				m[hash] = currTs
-				if err := ir.rollUpKey(writer, key); err != nil {
-					glog.Warningf("Error rolling up key [%v]: %v", err, key)
+		if writer != native {
+			// Original Badger/unsupported route: per-key readiness and asynchronous
+			// TxnWriter commits; only the original process-end completion drain.
+			for _, key := range *batch {
+				hash := z.MemHash(key)
+				if currTs-m[hash] >= 10 {
+					m[hash] = currTs
+					if err := ir.rollUpKey(writer, key); err != nil {
+						glog.Warningf("Error rolling up key [%v]: %v", err, key)
+					}
 				}
 			}
+			return
 		}
-		if err := writer.Flush(); err != nil {
-			glog.Warningf("Error completing rollup batch: %v", err)
+		// No receive-ahead: descriptors borrow only this original received batch.
+		// Preparation of the next finite window cannot overlap event admissions.
+		type readyKey struct {
+			key []byte
+			ts  uint64
 		}
-		*batch = (*batch)[:0]
-		ir.priorityKeys[priority].keysPool.Put(batch)
+		var ready [16]readyKey
+		for start := 0; start < len(*batch); {
+			n := 0
+			for start < len(*batch) && n < len(ready) {
+				key := (*batch)[start]
+				start++
+				hash := z.MemHash(key)
+				if currTs-m[hash] < 10 {
+					continue
+				}
+				m[hash] = currTs
+				ts, err := ir.prepareRollup()
+				if err != nil {
+					glog.Warningf("Error preparing rollup key [%v]: %v", key, err)
+					return
+				}
+				ready[n] = readyKey{key: key, ts: ts}
+				n++
+			}
+			for i := range n {
+				if err := ir.materializeRollup(writer, ready[i].key, ready[i].ts); err != nil {
+					glog.Warningf("Error rolling up key [%v]: %v", ready[i].key, err)
+				}
+				ready[i] = readyKey{}
+			}
+			if err := writer.Flush(); err != nil {
+				glog.Warningf("Error completing rollup batch: %v", err)
+			}
+		}
 	}
 
 	for {
