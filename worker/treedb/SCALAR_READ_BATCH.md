@@ -62,9 +62,11 @@ public dependency pin or performance.
 
 ```sh
 go test ./posting ./worker -count=1
-go test -race ./posting ./worker \
-  -run '^(TestPostingBatch|TestTreeDBPostingBatch|TestScalarBatch|TestRaftTreeDBTransferDrainsReadersAndRejectsStaleWriters|TestRaftTaskRejectsExpiredTimestampBeforeOracleAndCaches|TestRaftFutureOracleWaitDoesNotBlockMaintenanceAdmission)' \
-  -count=1
+tests='^(TestPostingBatch|TestTreeDBPostingBatch|TestScalarBatch|'
+tests="${tests}TestRaftTreeDBTransferDrainsReadersAndRejectsStaleWriters|"
+tests="${tests}TestRaftTaskRejectsExpiredTimestampBeforeOracleAndCaches|"
+tests="${tests}TestRaftFutureOracleWaitDoesNotBlockMaintenanceAdmission)"
+go test -race ./posting ./worker -run "$tests" -count=1
 ```
 
 This source and its focused checks are an optimization candidate. Public recovery, throughput,
