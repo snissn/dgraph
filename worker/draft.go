@@ -1441,6 +1441,11 @@ func (n *node) Run() {
 			if rd.SoftState != nil {
 				groups().triggerMembershipSync()
 				leader = rd.RaftState == raft.StateLeader
+				if leader {
+					// Wake the existing connector after election instead of waiting
+					// for its next retry tick. Oracle progress still goes through Raft.
+					groups().triggerOracleSync()
+				}
 				// create context with group id
 				ctx, _ := tag.New(n.ctx, tag.Upsert(x.KeyGroup, fmt.Sprintf("%d", n.gid)))
 				// detect leadership changes

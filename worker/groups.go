@@ -35,6 +35,7 @@ type groupi struct {
 	gid          uint32
 	tablets      map[string]*pb.Tablet
 	triggerCh    chan struct{} // Used to trigger membership sync
+	oracleWakeCh chan struct{} // Coalesced local-leadership wakeup for the Oracle connector
 	blockDeletes *sync.Mutex   // Ensure that deletion won't happen when move is going on.
 	closer       *z.Closer
 
@@ -132,6 +133,7 @@ func StartRaftNodes(walStore *raftwal.DiskStorage, bindall bool) {
 
 	gid := gr.groupId()
 	gr.triggerCh = make(chan struct{}, 1)
+	gr.oracleWakeCh = make(chan struct{}, 1)
 
 	// Initialize DiskStorage and pass it along.
 	walStore.SetUint(raftwal.RaftId, raftIdx)
@@ -1104,16 +1106,35 @@ func (g *groupi) processOracleDeltaStream() {
 		}
 	}
 
+	for g.waitForOracleLeadership(ticker) {
+		blockingReceiveAndPropose()
+	}
+}
+
+// triggerOracleSync never blocks the Raft Ready loop. One pending notification
+// is sufficient: the connector always rechecks current leadership before use.
+func (g *groupi) triggerOracleSync() {
+	select {
+	case g.oracleWakeCh <- struct{}{}:
+	default:
+	}
+}
+
+// waitForOracleLeadership shares the existing retry clock with the stream. A
+// wake is only a hint; neither stale notifications nor retries grant leadership.
+func (g *groupi) waitForOracleLeadership(ticker <-chan time.Time) bool {
 	for {
 		select {
 		case <-g.closer.HasBeenClosed():
-			return
+			return false
 		case <-ticker:
-			// Only the leader needs to connect to Zero and get transaction
-			// updates.
-			if g.Node.AmLeader() {
-				blockingReceiveAndPropose()
-			}
+		case <-g.oracleWakeCh:
+		}
+		if g.IsClosed() {
+			return false
+		}
+		if g.Node.AmLeader() {
+			return true
 		}
 	}
 }
