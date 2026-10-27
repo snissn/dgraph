@@ -3,7 +3,10 @@
 Only TreeDB's native incremental-rollup route changes batching. Badger and
 unsupported stores retain the original asynchronous `TxnWriter`: per-key
 readiness, per-KV callbacks, and the original process-end completion drain.
-Foreground `TxnWriter` behavior is unchanged.
+Selection occurs once before constructing the native writer. The scalar
+producer and per-key body retain their original concrete `TxnWriter` calls,
+callback ownership and pool-return path; they do not run native readiness or
+produced-work accounting. Foreground `TxnWriter` behavior is unchanged.
 
 TreeDB uses the original received key batch, priorities, hash throttle, distinct
 per-key non-readonly timestamps and Oracle waits. It first prepares at most 16
@@ -83,10 +86,13 @@ filtering is deliberately absent because it could miss a later subscriber.
 
 The existing `/debug/store` map exposes process-cumulative
 `dgraph.rollup.*_total` counters. Reads are individually atomic, not a coherent
-conservation cut. The native counters are TreeDB-specific; Badger's restored
-async route does not gain completion-accounting callback closures.
+conservation cut. The producer counters are TreeDB-specific; Badger's preserved
+scalar route does not gain hot-path accounting or completion callback closures. A Badger stats
+snapshot can still expose the detached map; its zero values are not measurements
+of scalar maintenance work.
 
-- `produced_kvs/bytes`: output of successful per-key materialization, both routes.
+- `produced_kvs/bytes`: output of successful native per-key materialization; the
+  preserved scalar producer is not instrumented.
 - `submitted_kvs/bytes`, `completed_kvs/bytes`, `unconfirmed_kvs/bytes`: native
   producer operands and their per-logical outcomes; direct unsupported-writer
   fallback completion is not instrumented by these counters.
@@ -96,13 +102,13 @@ async route does not gain completion-accounting callback closures.
   succeeded. `native_completed_kvs` counts independently successful operands,
   including successes from a partially failed validation subdivision. These
   counts are not physical syncs, engine cohorts or total rollup completion.
-- `readiness_waits`: actual per-key Oracle waits, including scalar fallback.
+- `readiness_waits`: actual per-key Oracle waits on the native producer.
   `event_pressure_cuts` and `read_dependency_cuts`: attempts to cut pending native
   work at these producer boundaries; a pressure observation with an empty prefix
   does not imply a submitted chunk.
 
 Byte counters charge key/value/envelope operands, not physical WAL or heap bytes.
-The existing producer shutdown log follows its original final Flush and retains
+The native producer shutdown log follows its original final Flush and retains
 its error. Native accepted work is drained; unconsumed pool/channel keys and
 prepared-but-unmaterialized work after cancellation remain outside that receipt.
 Counters cannot establish equivalent maintenance work or public performance.

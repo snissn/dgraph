@@ -88,22 +88,56 @@ func init() {
 	}
 }
 
-// rollUpKey takes the given key's posting lists, rolls it up and writes back to badger
+// rollupOutputWriter is used only by native materialization and its parity controls.
 type rollupOutputWriter interface {
 	Write(*bpb.KVList) error
 	Flush() error
 }
 
-func (ir *incrRollupi) rollUpKey(writer rollupOutputWriter, key []byte) error {
+// rollUpKey takes the given key's posting lists, rolls it up and writes back to badger
+func (ir *incrRollupi) rollUpKey(writer *TxnWriter, key []byte) error {
 	// Get a new non read only ts. This makes sure that no other txn would write at this
 	// ts, overwriting some data. Wait to read the Posting list until ts-1 have been applied
 	// to badger. This helps us prevent issues with wal replay, as we now have a timestamp
 	// where nothing was writen to dgraph.
-	ts, err := ir.prepareRollup()
+	ts := ir.getNewTs(false)
+
+	// Get a wait channel from oracle. Can't use WaitFromTs as we also need to check if other
+	// operations need to start. If ok is not true, that means we have already passed the ts,
+	// and we don't need to wait.
+	waitCh, ok := o.addToWaiters(ts)
+	if ok {
+		select {
+		case <-ir.closer.HasBeenClosed():
+			return ErrHighPriorityOp
+
+		case <-waitCh:
+		}
+	}
+
+	l, err := GetNoStore(key, ts)
 	if err != nil {
 		return err
 	}
-	return ir.materializeRollup(writer, key, ts)
+
+	kvs, err := l.Rollup(nil, ts)
+	if err != nil {
+		return err
+	}
+
+	RemoveCacheFor(key)
+	// TODO Update cache with rolled up results
+	// If we do a rollup, we typically won't need to update the key in cache.
+	// The only caveat is that the key written by rollup would be written at +1
+	// timestamp, hence bumping the latest TS for the key by 1. The cache should
+	// understand that.
+	const N = uint64(1000)
+	if glog.V(2) {
+		if count := atomic.AddUint64(&ir.count, 1); count%N == 0 {
+			glog.V(2).Infof("Rolled up %d keys", count)
+		}
+	}
+	return writer.Write(&bpb.KVList{Kv: kvs})
 }
 
 // Readiness never holds an event reservation, storage request or List/root lock.
@@ -173,18 +207,86 @@ func (ir *incrRollupi) addKeyToBatch(key []byte, priority int) {
 	}
 }
 
-// Process will rollup batches of 64 keys in a go routine.
+// Process selects the native route once. Badger and unsupported stores retain
+// the concrete scalar producer, including its original callback and pool paths.
 func (ir *incrRollupi) Process(closer *z.Closer, getNewTs func(bool) uint64) {
+	if nativeRollupStore(postingStore) {
+		ir.processNative(closer, getNewTs)
+		return
+	}
+	ir.processScalar(closer, getNewTs)
+}
+
+// processScalar preserves the original concrete producer for non-native stores.
+func (ir *incrRollupi) processScalar(closer *z.Closer, getNewTs func(bool) uint64) {
 	ir.getNewTs = getNewTs
 	ir.closer = closer
 
 	defer closer.Done()
 
-	native := &rollupWriter{store: postingStore}
-	var writer rollupOutputWriter = native
-	if !native.native() {
-		writer = NewTxnWriterForStore(postingStore)
+	writer := NewTxnWriterForStore(postingStore)
+	defer writer.Flush()
+
+	m := make(map[uint64]int64) // map hash(key) to ts. hash(key) to limit the size of the map.
+	limiter := time.Tick(time.Millisecond)
+	cleanupTick := time.Tick(5 * time.Minute)
+	forceRollupTick := time.Tick(500 * time.Millisecond)
+
+	doRollup := func(batch *[][]byte, priority int) {
+		currTs := time.Now().Unix()
+		for _, key := range *batch {
+			hash := z.MemHash(key)
+			if elem := m[hash]; currTs-elem >= 10 {
+				// Key not present or Key present but last roll up was more than 2 sec ago.
+				// Add/Update map and rollup.
+				m[hash] = currTs
+				if err := ir.rollUpKey(writer, key); err != nil {
+					glog.Warningf("Error rolling up key [%v]: %v", err, key)
+				}
+			}
+		}
+		*batch = (*batch)[:0]
+		ir.priorityKeys[priority].keysPool.Put(batch)
 	}
+
+	for {
+		select {
+		case <-closer.HasBeenClosed():
+			return
+		case <-cleanupTick:
+			currTs := time.Now().Unix()
+			for hash, ts := range m {
+				// Remove entries from map which have been there for there more than 10 seconds.
+				if currTs-ts >= 10 {
+					delete(m, hash)
+				}
+			}
+		case <-forceRollupTick:
+			batch := ir.priorityKeys[0].keysPool.Get().(*[][]byte)
+			if len(*batch) > 0 {
+				doRollup(batch, 0)
+			} else {
+				ir.priorityKeys[0].keysPool.Put(batch)
+			}
+		case batch := <-ir.priorityKeys[0].keysCh:
+			doRollup(batch, 0)
+			// We don't need a limiter here as we don't expect to call this function frequently.
+		case batch := <-ir.priorityKeys[1].keysCh:
+			doRollup(batch, 1)
+			// throttle to 1 batch = 16 rollups per 1 ms.
+			<-limiter
+		}
+	}
+}
+
+// processNative retains bounded readiness-before-admission for TreeDB.
+func (ir *incrRollupi) processNative(closer *z.Closer, getNewTs func(bool) uint64) {
+	ir.getNewTs = getNewTs
+	ir.closer = closer
+
+	defer closer.Done()
+
+	writer := &rollupWriter{store: postingStore}
 	defer func() {
 		err := writer.Flush()
 		if err != nil {
@@ -201,20 +303,6 @@ func (ir *incrRollupi) Process(closer *z.Closer, getNewTs func(bool) uint64) {
 	doRollup := func(batch *[][]byte, priority int) {
 		defer func() { *batch = (*batch)[:0]; ir.priorityKeys[priority].keysPool.Put(batch) }()
 		currTs := time.Now().Unix()
-		if writer != native {
-			// Original Badger/unsupported route: per-key readiness and asynchronous
-			// TxnWriter commits; only the original process-end completion drain.
-			for _, key := range *batch {
-				hash := z.MemHash(key)
-				if currTs-m[hash] >= 10 {
-					m[hash] = currTs
-					if err := ir.rollUpKey(writer, key); err != nil {
-						glog.Warningf("Error rolling up key [%v]: %v", err, key)
-					}
-				}
-			}
-			return
-		}
 		// No receive-ahead: descriptors borrow only this original received batch.
 		// Preparation of the next finite window cannot overlap event admissions.
 		type readyKey struct {

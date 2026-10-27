@@ -110,11 +110,11 @@ func (w *rollupWriter) bindReadEpoch() {
 	}
 }
 
-func (w *rollupWriter) native() bool {
-	if _, ok := w.store.(rollupBulkStore); ok {
+func nativeRollupStore(store Store) bool {
+	if _, ok := store.(rollupBulkStore); ok {
 		return true
 	}
-	if boundary, ok := w.store.(rollupCreationBoundary); ok {
+	if boundary, ok := store.(rollupCreationBoundary); ok {
 		target := boundary.rollupEntryTarget()
 		return target != nil
 	}
