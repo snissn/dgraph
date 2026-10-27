@@ -197,6 +197,18 @@ func (s *TreeDBStore) NewWriteTxn() WriteTxn {
 	return &treeDBWriteTxn{store: s, batch: batch, rootEpoch: s.rootEpoch.Load()}
 }
 
+// ReadPostingBatch owns the same root-install fence as ordinary read handles.
+// The MVCC operation owns its bounded cut and all returned payloads. In
+// particular a cleanup error is never replaced by produced values or a retry.
+func (s *TreeDBStore) ReadPostingBatch(keys [][]byte, readTs uint64) ([]PostingReadResult, error) {
+	if s == nil {
+		return nil, fmt.Errorf("read posting TreeDB batch: %w", treedb.ErrClosed)
+	}
+	txn := s.NewReadTxn(readTs).(*treeDBReadTxn)
+	defer txn.Discard()
+	return txn.readPostingBatch(keys)
+}
+
 func (s *TreeDBStore) IsClosed() bool {
 	return s == nil || s.closed.Load()
 }
@@ -973,6 +985,31 @@ func (t *treeDBReadTxn) Get(key []byte) (Item, error) {
 	return &item, nil
 }
 
+func (t *treeDBReadTxn) readPostingBatch(keys [][]byte) ([]PostingReadResult, error) {
+	t.mu.Lock()
+	discarded := t.discarded
+	t.mu.Unlock()
+	if discarded || t.store == nil || t.store.IsClosed() {
+		return nil, fmt.Errorf("read posting TreeDB batch: %w", treedb.ErrClosed)
+	}
+	values, err := t.store.mvcc.GetManyAt(keys, t.readTs)
+	if err != nil {
+		return nil, fmt.Errorf("read posting TreeDB batch: %w", err)
+	}
+	out := make([]PostingReadResult, len(values))
+	for i, value := range values {
+		switch {
+		case value.Err != nil:
+			out[i].Err = fmt.Errorf("read posting TreeDB item: %w", value.Err)
+		case value.Result.State == mvcc.Absent || value.Result.State == mvcc.Tombstone:
+			out[i].Err = badger.ErrKeyNotFound
+		default:
+			out[i].Value, _, _, out[i].Err = decodeTreeDBEnvelope(value.Result.Value)
+		}
+	}
+	return out, nil
+}
+
 func (t *treeDBReadTxn) NewIterator(opts IteratorOptions) Iterator {
 	return t.newIterator(nil, false, opts)
 }
@@ -1271,9 +1308,10 @@ func (i *treeDBItem) DiscardEarlierVersions() bool { return i.discard }
 func (i *treeDBItem) ValueSize() int64             { return int64(len(i.value)) }
 
 var (
-	_ Store    = (*TreeDBStore)(nil)
-	_ ReadTxn  = (*treeDBReadTxn)(nil)
-	_ WriteTxn = (*treeDBWriteTxn)(nil)
-	_ Iterator = (*treeDBIterator)(nil)
-	_ Item     = (*treeDBItem)(nil)
+	_ Store              = (*TreeDBStore)(nil)
+	_ PostingBatchReader = (*TreeDBStore)(nil)
+	_ ReadTxn            = (*treeDBReadTxn)(nil)
+	_ WriteTxn           = (*treeDBWriteTxn)(nil)
+	_ Iterator           = (*treeDBIterator)(nil)
+	_ Item               = (*treeDBItem)(nil)
 )

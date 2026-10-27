@@ -7,6 +7,9 @@ runtime. Badger remains the default and production backend.
 Durable posting writes use the bounded timestamp-preserving scheduler described in
 [Durable posting commit cohorts](DURABLE_COMMIT_COHORTS.md).
 
+Eligible scalar posting reads use the optional bounded path described in
+[Bounded scalar posting reads](SCALAR_READ_BATCH.md).
+
 The exact `github.com/snissn/gomap` dependency is pinned in the repository's [go.mod](../../go.mod).
 Resolve it with `GOWORK=off go list -m -json github.com/snissn/gomap`; qualification must record
 that version, checksum and any local replacement rather than reuse a historical source label here.

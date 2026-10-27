@@ -350,32 +350,31 @@ func (lc *LocalCache) readPostingListAt(key []byte) (*pb.PostingList, error) {
 	return pl, err
 }
 
-// GetSinglePosting retrieves the cached version of the first item in the list associated with the
-// given key. This is used for retrieving the value of a scalar predicats.
-func (lc *LocalCache) GetSinglePosting(key []byte) (*pb.PostingList, error) {
-	// This would return an error if there is some data in the local cache, but we couldn't read it.
-	getListFromLocalCache := func() (*pb.PostingList, error) {
-		lc.RLock()
+func (lc *LocalCache) singlePostingFromCache(key []byte) (*pb.PostingList, error) {
+	lc.RLock()
 
-		pl := &pb.PostingList{}
-		if delta, ok := lc.deltas[string(key)]; ok && len(delta) > 0 {
-			err := proto.Unmarshal(delta, pl)
-			lc.RUnlock()
-			return pl, err
-		}
-
-		l := lc.plists[string(key)]
+	pl := &pb.PostingList{}
+	if delta, ok := lc.deltas[string(key)]; ok && len(delta) > 0 {
+		err := proto.Unmarshal(delta, pl)
 		lc.RUnlock()
-
-		if l != nil {
-			return l.StaticValue(lc.startTs)
-		}
-
-		return nil, nil
+		return pl, err
 	}
 
+	l := lc.plists[string(key)]
+	lc.RUnlock()
+
+	if l != nil {
+		return l.StaticValue(lc.startTs)
+	}
+
+	return nil, nil
+}
+
+// GetSinglePosting retrieves the cached version of the first item in the list associated with the
+// given key. This is used for retrieving the value of a scalar predicate.
+func (lc *LocalCache) GetSinglePosting(key []byte) (*pb.PostingList, error) {
 	getPostings := func() (*pb.PostingList, error) {
-		pl, err := getListFromLocalCache()
+		pl, err := lc.singlePostingFromCache(key)
 		// If both pl and err are empty, that means that there was no data in local cache, hence we should
 		// read the data from badger.
 		if pl != nil || err != nil {
@@ -386,6 +385,10 @@ func (lc *LocalCache) GetSinglePosting(key []byte) (*pb.PostingList, error) {
 	}
 
 	pl, err := getPostings()
+	return filterSinglePosting(pl, err)
+}
+
+func filterSinglePosting(pl *pb.PostingList, err error) (*pb.PostingList, error) {
 	if err == badger.ErrKeyNotFound {
 		return nil, nil
 	}

@@ -156,6 +156,16 @@ func (ir *incrRollupi) addKeyToBatch(key []byte, priority int) {
 
 // Process will rollup batches of 64 keys in a go routine.
 func (ir *incrRollupi) Process(closer *z.Closer, getNewTs func(bool) uint64) {
+	if rollupReadinessStore(postingStore) {
+		ir.processReadiness(closer, getNewTs)
+		return
+	}
+	ir.processScalar(closer, getNewTs)
+}
+
+// processScalar retains the original concrete producer for Badger and stores
+// without the ordinary durable TreeDB cohort owner.
+func (ir *incrRollupi) processScalar(closer *z.Closer, getNewTs func(bool) uint64) {
 	ir.getNewTs = getNewTs
 	ir.closer = closer
 
