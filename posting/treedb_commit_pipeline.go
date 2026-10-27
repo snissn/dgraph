@@ -23,6 +23,8 @@ type treeDBCommitAggregate struct {
 	builder    mvcc.CommitBuilder
 	buildErr   error
 	building   bool
+	groupN     int
+	groupEnds  [treeDBCommitOwnershipLimit]int
 	n          int
 	await      bool
 	ownedBytes int
@@ -94,6 +96,7 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 		carried, hasCarried = treeDBCommitRequest{}, false
 		aggregate.requests[0], aggregate.n = first, 1
 		ownedBytes, work := first.batch.ownedBytes(), first.batch.work
+		groupCount := first.groupCount()
 		for !s.reserveCommitStaging(ownedBytes) {
 			<-s.commitWake
 		}
@@ -127,7 +130,7 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 				break collect
 			}
 			size := request.batch.ownedBytes()
-			if size > treeDBCommitCohortBytes-ownedBytes || work > s.writeWorkLimit || request.batch.work > s.writeWorkLimit-work || !s.reserveCommitStaging(size) {
+			if groupCount+request.groupCount() > treeDBCommitOwnershipLimit || size > treeDBCommitCohortBytes-ownedBytes || work > s.writeWorkLimit || request.batch.work > s.writeWorkLimit-work || !s.reserveCommitStaging(size) {
 				carried, hasCarried = request, true
 				break collect
 			}
@@ -136,6 +139,7 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 				s.stageDurableRequest(aggregate, aggregate.n)
 			}
 			aggregate.n++
+			groupCount += request.groupCount()
 			aggregate.ownedBytes += size
 			ownedBytes += size
 			work += request.batch.work
@@ -156,7 +160,9 @@ func (s *TreeDBStore) runDurableCommitQueue() {
 // collected. It constructs the root-dependent postimage once, after sealing.
 func (s *TreeDBStore) stageDurableRequest(a *treeDBCommitAggregate, i int) {
 	r := &a.requests[i]
-	a.groups[i] = mvcc.CommitGroup{Timestamp: r.commitTs, Mutations: r.batch.mutations}
+	start := a.groupN
+	a.groupN = r.copyGroups(a.groups[:], a.groupN)
+	a.groupEnds[i] = a.groupN
 	if s.commitGroupsForTest != nil || a.buildErr != nil {
 		return
 	}
@@ -167,9 +173,12 @@ func (s *TreeDBStore) stageDurableRequest(a *treeDBCommitAggregate, i int) {
 		}
 		a.building = true
 	}
-	if err := a.builder.AppendGroup(a.groups[i]); err != nil {
-		a.buildErr = errors.Join(err, a.builder.Abort())
-		a.building = false
+	for _, g := range a.groups[start:a.groupN] {
+		if err := a.builder.AppendGroup(g); err != nil {
+			a.buildErr = errors.Join(err, a.builder.Abort())
+			a.building = false
+			return
+		}
 	}
 }
 
@@ -187,7 +196,7 @@ func (s *TreeDBStore) submitDurableAggregate(a *treeDBCommitAggregate) {
 	}
 	// Keep the existing test injection at its original synchronous ambiguity
 	// boundary. Production always uses the actual native submit/completion seam.
-	if s.commitGroupsForTest != nil && a.n == 1 {
+	if s.commitGroupsForTest != nil && a.n == 1 && len(a.requests[0].batch.groups) == 0 {
 		a.results[0] = s.commitAtAdmitted(a.requests[0].commitTs, a.requests[0].batch.mutations)
 		return
 	}
@@ -199,10 +208,13 @@ func (s *TreeDBStore) submitDurableAggregate(a *treeDBCommitAggregate) {
 		if s.commitStartedForTest != nil {
 			s.commitStartedForTest(r.commitTs, r.batch.mutations)
 		}
-		a.groups[i] = mvcc.CommitGroup{Timestamp: r.commitTs, Mutations: r.batch.mutations}
+		if a.groupEnds[i] == 0 {
+			a.groupN = r.copyGroups(a.groups[:], a.groupN)
+			a.groupEnds[i] = a.groupN
+		}
 	}
 	if s.commitGroupsForTest != nil {
-		s.commitDurableGroups(a.groups[:a.n], a.results[:a.n])
+		s.commitAggregateGroups(a)
 		return
 	}
 	err := a.buildErr
@@ -211,7 +223,7 @@ func (s *TreeDBStore) submitDurableAggregate(a *treeDBCommitAggregate) {
 			err = a.builder.Submit(s.commitMode, &a.completion)
 			a.building = false // Submit transfers custody or releases it on error.
 		} else {
-			err = s.mvcc.SubmitCommitGroupAt(a.groups[:a.n], s.commitMode, &a.completion)
+			err = s.mvcc.SubmitCommitGroupAt(a.groups[:a.groupN], s.commitMode, &a.completion)
 		}
 	}
 	if err == nil {
@@ -221,8 +233,8 @@ func (s *TreeDBStore) submitDurableAggregate(a *treeDBCommitAggregate) {
 	// Only a wholly pre-storage validation refusal permits the existing
 	// sequential subdivision. Capacity and every storage/ambiguous result stay
 	// terminal for these original requests; no assigned command is retried.
-	if a.n > 1 && treeDBGroupValidationError(err) {
-		s.commitDurableGroups(a.groups[:a.n], a.results[:a.n])
+	if a.groupN > 1 && treeDBGroupValidationError(err) {
+		s.commitAggregateGroups(a)
 		return
 	}
 	err = fmt.Errorf("commit posting TreeDB transaction: %w", err)
@@ -242,7 +254,7 @@ func (s *TreeDBStore) finishDurableAggregate(a *treeDBCommitAggregate) {
 	}
 	last := a.requests[a.n-1].sequence
 	for i := range a.n {
-		if s.commitFinishedForTest != nil && !(s.commitGroupsForTest != nil && a.n == 1) {
+		if s.commitFinishedForTest != nil && !(s.commitGroupsForTest != nil && a.n == 1 && len(a.requests[0].batch.groups) == 0) {
 			s.commitFinishedForTest(a.requests[i].commitTs, a.results[i])
 		}
 		completion := treeDBCommitCompletion{request: a.requests[i], err: a.results[i]}
@@ -253,6 +265,25 @@ func (s *TreeDBStore) finishDurableAggregate(a *treeDBCommitAggregate) {
 	s.commitStagedBytes.Add(-int64(a.ownedBytes))
 	a.ownedBytes = 0
 	a.buildErr, a.building = nil, false
+	clear(a.groups[:])
+	clear(a.groupEnds[:])
+	a.groupN = 0
 	a.n, a.await = 0, false
 	s.commitCompleted.Store(last)
+}
+
+// Validation-only subdivision keeps per-version partial outcomes; the original
+// FIFO request completes once with its first error. Storage errors never retry.
+func (s *TreeDBStore) commitAggregateGroups(a *treeDBCommitAggregate) {
+	var results [treeDBCommitOwnershipLimit]error
+	s.commitDurableGroups(a.groups[:a.groupN], results[:a.groupN])
+	from := 0
+	for i := range a.n {
+		for _, err := range results[from:a.groupEnds[i]] {
+			if a.results[i] == nil {
+				a.results[i] = err
+			}
+		}
+		from = a.groupEnds[i]
+	}
 }

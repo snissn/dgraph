@@ -272,6 +272,17 @@ func (s eventStore) SealCommitWindow() {
 	}
 }
 
+// Capture the same per-logical-transaction subscription boundary as NewWriteTxn.
+// The producer drains a native chunk before an instrumented scalar commit, so
+// even a one-slot event bus cannot deadlock on admissions awaiting that chunk.
+func (s eventStore) rollupEntryTarget() (rollupBulkStore, WriteTxn) {
+	if s.bus.subscribers.Load() != 0 {
+		return nil, &eventWriteTxn{WriteTxn: s.Store.NewWriteTxn(), bus: s.bus}
+	}
+	target, _ := s.Store.(rollupBulkStore)
+	return target, nil
+}
+
 func (s eventStore) NewWriteTxn() WriteTxn {
 	// Define the subscription boundary at transaction creation so the enabled
 	// but unsubscribed path remains allocation-free.

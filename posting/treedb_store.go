@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/dgraph-io/badger/v4"
 	treedb "github.com/snissn/gomap/TreeDB"
@@ -67,6 +68,7 @@ const (
 	// An oversized individual transaction remains atomic; following requests
 	// wait for the next cohort rather than growing that transaction's batch.
 	treeDBCommitCohortBytes = 4 << 20
+	treeDBCommitGroupBytes  = int(unsafe.Sizeof(mvcc.CommitGroup{}))
 )
 
 // TreeDBStore owns exactly one TreeDB handle and exactly one external-MVCC
@@ -437,6 +439,7 @@ type treeDBWriteTxn struct {
 
 type treeDBMutationBatch struct {
 	mutations []mvcc.Mutation
+	groups    []mvcc.CommitGroup // nonempty only for a bounded multi-version rollup request
 	arena     []byte
 	work      uint64
 	// chunks retains every previous arena backing array after growth. Staged
@@ -597,6 +600,10 @@ func (s *TreeDBStore) releaseMutationBatch(batch *treeDBMutationBatch) {
 	if s == nil || batch == nil {
 		return
 	}
+	for i := range batch.groups {
+		batch.groups[i] = mvcc.CommitGroup{}
+	}
+	batch.groups = batch.groups[:0]
 	for i := range batch.mutations {
 		batch.mutations[i] = mvcc.Mutation{}
 	}
@@ -605,7 +612,7 @@ func (s *TreeDBStore) releaseMutationBatch(batch *treeDBMutationBatch) {
 		batch.chunks[i] = nil
 	}
 	clear(batch.arena)
-	poolable := cap(batch.mutations) <= 64 && cap(batch.arena) <= 64<<10 && cap(batch.chunks) <= 16
+	poolable := cap(batch.mutations) <= 64 && cap(batch.arena) <= 64<<10 && cap(batch.chunks) <= 16 && cap(batch.groups) <= rollupChunkKVs
 	if poolable {
 		batch.mutations = batch.mutations[:0]
 		batch.arena = batch.arena[:0]
@@ -683,7 +690,7 @@ func (s *TreeDBStore) runCommitQueue() {
 // command-WAL group at their acknowledgement barrier.
 func (s *TreeDBStore) runSerialCommitQueue() {
 	for request := range s.commitQueue {
-		err := s.commitAtAdmitted(request.commitTs, request.batch.mutations)
+		err := s.commitRequestAdmitted(&request)
 		s.completeTreeDBCommit(treeDBCommitCompletion{request: request, err: err})
 		s.deliverTreeDBCommit(treeDBCommitCompletion{request: request, err: err})
 	}
@@ -713,6 +720,7 @@ func (s *TreeDBStore) runDurableCommitQueueFIFO() {
 		hasCarried = false
 		requests[0] = first
 		n := 1
+		groupCount := first.groupCount()
 		ownedBytes := first.batch.ownedBytes()
 		work := first.batch.work
 	collect:
@@ -724,13 +732,14 @@ func (s *TreeDBStore) runDurableCommitQueueFIFO() {
 					break collect
 				}
 				size := request.batch.ownedBytes()
-				if size > treeDBCommitCohortBytes-ownedBytes ||
+				if groupCount+request.groupCount() > treeDBCommitOwnershipLimit || size > treeDBCommitCohortBytes-ownedBytes ||
 					(s.writeWorkLimit != 0 && (work > s.writeWorkLimit || request.batch.work > s.writeWorkLimit-work)) {
 					carried, hasCarried = request, true
 					break collect
 				}
 				requests[n] = request
 				n++
+				groupCount += request.groupCount()
 				ownedBytes += size
 				work += request.batch.work
 			default:
@@ -742,22 +751,33 @@ func (s *TreeDBStore) runDurableCommitQueueFIFO() {
 		if uint64(n) > s.durableCohortMax.Load() {
 			s.durableCohortMax.Store(uint64(n)) // only this worker writes it
 		}
-		if n == 1 {
+		if n == 1 && len(first.batch.groups) == 0 {
 			results[0] = s.commitAtAdmitted(first.commitTs, first.batch.mutations)
 		} else {
+			var ends [treeDBCommitOwnershipLimit]int
+			ng := 0
 			for i := range n {
-				request := &requests[i]
+				r := &requests[i]
 				if s.beforeCommitForTest != nil {
 					s.beforeCommitForTest()
 				}
 				if s.commitStartedForTest != nil {
-					s.commitStartedForTest(request.commitTs, request.batch.mutations)
+					s.commitStartedForTest(r.commitTs, r.batch.mutations)
 				}
-				groups[i] = mvcc.CommitGroup{Timestamp: request.commitTs, Mutations: request.batch.mutations}
+				ng = r.copyGroups(groups[:], ng)
+				ends[i] = ng
 			}
-			s.commitDurableGroups(groups[:n], results[:n])
-			if s.commitFinishedForTest != nil {
-				for i := range n {
+			var groupResults [treeDBCommitOwnershipLimit]error
+			s.commitDurableGroups(groups[:ng], groupResults[:ng])
+			from := 0
+			for i := range n {
+				for _, err := range groupResults[from:ends[i]] {
+					if results[i] == nil {
+						results[i] = err
+					}
+				}
+				from = ends[i]
+				if s.commitFinishedForTest != nil {
 					s.commitFinishedForTest(requests[i].commitTs, results[i])
 				}
 			}
@@ -770,6 +790,7 @@ func (s *TreeDBStore) runDurableCommitQueueFIFO() {
 			groups[i] = mvcc.CommitGroup{}
 			results[i] = nil
 		}
+		clear(groups[:])
 		if queue == nil && !hasCarried {
 			return
 		}
@@ -777,7 +798,7 @@ func (s *TreeDBStore) runDurableCommitQueueFIFO() {
 }
 
 func (b *treeDBMutationBatch) ownedBytes() int {
-	n := len(b.arena)
+	n := len(b.arena) + cap(b.groups)*treeDBCommitGroupBytes
 	for _, chunk := range b.chunks {
 		n += len(chunk)
 	}

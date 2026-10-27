@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
+	bpb "github.com/dgraph-io/badger/v4/pb"
 	td "github.com/snissn/gomap/TreeDB"
 	"github.com/stretchr/testify/require"
 )
@@ -46,6 +47,8 @@ func TestRaftTreeDBTransferDrainsReadersAndRejectsStaleWriters(t *testing.T) {
 	it := oldRead.NewIterator(IteratorOptions{})
 	it.Rewind()
 	require.True(t, it.Valid())
+	bufferedRollup := &rollupWriter{store: receiver}
+	require.NoError(t, bufferedRollup.Write(&bpb.KVList{Kv: []*bpb.KV{{Key: []byte("buffered-rollup"), Value: []byte("old-root"), Version: 2}}}))
 	stale := receiver.NewWriteTxn()
 	require.NoError(t, stale.SetEntry(Entry{Key: []byte("stale"), Value: []byte("must not publish")}))
 	defer stale.Discard()
@@ -106,6 +109,7 @@ func TestRaftTreeDBTransferDrainsReadersAndRejectsStaleWriters(t *testing.T) {
 	require.Equal(t, initialWorkEstimate, receiver.writeWorkEstimator.Estimate(8, 64))
 	<-authorized
 	require.ErrorIs(t, stale.CommitAt(2, nil), ErrTreeDBTxnClosed)
+	require.ErrorIs(t, bufferedRollup.Flush(), ErrTreeDBTxnClosed)
 	read := receiver.NewReadTxn(math.MaxUint64)
 	defer read.Discard()
 	item, err = read.Get([]byte("key"))

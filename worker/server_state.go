@@ -278,12 +278,20 @@ func (s *ServerState) PostingStoreRuntimeStatus() map[string]string {
 // unavailable Badger cache counters for TreeDB.
 func (s *ServerState) PostingStoreStats() (map[string]string, error) {
 	if s.TreeDBStore != nil {
-		return s.TreeDBStore.Stats()
+		stats, err := s.TreeDBStore.Stats()
+		if err == nil {
+			for k, v := range posting.RollupStats() {
+				stats[k] = v
+			}
+		}
+		return stats, err
 	}
 	if s.Pstore == nil {
 		return nil, fmt.Errorf("posting store is not open")
 	}
-	return map[string]string{"backend": PostingStoreBackendBadger}, nil
+	stats := posting.RollupStats()
+	stats["backend"] = PostingStoreBackendBadger
+	return stats, nil
 }
 
 // RunPostingStoreGC triggers the selected backend's value-log maintenance.

@@ -89,7 +89,12 @@ func init() {
 }
 
 // rollUpKey takes the given key's posting lists, rolls it up and writes back to badger
-func (ir *incrRollupi) rollUpKey(writer *TxnWriter, key []byte) error {
+type rollupOutputWriter interface {
+	Write(*bpb.KVList) error
+	Flush() error
+}
+
+func (ir *incrRollupi) rollUpKey(writer rollupOutputWriter, key []byte) error {
 	// Get a new non read only ts. This makes sure that no other txn would write at this
 	// ts, overwriting some data. Wait to read the Posting list until ts-1 have been applied
 	// to badger. This helps us prevent issues with wal replay, as we now have a timestamp
@@ -101,6 +106,11 @@ func (ir *incrRollupi) rollUpKey(writer *TxnWriter, key []byte) error {
 	// and we don't need to wait.
 	waitCh, ok := o.addToWaiters(ts)
 	if ok {
+		// Buffered maintenance must not become a dependency of the watermark
+		// we are about to wait for. Drain without retaining a List/root lock.
+		if err := writer.Flush(); err != nil {
+			return err
+		}
 		select {
 		case <-ir.closer.HasBeenClosed():
 			return ErrHighPriorityOp
@@ -131,6 +141,7 @@ func (ir *incrRollupi) rollUpKey(writer *TxnWriter, key []byte) error {
 			glog.V(2).Infof("Rolled up %d keys", count)
 		}
 	}
+	rollupProduced(kvs)
 	return writer.Write(&bpb.KVList{Kv: kvs})
 }
 
@@ -161,8 +172,14 @@ func (ir *incrRollupi) Process(closer *z.Closer, getNewTs func(bool) uint64) {
 
 	defer closer.Done()
 
-	writer := NewTxnWriterForStore(postingStore)
-	defer writer.Flush()
+	writer := &rollupWriter{store: postingStore}
+	defer func() {
+		err := writer.Flush()
+		if err != nil {
+			glog.Warningf("Error draining rollup writer: %v", err)
+		}
+		glog.Infof("Rollup accepted-work drain error=%v stats=%v", err, RollupStats())
+	}()
 
 	m := make(map[uint64]int64) // map hash(key) to ts. hash(key) to limit the size of the map.
 	limiter := time.Tick(time.Millisecond)
@@ -181,6 +198,9 @@ func (ir *incrRollupi) Process(closer *z.Closer, getNewTs func(bool) uint64) {
 					glog.Warningf("Error rolling up key [%v]: %v", err, key)
 				}
 			}
+		}
+		if err := writer.Flush(); err != nil {
+			glog.Warningf("Error completing rollup batch: %v", err)
 		}
 		*batch = (*batch)[:0]
 		ir.priorityKeys[priority].keysPool.Put(batch)
