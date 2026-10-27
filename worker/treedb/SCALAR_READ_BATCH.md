@@ -71,9 +71,11 @@ worktree; such tests do not qualify a public dependency pin or performance.
 
 ```sh
 go test ./posting ./worker -count=1
-go test -race ./posting ./worker \
-  -run '^(TestPostingBatch|TestTreeDBPostingBatch|TestScalarBatch|TestRaftTreeDBTransferDrainsReadersAndRejectsStaleWriters|TestRaftTaskRejectsExpiredTimestampBeforeOracleAndCaches|TestRaftFutureOracleWaitDoesNotBlockMaintenanceAdmission)' \
-  -count=1
+batch_tests='TestPostingBatch|TestTreeDBPostingBatch|TestScalarBatch'
+batch_tests="$batch_tests|TestRaftTreeDBTransferDrainsReadersAndRejectsStaleWriters"
+batch_tests="$batch_tests|TestRaftTaskRejectsExpiredTimestampBeforeOracleAndCaches"
+batch_tests="$batch_tests|TestRaftFutureOracleWaitDoesNotBlockMaintenanceAdmission"
+go test -race ./posting ./worker -run "^($batch_tests)" -count=1
 ```
 
 This source and its focused checks are an optimization candidate. Public recovery,
