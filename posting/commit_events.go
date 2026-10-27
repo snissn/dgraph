@@ -246,7 +246,17 @@ func WithCommitEvents(store Store, bus *CommitEventBus) Store {
 	if bus == nil {
 		return store
 	}
-	return eventStore{Store: store, bus: bus}
+	wrapped := eventStore{Store: store, bus: bus}
+	if reader, ok := store.(PostingBatchReader); ok {
+		return batchEventStore{eventStore: wrapped, PostingBatchReader: reader}
+	}
+	return wrapped
+}
+
+// Preserve the optional read capability without advertising it for Badger.
+type batchEventStore struct {
+	eventStore
+	PostingBatchReader
 }
 
 type eventStore struct {

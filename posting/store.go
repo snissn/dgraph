@@ -38,6 +38,25 @@ type Store interface {
 	IsClosed() bool
 }
 
+// MaxPostingBatchKeys bounds an operation, not the size of an individual value.
+const MaxPostingBatchKeys = 32
+
+// PostingReadResult is an owned scalar payload or its per-key read error.
+// Missing and deleted keys use badger.ErrKeyNotFound, as ReadTxn.Get does.
+type PostingReadResult struct {
+	Value []byte
+	Err   error
+}
+
+// PostingBatchReader is optional. Only the existing single-posting route may use
+// it; history reconstruction still uses ReadTxn. Results follow input order and
+// remain valid after return. A total error invalidates the call even if results
+// are also returned. Neither total nor per-key errors permit a scalar retry.
+// The backend owns any cut/floor admission for this operation, not LocalCache.
+type PostingBatchReader interface {
+	ReadPostingBatch(keys [][]byte, readTs uint64) ([]PostingReadResult, error)
+}
+
 // ReadTxn is the read side of the posting-store contract.
 type ReadTxn interface {
 	Get(key []byte) (Item, error)

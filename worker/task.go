@@ -449,11 +449,14 @@ func (qs *queryState) handleValuePostings(ctx context.Context, args funcArgs) er
 	// because list is stored by time, and we combine all the list items at various timestamps.
 	hasLang := schema.State().HasLang(q.Attr)
 	getMultiplePosting := q.DoCount || q.ExpandAll || listType || hasLang || q.FacetParam != nil
+	batchSinglePosting := !getMultiplePosting && qs.cache.SupportsPostingBatch()
 
 	calculate := func(start, end int) error {
 		x.AssertTrue(start%width == 0)
 		out := &pb.Result{}
 		outputs[start/width] = out
+		var batch []posting.SinglePostingResult
+		batchStart, batchEnd := start, start
 
 		for i := start; i < end; i++ {
 			select {
@@ -461,7 +464,10 @@ func (qs *queryState) handleValuePostings(ctx context.Context, args funcArgs) er
 				return ctx.Err()
 			default:
 			}
-			key := x.DataKey(q.Attr, q.UidList.Uids[i])
+			var key []byte
+			if !batchSinglePosting || i == batchEnd {
+				key = x.DataKey(q.Attr, q.UidList.Uids[i])
+			}
 
 			// Get or create the posting list for an entity, attribute combination.
 
@@ -469,7 +475,33 @@ func (qs *queryState) handleValuePostings(ctx context.Context, args funcArgs) er
 			fcs := &pb.FacetsList{FacetsList: make([]*pb.Facets, 0)} // TODO Figure out how it is stored
 
 			if !getMultiplePosting {
-				pl, err := qs.cache.GetSinglePosting(key)
+				var pl *pb.PostingList
+				var err error
+				if batchSinglePosting && (batchEnd > i || end-i > 1) {
+					if i == batchEnd {
+						batchStart, batchEnd = i, i+posting.MaxPostingBatchKeys
+						if batchEnd > end {
+							batchEnd = end
+						}
+						var keys [posting.MaxPostingBatchKeys][]byte
+						keys[0] = key
+						for j := i + 1; j < batchEnd; j++ {
+							keys[j-i] = x.DataKey(q.Attr, q.UidList.Uids[j])
+						}
+						batch, err = qs.cache.GetSinglePostings(keys[:batchEnd-i])
+						if err != nil {
+							return err
+						}
+					}
+					// Keep the physical work owned until the synchronous call
+					// returns, then check cancellation before consuming results.
+					if err := ctx.Err(); err != nil {
+						return err
+					}
+					pl, err = batch[i-batchStart].Posting, batch[i-batchStart].Err
+				} else {
+					pl, err = qs.cache.GetSinglePosting(key)
+				}
 				if err != nil {
 					return err
 				}
