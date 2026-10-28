@@ -223,6 +223,7 @@ func (n *node) proposeAndWait(ctx context.Context, proposal *pb.Proposal) (perr 
 
 	// Trim data to the new size after Marshal.
 	data = data[:8+sz]
+	n.deltaInquiry.oracleProposal(ctx, key, len(data))
 
 	span := trace.SpanFromContext(ctx)
 	stop := x.SpanTimer(span, "n.proposeAndWait")

@@ -947,6 +947,7 @@ OUTER:
 // Zero sends information about aborted/committed transactions and maxPending.
 func (g *groupi) processOracleDeltaStream() {
 	defer func() {
+		g.Node.deltaInquiry.oracle(inquiryEvent{Phase: "oracle_closed"})
 		glog.Infoln("Closing processOracleDeltaStream")
 		g.closer.Done() // CLOSER:1
 	}()
@@ -984,7 +985,10 @@ func (g *groupi) processOracleDeltaStream() {
 			return
 		}
 
-		deltaCh := make(chan *pb.OracleDelta, 100)
+		inquiry := g.Node.deltaInquiry
+		streamID := inquiry.oracleStream()
+		defer inquiry.oracle(inquiryEvent{Phase: "oracle_stream_closed", Stream: streamID})
+		deltaCh := make(chan oracleInquiryMessage, 100)
 		go func() {
 			// This would exit when either a Recv() returns error. Or, cancel() is called by
 			// something outside of this goroutine.
@@ -994,30 +998,52 @@ func (g *groupi) processOracleDeltaStream() {
 				}
 			}()
 			defer close(deltaCh)
+			defer inquiry.oracle(inquiryEvent{Phase: "oracle_receiver_closed", Stream: streamID})
 
+			var messageID uint64
 			for {
 				delta, err := stream.Recv()
+				var captured time.Time
+				if inquiry != nil {
+					captured = time.Now()
+				}
 				if err != nil || delta == nil {
+					event := inquiryEvent{Phase: "oracle_receive_end", Stream: streamID, Captured: captured}
+					if err != nil {
+						event.Error = err.Error()
+					} else {
+						event.Detail = "nil_delta"
+					}
+					inquiry.oracle(event)
 					glog.Errorf("Error in oracle delta stream. Error: %v", err)
 					return
 				}
 
+				messageID++
+				inquiry.oracleDelta(inquiryEvent{Phase: "oracle_received", Stream: streamID, Message: messageID, Captured: captured}, delta)
+				inquiry.oracle(inquiryEvent{Phase: "oracle_send_begin", Stream: streamID, Message: messageID})
 				select {
-				case deltaCh <- delta:
+				case deltaCh <- oracleInquiryMessage{delta: delta, id: messageID}:
+					inquiry.oracle(inquiryEvent{Phase: "oracle_send_end", Stream: streamID, Message: messageID})
 				case <-ctx.Done():
+					inquiry.oracle(inquiryEvent{Phase: "oracle_send_canceled", Stream: streamID, Message: messageID})
 					return
 				}
 			}
 		}()
 
+		var aggregateID uint64
 		for {
 			var delta *pb.OracleDelta
 			var batch int
 			select {
-			case delta = <-deltaCh:
+			case first := <-deltaCh:
+				delta = first.delta
 				if delta == nil {
 					return
 				}
+				aggregateID++
+				inquiry.oracle(inquiryEvent{Phase: "oracle_consumed", Stream: streamID, Aggregate: aggregateID, Message: first.id})
 				batch++
 			case <-ticker:
 				newLead := g.Leader(0)
@@ -1036,12 +1062,15 @@ func (g *groupi) processOracleDeltaStream() {
 		SLURP:
 			for {
 				select {
-				case more := <-deltaCh:
+				case message := <-deltaCh:
+					more := message.delta
 					if more == nil {
 						return
 					}
+					inquiry.oracle(inquiryEvent{Phase: "oracle_consumed", Stream: streamID, Aggregate: aggregateID, Message: message.id})
 					batch++
 					if err := mergeOracleDelta(delta, more); err != nil {
+						inquiry.oracle(inquiryEvent{Phase: "oracle_aggregate_failed", Stream: streamID, Aggregate: aggregateID, Error: err.Error()})
 						glog.Errorf("Invalid sequenced Oracle stream: %v", err)
 						return
 					}
@@ -1067,6 +1096,7 @@ func (g *groupi) processOracleDeltaStream() {
 			// race the application of its prewrite. Losing advisory watermarks can delay
 			// reads, but never permits visibility ahead of a materialized decision.
 			if raftCheckpointEnabled() && len(delta.Txns) == 0 && g.Node.raftRecoveryAtLimit() {
+				inquiry.oracleDelta(inquiryEvent{Phase: "oracle_aggregate_skipped", Stream: streamID, Aggregate: aggregateID}, delta)
 				continue
 			}
 			// We should always sort the txns before applying. Otherwise, we might lose some of
@@ -1090,10 +1120,19 @@ func (g *groupi) processOracleDeltaStream() {
 					}
 				}
 			}
+			inquiry.oracleDelta(inquiryEvent{Phase: "oracle_aggregate_ready", Stream: streamID, Aggregate: aggregateID, Entries: uint64(batch)}, delta)
+			var attempt uint64
 			for {
+				attempt++
+				inquiry.oracle(inquiryEvent{Phase: "oracle_propose_begin", Stream: streamID, Aggregate: aggregateID, Attempt: attempt})
 				// Block forever trying to propose this. Also this proposal should not be counted
 				// towards num pending proposals and be proposed right away.
-				err := g.Node.proposeAndWait(g.Ctx(), &pb.Proposal{Delta: delta})
+				err := g.Node.proposeAndWait(inquiry.oracleContext(g.Ctx(), streamID, aggregateID, attempt), &pb.Proposal{Delta: delta})
+				event := inquiryEvent{Phase: "oracle_propose_end", Stream: streamID, Aggregate: aggregateID, Attempt: attempt}
+				if err != nil {
+					event.Error = err.Error()
+				}
+				inquiry.oracle(event)
 				if err == nil {
 					break
 				}
