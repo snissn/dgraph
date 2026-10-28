@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dgraph-io/dgraph/v25/graphql/e2e/common"
@@ -635,11 +636,13 @@ func TestSubscriptionAuth_SameQueryDifferentClaimsAndExpiry_ShouldExpireIndepend
 		}`,
 	}, payload)
 	require.NoError(t, err)
+	t.Cleanup(subscriptionClient.Terminate)
 
-	res, err := subscriptionClient.RecvMsg()
+	res, err := subscriptionClient.RecvMsgWithTimeout(10 * time.Second)
 	require.NoError(t, err)
 
 	var resp common.GraphQLResponse
+	require.NotEmpty(t, res, "subscription completed before the expected update")
 	require.NoError(t, json.Unmarshal(res, &resp))
 
 	common.RequireNoGQLErrors(t, &resp)
@@ -668,8 +671,14 @@ func TestSubscriptionAuth_SameQueryDifferentClaimsAndExpiry_ShouldExpireIndepend
 
 	// 2nd subscription
 	metaInfo.AuthVars["USER"] = "pawan"
-	jwtToken, err = metaInfo.GetSignedToken("secret-long-enough", 2*subExp)
+	jwtToken, err = metaInfo.GetSignedToken("secret-long-enough", 30*time.Second)
 	require.NoError(t, err)
+	// Use the signed, whole-second expiry rather than another relative sleep.
+	var claims jwt.RegisteredClaims
+	_, _, err = jwt.NewParser().ParseUnverified(jwtToken, &claims)
+	require.NoError(t, err)
+	require.NotNil(t, claims.ExpiresAt)
+	secondExpiry := claims.ExpiresAt.Time
 	payload = fmt.Sprintf(`{"Authorization": "%s"}`, jwtToken)
 	subscriptionClient1, err := common.NewGraphQLSubscription(subscriptionEndpoint, &schema.Request{
 		Query: `subscription{
@@ -680,9 +689,11 @@ func TestSubscriptionAuth_SameQueryDifferentClaimsAndExpiry_ShouldExpireIndepend
 		}`,
 	}, payload)
 	require.NoError(t, err)
+	t.Cleanup(subscriptionClient1.Terminate)
 
-	res, err = subscriptionClient1.RecvMsg()
+	res, err = subscriptionClient1.RecvMsgWithTimeout(10 * time.Second)
 	require.NoError(t, err)
+	require.NotEmpty(t, res, "subscription completed before the expected update")
 	require.NoError(t, json.Unmarshal(res, &resp))
 
 	common.RequireNoGQLErrors(t, &resp)
@@ -709,9 +720,8 @@ func TestSubscriptionAuth_SameQueryDifferentClaimsAndExpiry_ShouldExpireIndepend
 	}
 	addResult = add.ExecuteAsPost(t, common.GraphqlURL)
 	common.RequireNoGQLErrors(t, addResult)
-	time.Sleep(pollInterval)
 	// 1st subscription should get the empty response as subscription has expired
-	res, err = subscriptionClient.RecvMsg()
+	res, err = subscriptionClient.RecvMsgWithTimeout(10 * time.Second)
 	require.NoError(t, err)
 	require.Nil(t, res)
 
@@ -732,10 +742,10 @@ func TestSubscriptionAuth_SameQueryDifferentClaimsAndExpiry_ShouldExpireIndepend
 	}
 	addResult = add.ExecuteAsPost(t, common.GraphqlURL)
 	common.RequireNoGQLErrors(t, addResult)
-	time.Sleep(pollInterval)
 
-	res, err = subscriptionClient1.RecvMsg()
+	res, err = subscriptionClient1.RecvMsgWithTimeout(10 * time.Second)
 	require.NoError(t, err)
+	require.NotEmpty(t, res, "subscription completed before the expected update")
 	require.NoError(t, json.Unmarshal(res, &resp))
 	common.RequireNoGQLErrors(t, &resp)
 	// 2nd one still running and should get the  update
@@ -749,9 +759,9 @@ func TestSubscriptionAuth_SameQueryDifferentClaimsAndExpiry_ShouldExpireIndepend
 	   "text" : "Dgraph is awesome!!"
 	}]}`, string(resp.Data))
 
-	// add delay for 2nd subscription  to timeout
-	// Wait for JWT to expire.
-	time.Sleep(subExp)
+	// Leave a generous window for mutations and polling after the first expiry.
+	// Then retain the independent eventual-expiry assertion at the actual JWT deadline.
+	time.Sleep(time.Until(secondExpiry))
 	// Add another TODO for pawan for which 2nd subscription shouldn't get updates.
 	add = &common.GraphQLParams{
 		Query: `mutation{
@@ -770,10 +780,9 @@ func TestSubscriptionAuth_SameQueryDifferentClaimsAndExpiry_ShouldExpireIndepend
 
 	addResult = add.ExecuteAsPost(t, common.GraphqlURL)
 	common.RequireNoGQLErrors(t, addResult)
-	time.Sleep(pollInterval)
 
 	// 2nd subscription should get the empty response as subscription has expired
-	res, err = subscriptionClient1.RecvMsg()
+	res, err = subscriptionClient1.RecvMsgWithTimeout(10 * time.Second)
 	require.NoError(t, err)
 	require.Nil(t, res)
 }

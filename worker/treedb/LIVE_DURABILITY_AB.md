@@ -196,7 +196,7 @@ waits can delay this boundary. In particular, the older endpoint diagnostic wait
 `TimedFinished + 5s` before the native disk walk. Its native totals and per-file cuts cannot be
 substituted for the original unprofiled storage boundary.
 
-The immutable schema-v1 storage sidecar records the run/backend/durability, posting directory,
+The immutable schema-v2 storage sidecar records the run/backend/durability, posting directory,
 `TimedFinished`, `native_posting_disk_usage_prevalidation` boundary, walk start/finish and
 serialization start, completion/error, observed regular-file count, native logical/allocated totals,
 and relative per-file names, sizes, stat blocks, allocated bytes and modification times. Rows and
@@ -205,23 +205,56 @@ and before post-metric requests, schema/posting validation or restart. There is 
 extra stat, status request, passive wait, checkpoint or file deletion. Only regular files
 contribute, as in the original native measurement.
 
+Schema v2 also binds the full native config and reproduction context (source, measured binary
+hash/build info, Go version, environment and command). It records the separate harness executable
+SHA256/build info, collected before native processes start. The context records the walk-time
+contamination disposition; later recovery-time contaminants may extend the final result. Validation
+compares immutable reproduction fields, while separately requiring diagnostic exclusion on both
+records. Mutable contaminant lists/reasons are not source or binary identity. Freeze the harness
+tree/diff, dependencies, build flags and original workload manifest before any separately authorized
+collection; executable provenance does not by itself authenticate historical binary equivalence.
+
+Each same-walk row adds device/inode as decimal strings, link count, file mode, identity
+availability and `observed_at`. The callback processes an already obtained FileInfo: this timestamp
+follows the underlying stat and is **not** the exact stat time. Missing Stat_t is retained as an
+identity-unavailable partial row and rejects completed attribution. Repeated device/inode identities
+are listed as aliases; their sizes still count once per path, preserving the native metric.
+Directory enumeration omits open-unlinked files. Blocks\*512 measures filesystem allocation, not
+extent ownership or live payload. Sparse, compressed, shared/reflink and block-rounded files limit
+interpretation; allocation greater than apparent size does not establish preallocation.
+
+The sidecar reuses the existing later Prometheus and `/debug/store` requests, preserving their raw
+bodies (including available non-200 or truncated response bytes), HTTP status, start/end and request
+errors. `walk_to_status_gap_ns` spans the walk end to store-request start, including the intervening
+Prometheus request; it must not be labelled status-request cost. Raw stats remain strings, including
+uint64 root identities beyond 2^53 and boolean values. Resolved profile, events policy, and the
+`treedb.write_path.mode` command-WAL route are typed optional fields; missing fields and
+Badger-specific unavailable TreeDB gauges carry reasons, not invented zeroes. Request failures and
+engine `stats_error` remain distinct errors. Status follows the file walk and its component stats
+have different locks/times: it is not an atomic root/page/leaf census. Current page high-water,
+cumulative allocator counters, durable-root fields and leaf retention gauges must not be subtracted
+or promoted to physical reachability/live-dead byte accounting.
+
 This is a sequential metadata walk while Alpha/background publication may continue. The envelope
 brackets the walk; it does not timestamp each filesystem change or establish an atomic/quiescent
 snapshot. Files created after a directory was enumerated may be absent, and mutation between
 observations remains possible. Modification times are metadata, not observation timestamps. These
-limits apply to both the native sums and their same-observation file attribution.
+limits apply to both the native sums and their same-observation file attribution. The later request
+envelope is validated separately from file inventory; missing optional engine fields do not
+invalidate a complete inventory.
 
 `validateStorageDiagnostic` compares the sidecar against the paired native result: identity, posting
 root, named boundary, ordered envelope, diagnostic exclusion, complete/error-free nonempty rows
 matching the walk count, unique confined relative paths, nonnegative sizes/blocks,
-allocated=blocks\*512, and exact file-sum/native totals. The diagnostic requires byte totals at most
-2^53-1 to preserve exact equality with the existing float64 native metrics. It does not infer
-allocated<=logical: sparse and block-rounded files can differ in either direction. Missing, partial,
-sum-inconsistent or boundary-inconsistent observations refuse validation. Failed/partial raw
-observations remain immutable sidecars with an error or an invalid/incomplete contract, and cannot
-produce a successful native result. Successful sidecar validation is a storage-observer check;
-native checksum, schema, restart and provenance validation are separately required. Internal
-consistency does not authenticate a coordinated rewrite of an entire packet.
+allocated=blocks\*512, checked integer multiplication/summation, aliases and exact file-sum/native
+totals. The diagnostic requires byte totals at most 2^53 to preserve exact equality with the
+existing float64 native metrics. It does not infer allocated<=logical: sparse and block-rounded
+files can differ in either direction. Missing, partial, sum-inconsistent or boundary-inconsistent
+observations refuse validation. Failed/partial raw observations remain immutable sidecars with
+request/walk/validation errors or an invalid/incomplete contract, and cannot produce a successful
+native result. Successful sidecar validation is a storage-observer check; native checksum, schema,
+restart and provenance validation are separately required. Internal consistency does not
+authenticate a coordinated rewrite of an entire packet.
 
 The path must be new, outside the entire run cluster (postings and Alpha/Zero WAL directories), and
 separate from native results, logs and other sidecars. A destination cannot be the cluster directory

@@ -11,12 +11,15 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -130,6 +133,13 @@ func run(o options) (err error) {
 	}
 	r.Context.Contaminants = contaminants(o.maxLoad)
 	markDiagnostics(&r, o)
+	var storageHarnessSHA, storageHarnessBuild string
+	if o.storageDiagnostic != "" {
+		storageHarnessSHA, storageHarnessBuild, err = storageHarnessIdentity()
+		if err != nil {
+			return fmt.Errorf("storage harness identity: %w", err)
+		}
+	}
 
 	zeroArgs := []string{"zero", "--wal", filepath.Join(runDir, "zw"), "--replicas=1", fmt.Sprintf("--port_offset=%d", o.zeroOffset)}
 	alphaArgs := []string{"alpha", "--zero", fmt.Sprintf("localhost:%d", 5080+o.zeroOffset), "--postings", filepath.Join(runDir, "p"), "--wal", filepath.Join(runDir, "w"), fmt.Sprintf("--port_offset=%d", o.alphaOffset), "--posting-store", posting, "--badger", badger}
@@ -256,6 +266,13 @@ func run(o options) (err error) {
 	storageWriteAttempted := false
 	if o.storageDiagnostic != "" {
 		storage = newStorageDiagnostic(filepath.Join(runDir, "p"), r)
+		storage.HarnessBinarySHA256, storage.HarnessBuildInfo = storageHarnessSHA, storageHarnessBuild
+		if afterStore == nil {
+			afterStore = &storage.Store
+		}
+		if afterProm == nil {
+			afterProm = &storage.Prometheus
+		}
 		// Retain partial observations on a walk or later metric failure before
 		// cleanup stops Alpha. Failed artifacts are rejected by the validator.
 		defer func() {
@@ -271,6 +288,12 @@ func run(o options) (err error) {
 	}
 	promAfter, promErr := prometheusObserved(httpBase+"/debug/prometheus_metrics", afterProm)
 	statusAfter, storeAfter, err := storeStatusObserved(httpBase, afterStore)
+	if storage != nil {
+		storage.Prometheus, storage.Store = *afterProm, *afterStore
+		storage.Prometheus.Error = errorString(promErr)
+		storage.Store.Error = errorString(err)
+		storage.WalkToStatusGap = storage.Store.StartedAt.Sub(storage.WalkFinishedAt)
+	}
 	if diagnostic != nil && promErr != nil {
 		return fmt.Errorf("operation diagnostic after Prometheus boundary: %w", promErr)
 	}
@@ -905,6 +928,15 @@ func validateSchemaJSON(raw []byte) error {
 }
 
 func fetch(url string, timeout time.Duration) ([]byte, error) {
+	return fetchObserved(url, timeout, nil)
+}
+
+// Observed requests preserve available failure bytes without another request.
+// The nil-observer path retains the original non-200 early return.
+func fetchObserved(url string, timeout time.Duration, observation *operationRequest) (body []byte, err error) {
+	if observation != nil {
+		defer func() { observation.Body = string(body); observation.Error = errorString(err) }()
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -916,8 +948,15 @@ func fetch(url string, timeout time.Duration) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if observation != nil {
+		observation.HTTPStatus = resp.StatusCode
+	}
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP %s", resp.Status)
+		if observation == nil {
+			return nil, fmt.Errorf("HTTP %s", resp.Status)
+		}
+		b, readErr := io.ReadAll(resp.Body)
+		return b, errors.Join(fmt.Errorf("HTTP %s", resp.Status), readErr)
 	}
 	return io.ReadAll(resp.Body)
 }
@@ -939,7 +978,7 @@ func storeStatusObserved(base string, observation *operationRequest) (map[string
 	if observation != nil {
 		observation.StartedAt = time.Now().UTC()
 	}
-	b, err := fetch(base+"/debug/store", 30*time.Second)
+	b, err := fetchObserved(base+"/debug/store", 30*time.Second, observation)
 	if observation != nil {
 		observation.FinishedAt = time.Now().UTC()
 	}
@@ -1016,7 +1055,7 @@ func prometheusObserved(url string, observation *operationRequest) (map[string]f
 	if observation != nil {
 		observation.StartedAt = time.Now().UTC()
 	}
-	b, err := fetch(url, 30*time.Second)
+	b, err := fetchObserved(url, 30*time.Second, observation)
 	if observation != nil {
 		observation.FinishedAt = time.Now().UTC()
 	}
@@ -1214,7 +1253,9 @@ func diskUsageObserved(root string, observation *storageDiagnostic) (float64, fl
 // or walk. Background writers can still change files during this sequential walk.
 func diskUsageWalk(root string, observation *storageDiagnostic, walk func(string, filepath.WalkFunc) error) (float64, float64, error) {
 	var logical, allocated float64
+	var identities map[string]string
 	if observation != nil {
+		identities = make(map[string]string)
 		observation.WalkStartedAt = time.Now().UTC()
 	}
 	err := walk(root, func(path string, info os.FileInfo, err error) error {
@@ -1226,7 +1267,18 @@ func diskUsageWalk(root string, observation *storageDiagnostic, walk func(string
 			logical += float64(size)
 			st, ok := info.Sys().(*syscall.Stat_t)
 			if !ok {
+				if observation != nil {
+					rel, relErr := filepath.Rel(root, path)
+					if relErr != nil {
+						return relErr
+					}
+					observation.RegularFiles++
+					observation.Files = append(observation.Files, endpointFile{Path: filepath.ToSlash(rel), LogicalBytes: size, ModifiedAt: info.ModTime().UTC(), Mode: uint32(info.Mode()), ObservedAt: time.Now().UTC()})
+				}
 				return errors.New("filesystem stat does not expose allocated blocks")
+			}
+			if observation != nil && (size < 0 || st.Blocks < 0 || st.Blocks > math.MaxInt64/512) {
+				return errors.New("storage diagnostic invalid or overflowing byte count")
 			}
 			allocated += float64(st.Blocks * 512)
 			if observation != nil {
@@ -1235,8 +1287,16 @@ func diskUsageWalk(root string, observation *storageDiagnostic, walk func(string
 				if err != nil {
 					return err
 				}
-				observation.Files = append(observation.Files, endpointFile{Path: filepath.ToSlash(rel),
-					LogicalBytes: size, AllocatedBytes: st.Blocks * 512, StatBlocks: st.Blocks, ModifiedAt: info.ModTime().UTC()})
+				row := endpointFile{Path: filepath.ToSlash(rel), IdentityAvailable: true,
+					Device: strconv.FormatUint(uint64(st.Dev), 10), Inode: strconv.FormatUint(st.Ino, 10), LinkCount: uint64(st.Nlink), Mode: uint32(info.Mode()), ObservedAt: time.Now().UTC(),
+					LogicalBytes: size, AllocatedBytes: st.Blocks * 512, StatBlocks: st.Blocks, ModifiedAt: info.ModTime().UTC()}
+				key := row.Device + ":" + row.Inode
+				if first, ok := identities[key]; ok {
+					observation.Aliases = append(observation.Aliases, storageAlias{FirstPath: first, Path: row.Path})
+				} else {
+					identities[key] = row.Path
+				}
+				observation.Files = append(observation.Files, row)
 			}
 		}
 		return nil
@@ -1414,11 +1474,17 @@ func contains(values []string, want string) bool {
 const endpointQuiescence = 5 * time.Second
 
 type endpointFile struct {
-	Path           string    `json:"path"`
-	LogicalBytes   int64     `json:"logical_bytes"`
-	AllocatedBytes int64     `json:"allocated_bytes"`
-	StatBlocks     int64     `json:"stat_blocks"`
-	ModifiedAt     time.Time `json:"modified_at"`
+	IdentityAvailable bool      `json:"identity_available,omitempty,omitzero"`
+	Device            string    `json:"device,omitempty,omitzero"`
+	Inode             string    `json:"inode,omitempty,omitzero"`
+	LinkCount         uint64    `json:"link_count,omitempty,omitzero"`
+	Mode              uint32    `json:"mode,omitempty,omitzero"`
+	ObservedAt        time.Time `json:"observed_at,omitempty,omitzero"`
+	Path              string    `json:"path"`
+	LogicalBytes      int64     `json:"logical_bytes"`
+	AllocatedBytes    int64     `json:"allocated_bytes"`
+	StatBlocks        int64     `json:"stat_blocks"`
+	ModifiedAt        time.Time `json:"modified_at"`
 }
 
 type endpointObservation struct {
@@ -1558,9 +1624,11 @@ type operationRow struct {
 }
 
 type operationRequest struct {
+	HTTPStatus int       `json:"http_status,omitempty"`
 	StartedAt  time.Time `json:"started_at"`
 	FinishedAt time.Time `json:"finished_at"`
 	Body       string    `json:"body"`
+	Error      string    `json:"error,omitempty"`
 }
 
 type operationBoundary struct {
@@ -1776,28 +1844,46 @@ func validateOperationDiagnostic(o options) error {
 const storageDiagnosticReason = "same-walk storage diagnostic overhead; excluded from performance acceptance"
 const storageDiagnosticBoundary = "native_posting_disk_usage_prevalidation"
 
+type storageAlias struct {
+	FirstPath string `json:"first_path"`
+	Path      string `json:"path"`
+}
+
 type storageDiagnostic struct {
-	SchemaVersion   int            `json:"schema_version"`
-	DiagnosticOnly  bool           `json:"diagnostic_only"`
-	RunID           string         `json:"run_id"`
-	Backend         string         `json:"backend"`
-	DurabilityClass string         `json:"durability_class"`
-	PostingDir      string         `json:"posting_dir"`
-	Boundary        string         `json:"boundary"`
-	TimedFinished   time.Time      `json:"timed_finished"`
-	WalkStartedAt   time.Time      `json:"walk_started_at"`
-	WalkFinishedAt  time.Time      `json:"walk_finished_at"`
-	WriteStartedAt  time.Time      `json:"write_started_at"`
-	WalkComplete    bool           `json:"walk_complete"`
-	Error           string         `json:"error"`
-	LogicalBytes    float64        `json:"logical_bytes"`
-	AllocatedBytes  float64        `json:"allocated_bytes"`
-	RegularFiles    int            `json:"regular_files"`
-	Files           []endpointFile `json:"files"`
+	ValidationError         string            `json:"validation_error,omitempty"`
+	Config                  livebench.Config  `json:"config"`
+	Context                 livebench.Context `json:"context"`
+	HarnessBinarySHA256     string            `json:"harness_binary_sha256"`
+	HarnessBuildInfo        string            `json:"harness_build_info"`
+	Store                   operationRequest  `json:"store"`
+	Prometheus              operationRequest  `json:"prometheus"`
+	WalkToStatusGap         time.Duration     `json:"walk_to_status_gap_ns"`
+	ResolvedProfile         storageField      `json:"resolved_profile"`
+	EventsPolicy            storageField      `json:"events_policy"`
+	CommandWALMode          storageField      `json:"command_wal_mode"`
+	EngineStatsAvailability storageField      `json:"engine_stats_availability"`
+	Aliases                 []storageAlias    `json:"aliases"`
+	SchemaVersion           int               `json:"schema_version"`
+	DiagnosticOnly          bool              `json:"diagnostic_only"`
+	RunID                   string            `json:"run_id"`
+	Backend                 string            `json:"backend"`
+	DurabilityClass         string            `json:"durability_class"`
+	PostingDir              string            `json:"posting_dir"`
+	Boundary                string            `json:"boundary"`
+	TimedFinished           time.Time         `json:"timed_finished"`
+	WalkStartedAt           time.Time         `json:"walk_started_at"`
+	WalkFinishedAt          time.Time         `json:"walk_finished_at"`
+	WriteStartedAt          time.Time         `json:"write_started_at"`
+	WalkComplete            bool              `json:"walk_complete"`
+	Error                   string            `json:"error"`
+	LogicalBytes            float64           `json:"logical_bytes"`
+	AllocatedBytes          float64           `json:"allocated_bytes"`
+	RegularFiles            int               `json:"regular_files"`
+	Files                   []endpointFile    `json:"files"`
 }
 
 func newStorageDiagnostic(root string, r livebench.Result) *storageDiagnostic {
-	return &storageDiagnostic{SchemaVersion: 1, DiagnosticOnly: true, RunID: r.RunID, Backend: r.Config.Backend,
+	return &storageDiagnostic{SchemaVersion: 2, Config: r.Config, Context: r.Context, DiagnosticOnly: true, RunID: r.RunID, Backend: r.Config.Backend,
 		DurabilityClass: r.Config.DurabilityClass, PostingDir: root, Boundary: storageDiagnosticBoundary,
 		TimedFinished: r.TimedFinished, Files: []endpointFile{}}
 }
@@ -1805,7 +1891,7 @@ func newStorageDiagnostic(root string, r livebench.Result) *storageDiagnostic {
 // Validation is against the native result from this run, not a new filesystem
 // observation. Incomplete raw artifacts are retained but cannot validate.
 func validateStorageDiagnostic(d *storageDiagnostic, r livebench.Result) error {
-	if d == nil || d.SchemaVersion != 1 || !d.DiagnosticOnly || !d.WalkComplete || d.Error != "" || len(d.Files) == 0 {
+	if d == nil || d.SchemaVersion != 2 || !d.DiagnosticOnly || !d.WalkComplete || d.Error != "" || d.ValidationError != "" || len(d.Files) == 0 {
 		return errors.New("incomplete storage diagnostic")
 	}
 	if d.RegularFiles != len(d.Files) {
@@ -1814,7 +1900,7 @@ func validateStorageDiagnostic(d *storageDiagnostic, r livebench.Result) error {
 	if d.RunID == "" || d.RunID != r.RunID || d.Backend != r.Config.Backend || d.DurabilityClass != r.Config.DurabilityClass ||
 		(d.Backend != "treedb" && d.Backend != "badger") || (d.DurabilityClass != "relaxed" && d.DurabilityClass != "durable") ||
 		r.Context.RawPath == "" || d.PostingDir != filepath.Join(filepath.Dir(r.Context.RawPath), "cluster", "p") ||
-		d.Boundary != storageDiagnosticBoundary || !r.Context.Excluded || !strings.Contains(r.Context.ExclusionReason, storageDiagnosticReason) {
+		d.Boundary != storageDiagnosticBoundary || !strings.Contains(d.Context.ExclusionReason, storageDiagnosticReason) || !r.Context.Excluded || !strings.Contains(r.Context.ExclusionReason, storageDiagnosticReason) {
 		return errors.New("storage diagnostic identity or boundary mismatch")
 	}
 	if d.TimedFinished.IsZero() || !d.TimedFinished.Equal(r.TimedFinished) || d.WalkStartedAt.IsZero() ||
@@ -1822,27 +1908,68 @@ func validateStorageDiagnostic(d *storageDiagnostic, r livebench.Result) error {
 		d.WriteStartedAt.IsZero() || d.WriteStartedAt.Before(d.WalkFinishedAt) {
 		return errors.New("storage diagnostic walk envelope mismatch")
 	}
+	if !reflect.DeepEqual(d.Config, r.Config) || !reflect.DeepEqual(storageReproductionContext(d.Context), storageReproductionContext(r.Context)) ||
+		!storageDigest(d.Context.DgraphSHA, 20) || d.Context.GomapVersion == "" || d.Context.GoVersion == "" ||
+		!storageDigest(d.Context.BinarySHA256, 32) || d.Context.BinaryBuildInfo == "" || len(d.Context.ExactCommand) == 0 ||
+		!storageDigest(d.HarnessBinarySHA256, 32) || d.HarnessBuildInfo == "" {
+		return errors.New("storage diagnostic source/config/binary binding mismatch")
+	}
+	if err := validateStorageStatus(d); err != nil {
+		return err
+	}
+	resolved := *d
+	resolved.resolveStorageFields()
+	if d.ResolvedProfile != resolved.ResolvedProfile || d.EventsPolicy != resolved.EventsPolicy || d.CommandWALMode != resolved.CommandWALMode || d.EngineStatsAvailability != resolved.EngineStatsAvailability {
+		return errors.New("storage diagnostic raw/derived status mismatch")
+	}
 	seen := make(map[string]bool, len(d.Files))
-	var logical, allocated float64
-	const maxExactBytes = 1<<53 - 1
+	identities := make(map[string]string)
+	aliases := []storageAlias{}
+	var logical, allocated int64
+	const maxExactBytes = 1 << 53
 	for _, f := range d.Files {
 		if f.Path == "" || filepath.IsAbs(f.Path) || filepath.ToSlash(filepath.Clean(f.Path)) != f.Path || f.Path == "." ||
 			f.Path == ".." || strings.HasPrefix(f.Path, "../") || strings.ContainsRune(f.Path, 0) || seen[f.Path] ||
-			f.LogicalBytes < 0 || f.LogicalBytes > maxExactBytes || f.StatBlocks < 0 || f.StatBlocks > maxExactBytes/512 ||
-			f.AllocatedBytes != f.StatBlocks*512 || f.ModifiedAt.IsZero() {
+			f.LogicalBytes < 0 || f.StatBlocks < 0 || f.StatBlocks > math.MaxInt64/512 ||
+			f.AllocatedBytes != f.StatBlocks*512 || f.ModifiedAt.IsZero() ||
+			!f.IdentityAvailable || f.Device == "" || f.Inode == "" || f.LinkCount == 0 ||
+			f.ObservedAt.IsZero() || f.ObservedAt.Before(d.WalkStartedAt) || f.ObservedAt.After(d.WalkFinishedAt) {
 			return errors.New("invalid storage diagnostic file row")
 		}
 		seen[f.Path] = true
-		logical += float64(f.LogicalBytes)
-		allocated += float64(f.AllocatedBytes)
+		if f.LogicalBytes > math.MaxInt64-logical || f.AllocatedBytes > math.MaxInt64-allocated {
+			return errors.New("storage diagnostic integer sum overflow")
+		}
+		logical += f.LogicalBytes
+		allocated += f.AllocatedBytes
+		key := f.Device + ":" + f.Inode
+		if first, ok := identities[key]; ok {
+			aliases = append(aliases, storageAlias{FirstPath: first, Path: f.Path})
+		} else {
+			identities[key] = f.Path
+		}
+		if _, err := strconv.ParseUint(f.Device, 10, 64); err != nil {
+			return errors.New("invalid storage device identity")
+		}
+		if _, err := strconv.ParseUint(f.Inode, 10, 64); err != nil {
+			return errors.New("invalid storage inode identity")
+		}
 		if logical > maxExactBytes || allocated > maxExactBytes {
 			return errors.New("storage diagnostic totals exceed exact native byte representation")
 		}
 	}
-	if logical != d.LogicalBytes || allocated != d.AllocatedBytes {
+	if len(aliases) != len(d.Aliases) {
+		return errors.New("storage diagnostic aliases mismatch")
+	}
+	for i := range aliases {
+		if aliases[i] != d.Aliases[i] {
+			return errors.New("storage diagnostic aliases mismatch")
+		}
+	}
+	if float64(logical) != d.LogicalBytes || float64(allocated) != d.AllocatedBytes {
 		return errors.New("storage diagnostic file sum mismatch")
 	}
-	for name, want := range map[string]float64{"disk_logical_bytes": logical, "disk_allocated_bytes": allocated} {
+	for name, want := range map[string]float64{"disk_logical_bytes": float64(logical), "disk_allocated_bytes": float64(allocated)} {
 		metric, ok := r.Metrics[name]
 		source := "posting directory walk"
 		if name == "disk_allocated_bytes" {
@@ -1864,7 +1991,9 @@ func writeStorageDiagnostic(path string, d *storageDiagnostic, r livebench.Resul
 		return err
 	}
 	d.WriteStartedAt = time.Now().UTC()
+	d.resolveStorageFields()
 	validationErr := validateStorageDiagnostic(d, r)
+	d.ValidationError = errorString(validationErr)
 	// Preserve even failed/partial raw observations with their error. Returning
 	// validationErr prevents a native success result from being published.
 	return errors.Join(validationErr, livebench.WriteImmutable(output, d))
@@ -1880,4 +2009,106 @@ func validateStorageDiagnosticOption(o options) error {
 	_, err := diagnosticOutputPath(o.storageDiagnostic, filepath.Join(o.artifactDir, "cluster", "p"),
 		[]string{o.cpuProfile, o.endpointDiagnostic, o.operationDiagnostic})
 	return err
+}
+
+func storageDigest(s string, size int) bool {
+	b, err := hex.DecodeString(s)
+	return err == nil && len(b) == size
+}
+
+func errorString(err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// Read once before native processes start; no executable I/O at the endpoint.
+func storageHarnessIdentity() (string, string, error) {
+	path, err := os.Executable()
+	if err != nil {
+		return "", "", err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err = io.Copy(h, f); err != nil {
+		return "", "", err
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "", "", errors.New("harness build info unavailable")
+	}
+	return hex.EncodeToString(h.Sum(nil)), info.String(), nil
+}
+
+type storageField struct {
+	Available bool   `json:"available"`
+	Value     string `json:"value,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+func optionalStorageField(m map[string]string, key string, backend string) storageField {
+	v, ok := m[key]
+	if ok {
+		return storageField{Available: true, Value: v}
+	}
+	return storageField{Reason: "not exported by " + backend + ": " + key}
+}
+func validateStorageStatus(d *storageDiagnostic) error {
+	p, s := d.Prometheus, d.Store
+	if p.StartedAt.IsZero() || p.FinishedAt.IsZero() || s.StartedAt.IsZero() || s.FinishedAt.IsZero() ||
+		p.StartedAt.Before(d.WalkFinishedAt) || p.FinishedAt.Before(p.StartedAt) ||
+		s.StartedAt.Before(p.FinishedAt) || s.FinishedAt.Before(s.StartedAt) || d.WriteStartedAt.Before(s.FinishedAt) ||
+		d.WalkToStatusGap != s.StartedAt.Sub(d.WalkFinishedAt) {
+		return errors.New("storage diagnostic later request envelope mismatch")
+	}
+	if p.Error != "" || s.Error != "" || p.HTTPStatus != http.StatusOK || s.HTTPStatus != http.StatusOK {
+		return errors.New("storage diagnostic later request failed")
+	}
+	if strings.Contains(s.Body, "stats_error=") {
+		return errors.New("storage diagnostic engine stats error")
+	}
+	if !strings.Contains(s.Body, "status=map[") || !strings.Contains(s.Body, "stats=map[") {
+		return errors.New("storage diagnostic raw status unavailable")
+	}
+	i := strings.Index(s.Body, "stats=map[")
+	if strings.IndexByte(s.Body[i+len("stats=map["):], ']') < 0 {
+		return errors.New("storage diagnostic malformed raw stats")
+	}
+	status := parseMapSection(s.Body, "status=map[")
+	if status["backend"] != d.Backend || status["profile"] == "" {
+		return errors.New("storage diagnostic observed backend/profile mismatch")
+	}
+	return nil
+}
+
+func (d *storageDiagnostic) resolveStorageFields() {
+	status := parseMapSection(d.Store.Body, "status=map[")
+	stats := parseMapSection(d.Store.Body, "stats=map[")
+	d.ResolvedProfile = optionalStorageField(status, "profile", d.Backend)
+	d.EventsPolicy = optionalStorageField(status, "post_commit_events", d.Backend)
+	d.CommandWALMode = optionalStorageField(stats, "treedb.write_path.mode", d.Backend)
+	d.EngineStatsAvailability = storageField{Available: d.Backend == "treedb" && len(stats) > 0 && strings.Contains(d.Store.Body, "stats=map[") && d.Store.HTTPStatus == http.StatusOK && d.Store.Error == "" && !strings.Contains(d.Store.Body, "stats_error=")}
+	if !d.EngineStatsAvailability.Available {
+		d.EngineStatsAvailability.Reason = "engine gauges unavailable; see raw store body and request error"
+		if d.Store.Error != "" {
+			d.EngineStatsAvailability.Error = d.Store.Error
+		}
+		if i := strings.Index(d.Store.Body, "stats_error="); i >= 0 {
+			d.EngineStatsAvailability.Error = d.Store.Body[i+len("stats_error="):]
+		}
+	}
+}
+
+// Recovery-time contamination changes the final exclusion disposition, not the
+// already sealed observation's source, binary, command, or environment identity.
+func storageReproductionContext(c livebench.Context) livebench.Context {
+	c.Contaminants = nil
+	c.ExclusionReason = ""
+	return c
 }

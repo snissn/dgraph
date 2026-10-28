@@ -432,3 +432,8 @@ private buffered bytes and retains fail-stop poisoning. There is no pooled or re
 ownership. Initialization and root/retirement fences remain whole-lifecycle work. The active journal
 can grow through these replacements while certification is blocked; this is not a new background
 checkpoint, retention cadence, or claim of a bound independent of the existing certificate.
+
+For separately admitted natural-endpoint file attribution, see
+[Native-boundary storage attribution](LIVE_DURABILITY_AB.md#native-boundary-storage-attribution-separate-diagnostic-only).
+Its schema-v2 file rows and later raw status are sequential observations, not a recovery-root
+reachability census; it adds no checkpoint, maintenance request, scan or endpoint wait.
