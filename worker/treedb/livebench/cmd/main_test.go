@@ -812,7 +812,7 @@ func TestOperationDiagnosticAbsentServerLatencyAndNativePath(t *testing.T) {
 
 func storageTestResult(root string) livebench.Result {
 	return livebench.Result{RunID: "treedb-relaxed-r1", Config: livebench.Config{Backend: "treedb", DurabilityClass: "relaxed"},
-		TimedFinished: time.Now().UTC().Add(-time.Second), Context: livebench.Context{RawPath: filepath.Join(filepath.Dir(filepath.Dir(root)), "result.json"), Excluded: true, ExclusionReason: storageDiagnosticReason}, Metrics: map[string]livebench.Metric{}}
+		TimedFinished: time.Now().UTC().Add(-time.Second), Context: livebench.Context{DgraphSHA: strings.Repeat("c", 40), GomapVersion: "gomap", GoVersion: "go-test", BinarySHA256: strings.Repeat("a", 64), BinaryBuildInfo: "measured build", ExactCommand: []string{"harness"}, RawPath: filepath.Join(filepath.Dir(filepath.Dir(root)), "result.json"), Excluded: true, ExclusionReason: storageDiagnosticReason}, Metrics: map[string]livebench.Metric{}}
 }
 func TestStorageDiagnosticSameWalkAndDefaultOff(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "cluster", "p")
@@ -850,6 +850,7 @@ func TestStorageDiagnosticSameWalkAndDefaultOff(t *testing.T) {
 	r := storageTestResult(root)
 	r.TimedFinished = d.TimedFinished
 	r.Metrics = metrics("treedb", "store_wal", 0, 0, logical, allocated, nil, nil, nil, nil)
+	completeStorageTestObservation(d)
 	sidecar := filepath.Join(filepath.Dir(filepath.Dir(root)), "storage.json")
 	if err := writeStorageDiagnostic(sidecar, d, r); err != nil {
 		t.Fatal(err)
@@ -895,6 +896,7 @@ func TestStorageDiagnosticRejectsInvalidAndRetainsPartial(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Metrics = metrics("treedb", "store_wal", 0, 0, l, a, nil, nil, nil, nil)
+	completeStorageTestObservation(d)
 	d.WriteStartedAt = time.Now().UTC()
 	raw, _ := json.Marshal(d)
 	for name, mutate := range map[string]func(*storageDiagnostic){
@@ -1176,6 +1178,7 @@ func TestDiagnosticResolvedWritesAndFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.Metrics = metrics("treedb", "store_wal", 0, 0, logical, allocated, nil, nil, nil, nil)
+	completeStorageTestObservation(d)
 	path := filepath.Join(alias, "storage.json")
 	if err := writeStorageDiagnostic(path, d, r); err != nil {
 		t.Fatal(err)
