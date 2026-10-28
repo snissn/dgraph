@@ -6,14 +6,17 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/dgraph-io/dgraph/v25/posting"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
@@ -234,4 +237,85 @@ func TestDeltaInquiryImmediateSubmissionError(t *testing.T) {
 	require.Equal(t, "submit_begin", events[0].Phase)
 	require.Equal(t, "submit_return", events[1].Phase)
 	require.Equal(t, "rejected admission", events[1].Error)
+}
+
+// Descriptors serialize while the receiver still owns the Delta. Subsequent
+// aggregate mutation cannot rewrite the already emitted receipt, even for a
+// large initial snapshot that exceeds glog's individual record limit.
+func TestDeltaInquiryOracleImmutableBoundedDescriptors(t *testing.T) {
+	var records [][]byte
+	d := &deltaInquiry{emit: func(e inquiryEvent) {
+		b, err := json.Marshal(e)
+		require.NoError(t, err)
+		require.Less(t, len(b), 8000)
+		records = append(records, b)
+	}}
+	d.event(inquiryEvent{Phase: "enabled"})
+	stream := d.oracleStream()
+	delta := &pb.OracleDelta{MaxAssigned: 99, ChecksumSequence: 3, GroupChecksums: map[uint32]uint64{1: 8}}
+	for i := range 5000 {
+		delta.Txns = append(delta.Txns, &pb.TxnStatus{StartTs: uint64(i + 1), CommitTs: uint64(i + 5001)})
+	}
+	digest := raftChecksumDigest(delta)
+	d.oracleDelta(inquiryEvent{Phase: "oracle_received", Stream: stream, Message: 1}, delta)
+	delta.Txns[0].CommitTs = 90000
+	delta.GroupChecksums[1] = 90000
+	var header, first inquiryEvent
+	require.NoError(t, json.Unmarshal(records[2], &header))
+	require.NoError(t, json.Unmarshal(records[3], &first))
+	require.Equal(t, 5000, header.TxnCount)
+	require.Equal(t, digest, header.ChecksumDigest)
+	require.Equal(t, uint64(5001), first.CommitTs)
+	require.Equal(t, header.Sequence, first.ParentSequence)
+	require.Len(t, records, 5003)
+	for i, b := range records {
+		var e inquiryEvent
+		require.NoError(t, json.Unmarshal(b, &e))
+		require.Equal(t, uint64(i+1), e.Sequence)
+	}
+	ctx := d.oracleContext(context.Background(), stream, 7, 2)
+	d.oracleProposal(ctx, 123, 456)
+	var encoded inquiryEvent
+	require.NoError(t, json.Unmarshal(records[len(records)-1], &encoded))
+	require.Equal(t, uint64(7), encoded.Aggregate)
+	require.Equal(t, uint64(2), encoded.Attempt)
+	require.Equal(t, uint64(123), encoded.Key)
+
+	// Exercise the actual wire JSON in the Python decoder. Struct round trips
+	// alone do not catch omitted zero-valued fields such as ordinal zero.
+	d.event(inquiryEvent{Phase: "apply_closed"})
+	python, err := exec.LookPath("python3")
+	require.NoError(t, err)
+	cmd := exec.Command(python, "-c", "import json,sys; sys.path.insert(0,'treedb/delta_inquiry'); from upstream import complete_events; es=complete_events(json.load(sys.stdin)); assert es[2]['txns'][0]['commit_ts']==5001; print(len(es[2]['txns']))")
+	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1")
+	cmd.Stdin = bytes.NewReader(append(append([]byte("["), bytes.Join(records, []byte(","))...), ']'))
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	require.Equal(t, "5000\n", string(output))
+	var disabled *deltaInquiry
+	base := context.Background()
+	require.Equal(t, base, disabled.oracleContext(base, 1, 2, 3))
+}
+
+// Captures happen before the shared log mutex. Emission sequence establishes
+// integrity, while a waiting receiver's capture can precede an earlier emitted
+// apply event. No consumer may assume capture times are sequence-monotonic.
+func TestDeltaInquiryOracleCaptureBeforeEmitLock(t *testing.T) {
+	var records []inquiryEvent
+	d := &deltaInquiry{emit: func(e inquiryEvent) { records = append(records, e) }}
+	d.event(inquiryEvent{Phase: "enabled"})
+	captured := time.Now()
+	d.mu.Lock()
+	done := make(chan struct{})
+	go func() {
+		d.oracle(inquiryEvent{Phase: "oracle_received", Captured: captured, Stream: 1, Message: 1})
+		close(done)
+	}()
+	d.emitLocked(inquiryEvent{Phase: "flush_end"})
+	d.mu.Unlock()
+	<-done
+	require.Equal(t, "flush_end", records[1].Phase)
+	require.Equal(t, "oracle_received", records[2].Phase)
+	require.Less(t, records[2].CapturedNS, records[1].ElapsedNS)
+	require.Less(t, records[2].CapturedNS, records[2].ElapsedNS)
 }

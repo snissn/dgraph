@@ -6,6 +6,7 @@
 package worker
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/dgraph-io/dgraph/v25/posting"
 	"github.com/dgraph-io/dgraph/v25/protos/pb"
 	"github.com/golang/glog"
+	"github.com/google/uuid"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -25,29 +27,45 @@ import (
 type deltaInquiry struct {
 	mu      sync.Mutex
 	seq     uint64
+	streams uint64
+	session string
 	started time.Time
 	emit    func(inquiryEvent)
 }
 type inquiryEvent struct {
-	Version      int               `json:"version"`
-	ElapsedNS    int64             `json:"elapsed_ns"`
-	Sequence     uint64            `json:"sequence"`
-	At           string            `json:"at"`
-	Phase        string            `json:"phase"`
-	Index        uint64            `json:"index"`
-	Key          uint64            `json:"key"`
-	Kind         string            `json:"kind,omitempty"`
-	Bytes        int               `json:"bytes,omitempty"`
-	Txns         []*pb.TxnStatus   `json:"txns,omitempty"`
-	StartTs      uint64            `json:"start_ts,omitempty"`
-	MaxAssigned  uint64            `json:"max_assigned,omitempty"`
-	CommitTs     uint64            `json:"commit_ts,omitempty"`
-	Request      uint64            `json:"request,omitempty"`
-	Entries      uint64            `json:"entries,omitempty"`
-	PayloadBytes uint64            `json:"payload_bytes,omitempty"`
-	Error        string            `json:"error,omitempty"`
-	Build        map[string]string `json:"build,omitempty"`
-	Detail       string            `json:"detail,omitempty"`
+	Session          string            `json:"session"`
+	Captured         time.Time         `json:"-"`
+	CapturedNS       int64             `json:"captured_ns,omitempty"`
+	Stream           uint64            `json:"stream,omitempty"`
+	Message          uint64            `json:"message,omitempty"`
+	Aggregate        uint64            `json:"aggregate,omitempty"`
+	Attempt          uint64            `json:"attempt,omitempty"`
+	TxnCount         int               `json:"txn_count,omitempty"`
+	ParentSequence   uint64            `json:"parent_sequence,omitempty"`
+	Ordinal          int               `json:"ordinal"`
+	NilTxn           bool              `json:"nil_txn,omitempty"`
+	ChecksumSequence uint64            `json:"checksum_sequence,omitempty"`
+	ChecksumDigest   string            `json:"checksum_digest,omitempty"`
+	UnknownFields    bool              `json:"unknown_fields,omitempty"`
+	Version          int               `json:"version"`
+	ElapsedNS        int64             `json:"elapsed_ns"`
+	Sequence         uint64            `json:"sequence"`
+	At               string            `json:"at"`
+	Phase            string            `json:"phase"`
+	Index            uint64            `json:"index"`
+	Key              uint64            `json:"key"`
+	Kind             string            `json:"kind,omitempty"`
+	Bytes            int               `json:"bytes,omitempty"`
+	Txns             []*pb.TxnStatus   `json:"txns,omitempty"`
+	StartTs          uint64            `json:"start_ts,omitempty"`
+	MaxAssigned      uint64            `json:"max_assigned,omitempty"`
+	CommitTs         uint64            `json:"commit_ts,omitempty"`
+	Request          uint64            `json:"request,omitempty"`
+	Entries          uint64            `json:"entries,omitempty"`
+	PayloadBytes     uint64            `json:"payload_bytes,omitempty"`
+	Error            string            `json:"error,omitempty"`
+	Build            map[string]string `json:"build,omitempty"`
+	Detail           string            `json:"detail,omitempty"`
 }
 
 func newDeltaInquiry() *deltaInquiry {
@@ -91,7 +109,38 @@ func (d *deltaInquiry) event(e inquiryEvent) {
 	if d.started.IsZero() {
 		d.started = time.Now()
 	}
+	if d.session == "" {
+		d.session = uuid.NewString()
+	}
+	if !e.Captured.IsZero() {
+		e.CapturedNS = e.Captured.Sub(d.started).Nanoseconds()
+	}
+	// Keep decision lists below glog's record-size limit. Exact child count and
+	// ordinal permit fail-closed reconstruction after partial logging.
+	if len(e.Txns) > 32 {
+		txns := e.Txns
+		e.Txns = nil
+		e.TxnCount = len(txns)
+		d.emitLocked(e)
+		parent := d.seq
+		for i, txn := range txns {
+			child := inquiryEvent{Phase: "decision_part", ParentSequence: parent, Ordinal: i}
+			if txn == nil {
+				child.NilTxn = true
+			} else {
+				child.StartTs, child.CommitTs = txn.StartTs, txn.CommitTs
+				child.UnknownFields = len(txn.ProtoReflect().GetUnknown()) != 0
+			}
+			d.emitLocked(child)
+		}
+		return
+	}
+	d.emitLocked(e)
+}
+
+func (d *deltaInquiry) emitLocked(e inquiryEvent) {
 	d.seq++
+	e.Session = d.session
 	e.ElapsedNS = time.Since(d.started).Nanoseconds()
 	e.Version = 1
 	e.Sequence = d.seq
@@ -215,4 +264,75 @@ func (n *node) enqueueApply(entries []raftpb.Entry) {
 	n.deltaInquiry.entries(entries, "enqueue_begin")
 	n.applyCh <- entries
 	n.deltaInquiry.entries(entries, "enqueue_end")
+}
+
+// oracleInquiryMessage transfers exactly the same Delta ownership as the
+// original pointer channel. IDs are observation metadata, never admission state.
+type oracleInquiryMessage struct {
+	delta *pb.OracleDelta
+	id    uint64
+}
+
+type oracleInquiryContextKey struct{}
+type oracleInquiryContext struct{ stream, aggregate, attempt uint64 }
+
+func (d *deltaInquiry) oracleStream() uint64 {
+	if d == nil {
+		return 0
+	}
+	d.mu.Lock()
+	d.streams++
+	id := d.streams
+	d.mu.Unlock()
+	d.oracle(inquiryEvent{Phase: "oracle_stream_open", Stream: id})
+	return id
+}
+
+func (d *deltaInquiry) oracle(e inquiryEvent) {
+	if d == nil {
+		return
+	}
+	if e.Captured.IsZero() {
+		e.Captured = time.Now()
+	}
+	d.event(e)
+}
+
+// Called before ownership transfer or by the sole aggregate owner. Nothing
+// reads a mutable Delta after sending it to the consumer.
+func (d *deltaInquiry) oracleDelta(e inquiryEvent, delta *pb.OracleDelta) {
+	if d == nil {
+		return
+	}
+	if e.Captured.IsZero() {
+		e.Captured = time.Now()
+	}
+	e.Bytes = proto.Size(delta)
+	e.Txns = delta.Txns
+	e.MaxAssigned = delta.MaxAssigned
+	e.ChecksumSequence = delta.ChecksumSequence
+	e.ChecksumDigest = raftChecksumDigest(delta)
+	e.UnknownFields = len(delta.ProtoReflect().GetUnknown()) != 0
+	for _, txn := range delta.Txns {
+		if txn != nil && len(txn.ProtoReflect().GetUnknown()) != 0 {
+			e.UnknownFields = true
+		}
+	}
+	d.event(e)
+}
+
+func (d *deltaInquiry) oracleContext(ctx context.Context, stream, aggregate, attempt uint64) context.Context {
+	if d == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, oracleInquiryContextKey{}, oracleInquiryContext{stream, aggregate, attempt})
+}
+
+func (d *deltaInquiry) oracleProposal(ctx context.Context, key uint64, bytes int) {
+	if d == nil {
+		return
+	}
+	if o, ok := ctx.Value(oracleInquiryContextKey{}).(oracleInquiryContext); ok {
+		d.oracle(inquiryEvent{Phase: "oracle_proposal_encoded", Stream: o.stream, Aggregate: o.aggregate, Attempt: o.attempt, Key: key, Bytes: bytes})
+	}
 }

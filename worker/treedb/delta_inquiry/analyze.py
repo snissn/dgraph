@@ -5,14 +5,16 @@
 import argparse
 import collections
 import json
+from upstream import complete_events
 
 
 def analyze(events):
+    events = complete_events(events)
     if not events or [e['sequence'] for e in events] != list(range(1, len(events)+1)):
         raise ValueError('missing, reordered or mixed-process sequence')
     if any(e['version'] != 1 for e in events):
         raise ValueError('unsupported version')
-    if events[0]['phase'] != 'enabled' or events[-1]['phase'] != 'apply_closed':
+    if events[0]['phase'] != 'enabled' or not any(e['phase'] == 'apply_closed' for e in events):
         raise ValueError('incomplete trace; retain raw evidence, no frequency inference')
     times = [e['elapsed_ns'] for e in events]
     if any(type(t) is not int or t < 0 for t in times) or times != sorted(times):
@@ -58,7 +60,7 @@ def analyze(events):
             reason = 'no_storage_submission'
         else:
             txns = left.get('txns', []) + right.get('txns', [])
-            starts = [x.get('start_ts', 0) for x in txns]
+            starts = [x.get('start_ts', 0) if x is not None else 0 for x in txns]
             if not starts or 0 in starts or len(set(starts)) != len(starts):
                 reason = 'duplicate_or_invalid_start_ts'
             elif not all(x.get('commit_ts', 0) > x['start_ts'] for x in txns):
