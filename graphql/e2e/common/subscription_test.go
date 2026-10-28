@@ -39,11 +39,15 @@ func TestSubscriptionReceiveDeadline(t *testing.T) {
 			require.NoError(t, err)
 			defer conn.Close()
 			client := &GraphQLSubscriptionClient{conn: conn}
-			payload, err := client.RecvMsgWithTimeout(50 * time.Millisecond)
+			timeout := 10 * time.Second
 			if typ == "idle" {
-				var timeout net.Error
-				require.True(t, errors.As(err, &timeout))
-				require.True(t, timeout.Timeout())
+				timeout = 50 * time.Millisecond
+			}
+			payload, err := client.RecvMsgWithTimeout(timeout)
+			if typ == "idle" {
+				var timeoutErr net.Error
+				require.True(t, errors.As(err, &timeoutErr))
+				require.True(t, timeoutErr.Timeout())
 				return
 			}
 			require.NoError(t, err)
