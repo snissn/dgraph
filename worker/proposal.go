@@ -122,7 +122,13 @@ var errUnableToServe = errors.New("Server overloaded with pending proposals. Ple
 
 // proposeAndWait sends a proposal through RAFT. It waits on a channel for the proposal
 // to be applied(written to WAL) to all the nodes in the group.
-func (n *node) proposeAndWait(ctx context.Context, proposal *pb.Proposal) (perr error) {
+func (n *node) proposeAndWait(ctx context.Context, proposal *pb.Proposal) error {
+	return n.proposeAndWaitCommitted(ctx, proposal, nil)
+}
+
+// The optional committed observation confers ordering only, never visibility or
+// acknowledgement. Existing callers retain the same synchronous apply wait.
+func (n *node) proposeAndWaitCommitted(ctx context.Context, proposal *pb.Proposal, committed chan<- uint64) (perr error) {
 	if raftCheckpointEnabled() {
 		if err := checkRaftPrototypeProposal(proposal); err != nil {
 			return err
@@ -225,6 +231,10 @@ func (n *node) proposeAndWait(ctx context.Context, proposal *pb.Proposal) (perr 
 	data = data[:8+sz]
 	n.deltaInquiry.oracleProposal(ctx, key, len(data))
 
+	if committed != nil {
+		return n.proposeOrderedBytes(ctx, key, data, committed)
+	}
+
 	span := trace.SpanFromContext(ctx)
 	stop := x.SpanTimer(span, "n.proposeAndWait")
 	defer stop()
@@ -237,8 +247,9 @@ func (n *node) proposeAndWait(ctx context.Context, proposal *pb.Proposal) (perr 
 
 		errCh := make(chan error, 1)
 		pctx := &conn.ProposalCtx{
-			ErrCh: errCh,
-			Ctx:   cctx,
+			ErrCh:     errCh,
+			Committed: committed,
+			Ctx:       cctx,
 		}
 		x.AssertTruef(n.Proposals.Store(key, pctx), "Found existing proposal with key: [%x]", key)
 		defer n.Proposals.Delete(key) // Ensure that it gets deleted on return.

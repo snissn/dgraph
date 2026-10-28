@@ -138,6 +138,9 @@ func raftProposalIdentity(p *pb.Proposal) (uint64, string, error) {
 }
 
 func (n *node) applyTrackedProposal(p *pb.Proposal, key uint64, size int) error {
+	return n.applyTrackedProposalUsing(p, key, size, n.applyCommitted)
+}
+func (n *node) applyTrackedProposalUsing(p *pb.Proposal, key uint64, size int, apply func(*pb.Proposal, uint64) error) error {
 	var start uint64
 	var digest string
 	if raftCheckpointEnabled() {
@@ -152,7 +155,7 @@ func (n *node) applyTrackedProposal(p *pb.Proposal, key uint64, size int) error 
 		// These controls have intrinsic ordered-state disposition, not an
 		// eternal arbitrary proposal-key identity. They never enter the map.
 		if !raftProposalNeedsIdentity(p) {
-			err := n.applyCommitted(p, key)
+			err := apply(p, key)
 			if err == nil && p.Delta != nil && p.Delta.MaxAssigned > n.raftOrderedAssigned {
 				n.raftOrderedAssigned = p.Delta.MaxAssigned
 			}
@@ -201,7 +204,7 @@ func (n *node) applyTrackedProposal(p *pb.Proposal, key uint64, size int) error 
 	}
 	err := rejection
 	if err == nil {
-		err = n.applyCommitted(p, key)
+		err = apply(p, key)
 	}
 	if raftCheckpointEnabled() && err == nil && p.Delta != nil && p.Delta.MaxAssigned > n.raftOrderedAssigned {
 		n.raftOrderedAssigned = p.Delta.MaxAssigned
