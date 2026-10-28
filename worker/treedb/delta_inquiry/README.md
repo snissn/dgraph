@@ -13,31 +13,32 @@ status. Preserve every attempt, raw log and `/debug/store` observation already c
 harness. Do not add status requests inside the measured interval for this inquiry. The records do
 not replace source/binary binding or native physical-sync counters.
 
-`version=1` JSON records follow the `DELTA_INQUIRY ` marker. A per-node mutex assigns contiguous
-sequence numbers, wall timestamps and monotonic `elapsed_ns` at logging; sequence is authoritative
-for observed ordering. The enabled record retains available embedded build/toolchain/module settings;
-external clean source and executable hashes remain required when VCS metadata is absent.
-`index` and `key` identify the Raft proposal; `request` is local to that Delta's writer.
-`bytes` is encoded Raft entry size; `payload_bytes` counts successful SetEntry key/value or Delete
-key lengths, excluding metadata/envelopes. Counts are adapter input, not retained heap or physical
-work. `start_ts`, `commit_ts` and raw Delta decisions retain their original timestamps.
+`version=1` JSON records follow the `DELTA_INQUIRY` marker and following space. A per-node mutex
+assigns contiguous sequence numbers, wall timestamps and monotonic `elapsed_ns` at logging; sequence
+is authoritative for observed ordering. The enabled record retains available embedded
+build/toolchain/module settings; external clean source and executable hashes remain required when
+VCS metadata is absent. `index` and `key` identify the Raft proposal; `request` is local to that
+Delta's writer. `bytes` is encoded Raft entry size; `payload_bytes` counts successful SetEntry
+key/value or Delete key lengths, excluding metadata/envelopes. Counts are adapter input, not
+retained heap or physical work. `start_ts`, `commit_ts` and raw Delta decisions retain their
+original timestamps.
 
 The event seams are the existing production owners:
 
 - `enqueue_begin/end`: offer before the channel send and return after it. Begin alone proves no
   queue admission. Apply may begin before enqueue_end; that ambiguity is retained.
-- `apply_begin`, `delta_begin`: actual serial application. The profile label is a candidate only
-  for configured ordinary durable TreeDB with actual `wal_on_sync`/durable status; other modes
-  remain instrumented but excluded. Proposal duplicate skips produce no delta_begin.
+- `apply_begin`, `delta_begin`: actual serial application. The profile label is a candidate only for
+  configured ordinary durable TreeDB with actual `wal_on_sync`/durable status; other modes remain
+  instrumented but excluded. Proposal duplicate skips produce no delta_begin.
 - `materialize_begin/end`: original txn.Update and CommitToDisk, including legacy retry behavior.
 - `submit_begin/return`, `callback`: actual CommitAt request, immediate return and callback entry.
   Callback can occur before return. No new callback, retry or storage request is introduced.
-- `flush_begin/end`, `window_seal`: original TxnWriter Flush and forwarded scheduling fence;
-  sealing is no durability certificate. A callback record precedes forwarding the original callback.
+- `flush_begin/end`, `window_seal`: original TxnWriter Flush and forwarded scheduling fence; sealing
+  is no durability certificate. A callback record precedes forwarding the original callback.
 - optional `hard_sync_begin/end`, cache invalidation, `oracle_begin/end`, `proposal_done_begin`,
   `applied_done`: existing publication/completion boundaries. Applied is an attempted-apply marker;
-  ordinary existing error paths may advance it without proving durability. Oracle end records
-  actual MaxAssigned after ProcessDelta. No error semantics are changed.
+  ordinary existing error paths may advance it without proving durability. Oracle end records actual
+  MaxAssigned after ProcessDelta. No error semantics are changed.
 - `apply_closed`: normal channel-close endpoint. Abrupt or partial logs remain evidence but are
   refused for complete-frequency inference.
 
@@ -48,10 +49,10 @@ python3 worker/treedb/delta_inquiry/analyze.py alpha.log > inquiry.json
 python3 -m unittest discover -s worker/treedb/delta_inquiry -v
 ```
 
-The analyzer reports adjacent pairs in offered Raft order. It excludes interposed non-Deltas,
-Raft index gaps (including controls filtered before applyCh), unsupported profiles, duplicate/invalid
-StartTs, aborts, watermark-only/no-storage work, errors,
-unbalanced request/return/callback records, incomplete application and send-overlap uncertainty. A pair requires successor enqueue_end before
+The analyzer reports adjacent pairs in offered Raft order. It excludes interposed non-Deltas, Raft
+index gaps (including controls filtered before applyCh), unsupported profiles, duplicate/invalid
+StartTs, aborts, watermark-only/no-storage work, errors, unbalanced request/return/callback records,
+incomplete application and send-overlap uncertainty. A pair requires successor enqueue_end before
 predecessor flush_end and actual storage-bearing submissions in both Deltas. It is an **upper bound
 on candidates**, not proof that preparing the successor is safe: cache ownership, retries, checksum,
 transaction independence, barriers, retained input and recovery must be proved separately. Pairs may
