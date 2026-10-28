@@ -221,7 +221,7 @@ extent ownership or live payload. Sparse, compressed, shared/reflink and block-r
 interpretation; allocation greater than apparent size does not establish preallocation.
 
 The sidecar reuses the existing later Prometheus and `/debug/store` requests, preserving their raw
-bodies, start/end and request errors. `walk_to_status_gap_ns` spans the walk end to store-request
+bodies (including available non-200 or truncated response bytes), HTTP status, start/end and request errors. `walk_to_status_gap_ns` spans the walk end to store-request
 start, including the intervening Prometheus request; it must not be labelled status-request cost.
 Raw stats remain strings, including uint64 root identities beyond 2^53 and boolean values. Resolved
 profile, events policy, and the `treedb.write_path.mode` command-WAL route are typed optional fields;

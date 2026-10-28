@@ -2,10 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -135,8 +139,8 @@ func completeStorageTestObservation(d *storageDiagnostic) {
 	d.HarnessBinarySHA256 = strings.Repeat("b", 64)
 	d.HarnessBuildInfo = "harness build"
 	now := time.Now().UTC()
-	d.Prometheus = operationRequest{StartedAt: now, FinishedAt: now}
-	d.Store = operationRequest{StartedAt: now, FinishedAt: now, Body: "status=map[backend:" + d.Backend + " profile:wal_on_sync post_commit_events:true] stats=map[]"}
+	d.Prometheus = operationRequest{HTTPStatus: 200, StartedAt: now, FinishedAt: now}
+	d.Store = operationRequest{HTTPStatus: 200, StartedAt: now, FinishedAt: now, Body: "status=map[backend:" + d.Backend + " profile:wal_on_sync post_commit_events:true] stats=map[]"}
 	d.WalkToStatusGap = d.Store.StartedAt.Sub(d.WalkFinishedAt)
 	d.resolveStorageFields()
 }
@@ -274,5 +278,36 @@ func TestStorageAttributionDefaultMetricsUnchanged(t *testing.T) {
 	}
 	if strings.Contains(string(b), "observed_at") || strings.Contains(string(b), "identity_available") {
 		t.Fatalf("default endpoint row changed: %s", b)
+	}
+}
+
+func TestStorageAttributionPreservesHTTPFailureBytes(t *testing.T) {
+	for _, truncated := range []bool{false, true} {
+		for _, store := range []bool{false, true} {
+			t.Run(fmt.Sprintf("truncated=%t/store=%t", truncated, store), func(t *testing.T) {
+				body := "failure evidence"
+				var calls atomic.Int32
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					calls.Add(1)
+					if truncated {
+						w.Header().Set("Content-Length", "100")
+					} else {
+						w.WriteHeader(http.StatusInternalServerError)
+					}
+					_, _ = w.Write([]byte(body))
+				}))
+				defer srv.Close()
+				obs := operationRequest{}
+				var err error
+				if store {
+					_, _, err = storeStatusObserved(srv.URL, &obs)
+				} else {
+					_, err = prometheusObserved(srv.URL, &obs)
+				}
+				if calls.Load() != 1 || err == nil || obs.Body != body || obs.Error == "" || (truncated && obs.HTTPStatus != 200) || (!truncated && obs.HTTPStatus != 500) || obs.StartedAt.IsZero() || obs.FinishedAt.Before(obs.StartedAt) {
+					t.Fatalf("failure bytes lost: %+v err=%v", obs, err)
+				}
+			})
+		}
 	}
 }

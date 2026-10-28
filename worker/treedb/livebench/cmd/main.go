@@ -928,6 +928,15 @@ func validateSchemaJSON(raw []byte) error {
 }
 
 func fetch(url string, timeout time.Duration) ([]byte, error) {
+	return fetchObserved(url, timeout, nil)
+}
+
+// Observed requests preserve available failure bytes without another request.
+// The nil-observer path retains the original non-200 early return.
+func fetchObserved(url string, timeout time.Duration, observation *operationRequest) (body []byte, err error) {
+	if observation != nil {
+		defer func() { observation.Body = string(body); observation.Error = errorString(err) }()
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -939,8 +948,15 @@ func fetch(url string, timeout time.Duration) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if observation != nil {
+		observation.HTTPStatus = resp.StatusCode
+	}
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP %s", resp.Status)
+		if observation == nil {
+			return nil, fmt.Errorf("HTTP %s", resp.Status)
+		}
+		b, readErr := io.ReadAll(resp.Body)
+		return b, errors.Join(fmt.Errorf("HTTP %s", resp.Status), readErr)
 	}
 	return io.ReadAll(resp.Body)
 }
@@ -962,7 +978,7 @@ func storeStatusObserved(base string, observation *operationRequest) (map[string
 	if observation != nil {
 		observation.StartedAt = time.Now().UTC()
 	}
-	b, err := fetch(base+"/debug/store", 30*time.Second)
+	b, err := fetchObserved(base+"/debug/store", 30*time.Second, observation)
 	if observation != nil {
 		observation.FinishedAt = time.Now().UTC()
 	}
@@ -1039,7 +1055,7 @@ func prometheusObserved(url string, observation *operationRequest) (map[string]f
 	if observation != nil {
 		observation.StartedAt = time.Now().UTC()
 	}
-	b, err := fetch(url, 30*time.Second)
+	b, err := fetchObserved(url, 30*time.Second, observation)
 	if observation != nil {
 		observation.FinishedAt = time.Now().UTC()
 	}
@@ -1608,6 +1624,7 @@ type operationRow struct {
 }
 
 type operationRequest struct {
+	HTTPStatus int       `json:"http_status,omitempty"`
 	StartedAt  time.Time `json:"started_at"`
 	FinishedAt time.Time `json:"finished_at"`
 	Body       string    `json:"body"`
@@ -2050,7 +2067,7 @@ func validateStorageStatus(d *storageDiagnostic) error {
 		d.WalkToStatusGap != s.StartedAt.Sub(d.WalkFinishedAt) {
 		return errors.New("storage diagnostic later request envelope mismatch")
 	}
-	if p.Error != "" || s.Error != "" {
+	if p.Error != "" || s.Error != "" || p.HTTPStatus != http.StatusOK || s.HTTPStatus != http.StatusOK {
 		return errors.New("storage diagnostic later request failed")
 	}
 	if strings.Contains(s.Body, "stats_error=") {
@@ -2076,7 +2093,7 @@ func (d *storageDiagnostic) resolveStorageFields() {
 	d.ResolvedProfile = optionalStorageField(status, "profile", d.Backend)
 	d.EventsPolicy = optionalStorageField(status, "post_commit_events", d.Backend)
 	d.CommandWALMode = optionalStorageField(stats, "treedb.write_path.mode", d.Backend)
-	d.EngineStatsAvailability = storageField{Available: d.Backend == "treedb" && len(stats) > 0 && strings.Contains(d.Store.Body, "stats=map[") && d.Store.Error == "" && !strings.Contains(d.Store.Body, "stats_error=")}
+	d.EngineStatsAvailability = storageField{Available: d.Backend == "treedb" && len(stats) > 0 && strings.Contains(d.Store.Body, "stats=map[") && d.Store.HTTPStatus == http.StatusOK && d.Store.Error == "" && !strings.Contains(d.Store.Body, "stats_error=")}
 	if !d.EngineStatsAvailability.Available {
 		d.EngineStatsAvailability.Reason = "engine gauges unavailable; see raw store body and request error"
 		if d.Store.Error != "" {
