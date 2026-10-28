@@ -105,6 +105,18 @@ func TestDeltaInquiryDisabledAndEntryKinds(t *testing.T) {
 // Hold an actual native callback while a second Delta is queued. This inquiry
 // characterizes the current serial production path; it enables no overlap.
 func TestDeltaInquiryProductionSerialBoundary(t *testing.T) {
+	testDeltaInquirySerialBoundary(t, false, "")
+}
+func TestOrderedDeltaCrossBatchArrivalStagesDuringPredecessor(t *testing.T) {
+	testDeltaInquirySerialBoundary(t, true, "")
+}
+func TestOrderedDeltaDuplicateRetryAfterSuccessor(t *testing.T) {
+	for _, batch := range []string{"same_batch", "later_batch"} {
+		t.Run(batch, func(t *testing.T) { testDeltaInquirySerialBoundary(t, true, batch) })
+	}
+}
+func testDeltaInquirySerialBoundary(t *testing.T, enabled bool, duplicateBatch string) {
+	dir := t.TempDir()
 	oldConfig, oldState, oldBadger, oldStore, oldGroup := Config, State, pstore, postingStore, gr
 	oldHardSync, oldRetries := x.WorkerConfig.HardSync, x.Config.MaxRetries
 	attr := x.AttrInRootNamespace("delta-inquiry")
@@ -121,7 +133,7 @@ func TestDeltaInquiryProductionSerialBoundary(t *testing.T) {
 		posting.Init(oldBadger, 0, false)
 		schema.Init(oldBadger)
 	})
-	Config = snapshotInstallOptions(t.TempDir())
+	Config = snapshotInstallOptions(dir)
 	Config.PostingStoreDurability = PostingStoreDurabilityDurable
 	x.WorkerConfig.HardSync, x.Config.MaxRetries = false, 3
 	require.NoError(t, os.MkdirAll(Config.WALDir, 0700))
@@ -133,6 +145,7 @@ func TestDeltaInquiryProductionSerialBoundary(t *testing.T) {
 	schema.InitForStore(schemaPostingStore{store: postingStore})
 	require.NoError(t, schema.LoadFromDb(context.Background()))
 	n := newNode(wal, 1, 1, "")
+	n.orderedDelta = enabled
 	gr.Node = n
 	base := posting.Oracle().MaxAssigned() + 100
 	apply := func(p *pb.Proposal) { require.NoError(t, n.applyCommitted(p, 0)) }
@@ -141,14 +154,52 @@ func TestDeltaInquiryProductionSerialBoundary(t *testing.T) {
 	for i := uint64(2); i <= 3; i++ {
 		apply(&pb.Proposal{Mutations: &pb.Mutations{StartTs: base + i, Edges: []*pb.DirectedEdge{{Entity: i, Attr: attr, Value: []byte("value"), ValueType: pb.Posting_STRING, Op: pb.DirectedEdge_SET}}}})
 	}
+	if duplicateBatch == "budgets" {
+		testOrderedDeltaWindowBudgets(t, n, apply, attr, base)
+		return
+	}
 	var mu sync.Mutex
 	var events []inquiryEvent
-	n.deltaInquiry = &deltaInquiry{emit: func(e inquiryEvent) { mu.Lock(); defer mu.Unlock(); events = append(events, e) }}
+	secondSubmitted := make(chan struct{})
+	var secondSubmitOnce sync.Once
+	n.deltaInquiry = &deltaInquiry{emit: func(e inquiryEvent) {
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, e)
+		if e.Index == 2 && e.Phase == "submit_return" {
+			secondSubmitOnce.Do(func() { close(secondSubmitted) })
+		}
+	}}
 	n.deltaInquiry.event(inquiryEvent{Phase: "enabled", Detail: "deterministic held-callback fixture; not natural arrivals"})
 	wrapped := &inquiryHeldStore{Store: postingStore, held: make(chan struct{}), release: make(chan struct{})}
 	postingStore = wrapped
 	a := checkpointEntry(t, 1, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 4, Txns: []*pb.TxnStatus{{StartTs: base + 2, CommitTs: base + 4}}}})
 	b := checkpointEntry(t, 2, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 5, Txns: []*pb.TxnStatus{{StartTs: base + 3, CommitTs: base + 5}}}})
+	if enabled {
+		// Rejecting the last status must not reserve the valid prefix of a whole
+		// original aggregate or consume any whole-window budget.
+		for _, kind := range []string{"missing_last", "abort_last", "live_duplicate_last"} {
+			w := new(orderedDeltaWindow)
+			p, _, _ := w.admit(n, a)
+			require.NotNil(t, p)
+			beforeBytes, beforeSnapshots, beforeMaps := w.inputBytes, w.snapshotBytes, w.mapEntries
+			last := &pb.TxnStatus{StartTs: base + 4, CommitTs: base + 6}
+			if kind == "abort_last" {
+				last.CommitTs = 0
+			}
+			if kind == "live_duplicate_last" {
+				last.StartTs = base + 2
+			}
+			invalid := checkpointEntry(t, 2, &pb.Proposal{Delta: &pb.OracleDelta{MaxAssigned: base + 6, Txns: []*pb.TxnStatus{{StartTs: base + 3, CommitTs: base + 5}, last}}})
+			rejected, _, _ := w.admit(n, invalid)
+			require.Nil(t, rejected, kind)
+			require.Equal(t, beforeBytes, w.inputBytes)
+			require.Equal(t, beforeSnapshots, w.snapshotBytes)
+			require.Equal(t, beforeMaps, w.mapEntries)
+			require.Len(t, w.starts, 1)
+			require.Len(t, w.proposalKeys, 1)
+		}
+	}
 	n.closer = z.NewCloser(1)
 	n.Applied.Begin(1)
 	n.Applied.Begin(2)
@@ -160,22 +211,54 @@ func TestDeltaInquiryProductionSerialBoundary(t *testing.T) {
 	defer shutdown()
 	n.enqueueApply([]raftpb.Entry{a})
 	<-wrapped.held
-	n.enqueueApply([]raftpb.Entry{b})
+	if duplicateBatch != "" {
+		duplicate := a
+		duplicate.Index = 3
+		n.Applied.Begin(3)
+		atomic.AddInt64(&n.pendingSize, int64(duplicate.Size()))
+		if duplicateBatch == "same_batch" {
+			n.enqueueApply([]raftpb.Entry{b, duplicate})
+		} else {
+			n.enqueueApply([]raftpb.Entry{b})
+			n.enqueueApply([]raftpb.Entry{duplicate})
+		}
+	} else {
+		n.enqueueApply([]raftpb.Entry{b})
+	}
+	if enabled {
+		select {
+		case <-secondSubmitted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("cross-batch successor never submitted during held predecessor")
+		}
+	}
 	require.Equal(t, base, posting.Oracle().MaxAssigned())
 	require.Zero(t, n.Applied.DoneUntil())
 	mu.Lock()
 	snapshot := append([]inquiryEvent(nil), events...)
 	mu.Unlock()
 	for _, e := range snapshot {
-		require.False(t, e.Index == 2 && e.Phase == "submit_begin")
+		if !enabled {
+			require.False(t, e.Index == 2 && e.Phase == "submit_begin")
+		}
 		require.NotEqual(t, "oracle_end", e.Phase)
 	}
 	shutdown()
 	require.Equal(t, base+5, posting.Oracle().MaxAssigned())
 	mu.Lock()
 	defer mu.Unlock()
+	if duplicateBatch != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		require.NoError(t, n.Applied.WaitForMark(ctx, 3))
+		require.Equal(t, uint64(3), n.Applied.DoneUntil())
+	}
 	positions := map[string]int{}
 	for i, e := range events {
+		if duplicateBatch != "" && e.Index == 3 {
+			require.NotEqual(t, "submit_begin", e.Phase)
+			require.NotEqual(t, "oracle_end", e.Phase)
+		}
 		positions[fmt.Sprintf("%d/%s", e.Index, e.Phase)] = i
 		if e.Phase == "delta_begin" {
 			require.Equal(t, "ordinary_store_wal_candidate", e.Kind)
@@ -188,7 +271,11 @@ func TestDeltaInquiryProductionSerialBoundary(t *testing.T) {
 	require.Less(t, positions["1/callback"], positions["1/flush_end"])
 	require.Less(t, positions["1/flush_end"], positions["1/oracle_end"])
 	require.Less(t, positions["1/oracle_end"], positions["1/applied_done"])
-	require.Less(t, positions["1/applied_done"], positions["2/submit_begin"])
+	if enabled {
+		require.Less(t, positions["2/submit_begin"], positions["1/flush_end"])
+	} else {
+		require.Less(t, positions["1/applied_done"], positions["2/submit_begin"])
+	}
 	for _, event := range events {
 		data, err := json.Marshal(event)
 		require.NoError(t, err)

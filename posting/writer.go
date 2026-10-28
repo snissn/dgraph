@@ -109,6 +109,11 @@ func (w *TxnWriter) Wait() error {
 	if sealer, ok := w.store.(commitWindowSealer); ok {
 		sealer.SealCommitWindow()
 	}
+	return w.DrainCallbacks()
+}
+
+// DrainCallbacks waits for accepted work without sealing input or retrying.
+func (w *TxnWriter) DrainCallbacks() error {
 	w.wg.Wait()
 	select {
 	case err := <-w.che:
