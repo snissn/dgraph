@@ -13,6 +13,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"math"
+	"os"
 	"sort"
 	"strconv"
 	"sync"
@@ -58,6 +59,7 @@ type node struct {
 	// Fields which are never changed after init.
 	applyCh      chan []raftpb.Entry
 	deltaInquiry *deltaInquiry
+	orderedDelta bool
 	ctx          context.Context
 	gid          uint32
 	closer       *z.Closer
@@ -292,6 +294,7 @@ func newNode(store *raftwal.DiskStorage, gid uint32, id uint64, myAddr string) *
 	n := &node{
 		Node:         m,
 		deltaInquiry: newDeltaInquiry(),
+		orderedDelta: os.Getenv("DGRAPH_ORDERED_DELTA_PROVISIONAL") == "1",
 		ctx:          context.Background(),
 		gid:          gid,
 		// We need a generous size for applyCh, because raft.Tick happens every
@@ -857,7 +860,7 @@ func (n *node) processApplyCh() {
 	defer n.closer.Done() // CLOSER:1
 
 	// This function must be run serially.
-	handle := func(entries []raftpb.Entry) {
+	handle := func(entries []raftpb.Entry, prepared map[uint64]func() error) {
 		if raftCheckpointEnabled() {
 			n.raftSemanticMu.Lock()
 			defer n.raftSemanticMu.Unlock()
@@ -906,7 +909,11 @@ func (n *node) processApplyCh() {
 			} else {
 				// if this applyCommitted fails, how do we ensure
 				start := time.Now()
-				perr = n.applyTrackedProposal(&proposal, key, psz)
+				apply := n.applyCommitted
+				if finish := prepared[entry.Index]; finish != nil {
+					apply = func(*pb.Proposal, uint64) error { return finish() }
+				}
+				perr = n.applyTrackedProposalUsing(&proposal, key, psz, apply)
 				span := trace.SpanFromContext(n.ctx)
 				if perr != nil {
 					glog.Errorf("Applying proposal. Error: %v. Proposal: %q.", perr, &proposal)
@@ -929,7 +936,10 @@ func (n *node) processApplyCh() {
 				_ = ostats.RecordWithTags(context.Background(), tags, x.LatencyMs.M(ms))
 			}
 
-			if stderrors.Is(perr, posting.ErrTreeDBEntryTooLarge) {
+			if perr != nil && n.orderedDelta && proposal.Delta != nil && Config.PostingStoreBackend == PostingStoreBackendTreeDB && Config.PostingStoreDurability == PostingStoreDurabilityDurable {
+				perr = stderrors.Join(errOrderedDeltaIncomplete, perr)
+			}
+			if stderrors.Is(perr, posting.ErrTreeDBEntryTooLarge) || stderrors.Is(perr, errOrderedDeltaIncomplete) {
 				// commitOrAbort has drained every accepted callback. A terminal
 				// producer failure can leave a materialized prefix, so no mode may
 				// acknowledge this proposal or apply a later Oracle watermark.
@@ -959,21 +969,31 @@ func (n *node) processApplyCh() {
 	maxAge := 10 * time.Minute
 	tick := time.Tick(maxAge / 2)
 
+	finishApply := func() {
+		if raftCheckpointEnabled() {
+			n.raftSemanticMu.Lock()
+			defer n.raftSemanticMu.Unlock()
+		}
+		if err := n.checkpointRaftCut(n.raftSemanticIndex, true); err != nil {
+			glog.Errorf("final checkpoint: %v", err)
+		}
+		n.deltaInquiry.phase(0, 0, "apply_closed", nil)
+	}
 	for {
 		select {
 		case entries, ok := <-n.applyCh:
 			if !ok {
-				if raftCheckpointEnabled() {
-					n.raftSemanticMu.Lock()
-					defer n.raftSemanticMu.Unlock()
-				}
-				if err := n.checkpointRaftCut(n.raftSemanticIndex, true); err != nil {
-					glog.Errorf("final checkpoint: %v", err)
-				}
-				n.deltaInquiry.phase(0, 0, "apply_closed", nil)
+				finishApply()
 				return
 			}
-			handle(entries)
+			if n.orderedDeltaEnabled() {
+				if n.pumpOrderedDeltas(entries, handle) {
+					finishApply()
+					return
+				}
+			} else {
+				handle(entries, nil)
+			}
 		case <-tick:
 			// We use this ticker to clear out previous map.
 			now := time.Now()
@@ -1030,6 +1050,79 @@ func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
 }
 
 func (n *node) commitOrAbortObserved(pkey, index uint64, delta *pb.OracleDelta) error {
+	finish, err := n.prepareDelta(pkey, index, delta)
+	if err != nil {
+		return err
+	}
+	return finish.finish()
+}
+
+// prepareDelta transfers chunks to the existing store owner. Its returned
+// finalizer is called exactly once, in Raft order, by the same apply owner.
+type preparedDelta struct {
+	n             *node
+	key, index    uint64
+	delta         *pb.OracleDelta
+	writer        *posting.TxnWriter
+	snapshots     map[uint64]*posting.DeltaSnapshot
+	callbacksDone chan struct{}
+	callbacksErr  error
+	drained       bool
+	drainErr      error
+}
+
+func (p *preparedDelta) drain() error {
+	if p.drained {
+		return p.drainErr
+	}
+	// A completion error channel is destructive: cache its first drain result.
+	// Mark before tracing/sealing, and guarantee callbacks even if either panics.
+	p.drained = true
+	defer func() {
+		if v := recover(); v != nil {
+			if p.callbacksDone != nil {
+				<-p.callbacksDone
+				p.drainErr = stderrors.Join(p.drainErr, p.callbacksErr)
+			} else {
+				p.drainErr = stderrors.Join(p.drainErr, p.writer.DrainCallbacks())
+			}
+			panic(v)
+		}
+	}()
+	p.n.deltaInquiry.phase(p.index, p.key, "flush_begin", nil)
+	if p.callbacksDone != nil {
+		if sealer, ok := postingStore.(interface{ SealCommitWindow() }); ok {
+			sealer.SealCommitWindow()
+		}
+		<-p.callbacksDone
+		p.drainErr = p.callbacksErr
+	} else {
+		p.drainErr = p.writer.Flush()
+	}
+	p.n.deltaInquiry.phase(p.index, p.key, "flush_end", p.drainErr)
+	return p.drainErr
+}
+
+// Preserve the original panic payload while draining every reachable accepted
+// writer. A secondary tracing/sealing panic cannot replace that payload.
+func drainPreparedDeltaPanic(states ...*preparedDelta) {
+	v := recover()
+	if v == nil {
+		return
+	}
+	for _, p := range states {
+		if p != nil && p.writer != nil {
+			func() { defer func() { _ = recover() }(); _ = p.drain() }()
+		}
+	}
+	panic(v)
+}
+
+func (n *node) prepareDelta(pkey, index uint64, delta *pb.OracleDelta) (preparedDelta, error) {
+	return n.prepareDeltaMode(pkey, index, delta, true, nil)
+}
+
+func (n *node) prepareDeltaMode(pkey, index uint64, delta *pb.OracleDelta, legacyRetry bool, snapshots map[uint64]*posting.DeltaSnapshot) (preparedDelta, error) {
 	x.PrintOracleDelta(delta)
 	// First let's commit all mutations to disk.
 	store := postingStore
@@ -1048,24 +1141,33 @@ func (n *node) commitOrAbortObserved(pkey, index uint64, delta *pb.OracleDelta) 
 		n.deltaInquiry.event(inquiryEvent{Phase: "delta_begin", Index: index, Key: pkey, Kind: kind, Detail: detail})
 		store = &inquiryStore{Store: store, trace: n.deltaInquiry, index: index, key: pkey}
 	}
+
 	writer := posting.NewTxnWriterForStore(store)
-	flush := func() error {
-		n.deltaInquiry.phase(index, pkey, "flush_begin", nil)
-		err := writer.Flush()
-		n.deltaInquiry.phase(index, pkey, "flush_end", err)
-		return err
+	prepared := preparedDelta{n: n, key: pkey, index: index, delta: delta, writer: writer, snapshots: snapshots}
+	flush := prepared.drain
+	if !legacyRetry {
+		defer drainPreparedDeltaPanic(&prepared)
 	}
+
 	toDisk := func(start, commit uint64) error {
 		txn := posting.Oracle().GetTxn(start)
 		if txn == nil || commit == 0 {
 			return nil
 		}
 		n.deltaInquiry.event(inquiryEvent{Phase: "materialize_begin", Index: index, Key: pkey, CommitTs: commit, StartTs: start})
-		txn.Update()
-		err := retryPostingProducer(func() error { return txn.CommitToDisk(writer, commit) })
+		var err error
+		if snapshot := snapshots[start]; snapshot != nil {
+			err = snapshot.CommitToDisk(writer, commit)
+		} else if legacyRetry {
+			txn.Update()
+			err = retryPostingProducer(func() error { return txn.CommitToDisk(writer, commit) })
+		} else {
+			txn.Update()
+			err = txn.CommitToDisk(writer, commit)
+		}
 		n.deltaInquiry.phase(index, pkey, "materialize_end", err)
 		if err != nil {
-			if stderrors.Is(err, posting.ErrTreeDBEntryTooLarge) {
+			if !legacyRetry || stderrors.Is(err, posting.ErrTreeDBEntryTooLarge) {
 				return err
 			}
 			glog.Errorf("Error while applying txn status to disk (%d -> %d): %v", start, commit, err)
@@ -1078,10 +1180,16 @@ func (n *node) commitOrAbortObserved(pkey, index uint64, delta *pb.OracleDelta) 
 			// Earlier precommit chunks may already be owned by the storage queue.
 			// Drain every callback before returning the original terminal producer error;
 			// neither its prefix nor any ambiguous storage result may be resubmitted.
-			return stderrors.Join(err, flush())
+			return preparedDelta{}, stderrors.Join(err, flush())
 		}
 	}
 
+	return prepared, nil
+}
+
+func (p *preparedDelta) finish() error {
+	n, index, pkey, delta := p.n, p.index, p.key, p.delta
+	flush := p.drain
 	if err := flush(); err != nil {
 		return errors.Wrapf(err, "while flushing to disk")
 	}
@@ -1119,7 +1227,11 @@ func (n *node) commitOrAbortObserved(pkey, index uint64, delta *pb.OracleDelta) 
 	// Clear all the cached lists that were touched by this transaction.
 	for _, status := range delta.Txns {
 		txn := posting.Oracle().GetTxn(status.StartTs)
-		txn.UpdateCachedKeys(status.CommitTs)
+		if snapshot := p.snapshots[status.StartTs]; snapshot != nil {
+			snapshot.UpdateCachedKeys(status.CommitTs)
+		} else {
+			txn.UpdateCachedKeys(status.CommitTs)
+		}
 	}
 
 	n.deltaInquiry.phase(index, pkey, "cache_invalidation_end", nil)
@@ -1662,9 +1774,7 @@ func (n *node) Run() {
 					}
 					if entry.Type != raftpb.EntryConfChange && len(entry.Data) > 0 {
 						key := binary.BigEndian.Uint64(entry.Data[:8])
-						if pctx := n.Proposals.Get(key); pctx != nil {
-							atomic.AddUint32(&pctx.Found, 1)
-						}
+						n.markProposalCommitted(key, entry.Index)
 					}
 					entries = append(entries, entry)
 					continue
@@ -1685,7 +1795,7 @@ func (n *node) Run() {
 				default:
 					key := binary.BigEndian.Uint64(entry.Data[:8])
 					if pctx := n.Proposals.Get(key); pctx != nil {
-						atomic.AddUint32(&pctx.Found, 1)
+						n.markProposalCommitted(key, entry.Index)
 						if span := trace.SpanFromContext(pctx.Ctx); span != nil {
 							span.AddEvent("Proposal found in CommittedEntries")
 						}

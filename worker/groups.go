@@ -1032,8 +1032,33 @@ func (g *groupi) processOracleDeltaStream() {
 			}
 		}()
 
+		var ordered *orderedDeltaAdmission
+		if g.Node.orderedDeltaEnabled() {
+			ordered = &orderedDeltaAdmission{n: g.Node, ctx: g.Ctx()}
+			defer func() {
+				cancel() // stop this stream receiver before joining proposal ownership.
+				if err := ordered.drain(); err != nil && g.Ctx().Err() == nil {
+					if errors.Is(err, errOrderedDeltaIncomplete) {
+						panic(fmt.Errorf("ordered Delta proposal drain: %w", err))
+					}
+					glog.Warningf("Ordered Delta stream drained after proposal error; reconnecting: %v", err)
+				}
+			}()
+		}
 		var aggregateID uint64
 		for {
+			if ordered != nil {
+				if err := ordered.beforeNext(); err != nil {
+					if g.Ctx().Err() != nil {
+						return
+					}
+					if errors.Is(err, errOrderedDeltaIncomplete) {
+						panic(fmt.Errorf("ordered Delta proposal failed; replay required: %w", err))
+					}
+					glog.Warningf("Ordered Delta proposal stopped before admission; reconnecting: %v", err)
+					return
+				}
+			}
 			var delta *pb.OracleDelta
 			var batch int
 			select {
@@ -1121,6 +1146,22 @@ func (g *groupi) processOracleDeltaStream() {
 				}
 			}
 			inquiry.oracleDelta(inquiryEvent{Phase: "oracle_aggregate_ready", Stream: streamID, Aggregate: aggregateID, Entries: uint64(batch)}, delta)
+			if ordered != nil {
+				submitted, err := ordered.submitContext(inquiry.oracleContext(g.Ctx(), streamID, aggregateID, 1), delta)
+				if err != nil {
+					if g.Ctx().Err() != nil {
+						return
+					}
+					if errors.Is(err, errOrderedDeltaIncomplete) {
+						panic(fmt.Errorf("ordered Delta proposal admission failed; replay required: %w", err))
+					}
+					glog.Warningf("Ordered Delta proposal admission stopped; reconnecting: %v", err)
+					return
+				}
+				if submitted {
+					continue
+				}
+			}
 			var attempt uint64
 			for {
 				attempt++
