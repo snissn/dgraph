@@ -56,10 +56,11 @@ type node struct {
 	*conn.Node
 
 	// Fields which are never changed after init.
-	applyCh chan []raftpb.Entry
-	ctx     context.Context
-	gid     uint32
-	closer  *z.Closer
+	applyCh      chan []raftpb.Entry
+	deltaInquiry *deltaInquiry
+	ctx          context.Context
+	gid          uint32
+	closer       *z.Closer
 
 	raftDebtMu           sync.Mutex
 	raftSemanticMu       sync.Mutex // external apply, expiry and root-install barrier
@@ -289,9 +290,10 @@ func newNode(store *raftwal.DiskStorage, gid uint32, id uint64, myAddr string) *
 	m := conn.NewNode(rc, store, x.WorkerConfig.TLSClientConfig)
 
 	n := &node{
-		Node: m,
-		ctx:  context.Background(),
-		gid:  gid,
+		Node:         m,
+		deltaInquiry: newDeltaInquiry(),
+		ctx:          context.Background(),
+		gid:          gid,
 		// We need a generous size for applyCh, because raft.Tick happens every
 		// 10ms. If we restrict the size here, then Raft goes into a loop trying
 		// to maintain quorum health.
@@ -675,7 +677,7 @@ func (n *node) applyCommitted(proposal *pb.Proposal, key uint64) error {
 	case proposal.Delta != nil:
 		span.AddEvent("Applying Oracle Delta for key: %d", trace.WithAttributes(
 			attribute.Int64("key", int64(key))))
-		return n.commitOrAbort(key, proposal.Delta)
+		return n.commitOrAbortObserved(key, proposal.Index, proposal.Delta)
 
 	case proposal.ExtSnapshotState != nil:
 		// Handle ExtSnapshotState proposal with two distinct scenarios:
@@ -799,7 +801,7 @@ func (n *node) applyCommitted(proposal *pb.Proposal, key uint64) error {
 
 		// Call commitOrAbort to update the group checksums.
 		ts := proposal.Restore.RestoreTs
-		return n.commitOrAbort(key, &pb.OracleDelta{
+		return n.commitOrAbortObserved(key, proposal.Index, &pb.OracleDelta{
 			Txns: []*pb.TxnStatus{
 				{StartTs: ts, CommitTs: ts},
 			},
@@ -865,6 +867,7 @@ func (n *node) processApplyCh() {
 
 		var totalSize int64
 		for _, entry := range entries {
+			n.deltaInquiry.entries([]raftpb.Entry{entry}, "apply_begin")
 			// We use the size as a double check to ensure that we're
 			// working with the same proposal as before.
 			psz := entry.Size()
@@ -942,8 +945,10 @@ func (n *node) processApplyCh() {
 					glog.Fatalf("raft_checkpoint failed: %v", err)
 				}
 			}
+			n.deltaInquiry.phase(proposal.Index, key, "proposal_done_begin", perr)
 			n.Proposals.Done(key, perr)
 			n.Applied.Done(proposal.Index)
+			n.deltaInquiry.phase(proposal.Index, key, "applied_done", perr)
 			ostats.Record(context.Background(), x.RaftAppliedIndex.M(int64(n.Applied.DoneUntil())))
 		}
 		if sz := atomic.AddInt64(&n.pendingSize, -totalSize); sz < 0 {
@@ -965,6 +970,7 @@ func (n *node) processApplyCh() {
 				if err := n.checkpointRaftCut(n.raftSemanticIndex, true); err != nil {
 					glog.Errorf("final checkpoint: %v", err)
 				}
+				n.deltaInquiry.phase(0, 0, "apply_closed", nil)
 				return
 			}
 			handle(entries)
@@ -1020,16 +1026,44 @@ func retryPostingProducer(commit func() error) error {
 
 // TODO(Anurag - 4 May 2020): Are we using pkey? Remove if unused.
 func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
+	return n.commitOrAbortObserved(pkey, 0, delta)
+}
+
+func (n *node) commitOrAbortObserved(pkey, index uint64, delta *pb.OracleDelta) error {
 	x.PrintOracleDelta(delta)
 	// First let's commit all mutations to disk.
-	writer := posting.NewTxnWriterForStore(postingStore)
+	store := postingStore
+	if n.deltaInquiry != nil {
+		detail := fmt.Sprintf("backend=%s durability=%s raft_checkpoint=%t hard_sync=%t", Config.PostingStoreBackend, Config.PostingStoreDurability, raftCheckpointEnabled(), x.WorkerConfig.HardSync)
+		if State.TreeDBStore != nil {
+			detail += fmt.Sprintf(" resolved=%+v", State.TreeDBStore.Status())
+		}
+		kind := "excluded_profile"
+		if Config.PostingStoreBackend == PostingStoreBackendTreeDB && Config.PostingStoreDurability == PostingStoreDurabilityDurable && !raftCheckpointEnabled() && State.TreeDBStore != nil {
+			status := State.TreeDBStore.Status()
+			if status.DurableCommits && status.DurabilityMode == "wal_on_sync" && !status.Closed {
+				kind = "ordinary_store_wal_candidate"
+			}
+		}
+		n.deltaInquiry.event(inquiryEvent{Phase: "delta_begin", Index: index, Key: pkey, Kind: kind, Detail: detail})
+		store = &inquiryStore{Store: store, trace: n.deltaInquiry, index: index, key: pkey}
+	}
+	writer := posting.NewTxnWriterForStore(store)
+	flush := func() error {
+		n.deltaInquiry.phase(index, pkey, "flush_begin", nil)
+		err := writer.Flush()
+		n.deltaInquiry.phase(index, pkey, "flush_end", err)
+		return err
+	}
 	toDisk := func(start, commit uint64) error {
 		txn := posting.Oracle().GetTxn(start)
 		if txn == nil || commit == 0 {
 			return nil
 		}
+		n.deltaInquiry.event(inquiryEvent{Phase: "materialize_begin", Index: index, Key: pkey, CommitTs: commit, StartTs: start})
 		txn.Update()
 		err := retryPostingProducer(func() error { return txn.CommitToDisk(writer, commit) })
+		n.deltaInquiry.phase(index, pkey, "materialize_end", err)
 		if err != nil {
 			if stderrors.Is(err, posting.ErrTreeDBEntryTooLarge) {
 				return err
@@ -1044,11 +1078,11 @@ func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
 			// Earlier precommit chunks may already be owned by the storage queue.
 			// Drain every callback before returning the original terminal producer error;
 			// neither its prefix nor any ambiguous storage result may be resubmitted.
-			return stderrors.Join(err, writer.Flush())
+			return stderrors.Join(err, flush())
 		}
 	}
 
-	if err := writer.Flush(); err != nil {
+	if err := flush(); err != nil {
 		return errors.Wrapf(err, "while flushing to disk")
 	}
 	if raftCheckpointEnabled() {
@@ -1062,7 +1096,10 @@ func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
 	}
 
 	if x.WorkerConfig.HardSync && pstore != nil {
-		if err := pstore.Sync(); err != nil {
+		n.deltaInquiry.phase(index, pkey, "hard_sync_begin", nil)
+		err := pstore.Sync()
+		n.deltaInquiry.phase(index, pkey, "hard_sync_end", err)
+		if err != nil {
 			glog.Errorf("Error while calling Sync while commitOrAbort: %v", err)
 		}
 	}
@@ -1078,14 +1115,20 @@ func (n *node) commitOrAbort(pkey uint64, delta *pb.OracleDelta) error {
 		atomic.StoreUint64(&g.deltaChecksum, delta.GroupChecksums[g.groupId()])
 	}
 
+	n.deltaInquiry.phase(index, pkey, "cache_invalidation_begin", nil)
 	// Clear all the cached lists that were touched by this transaction.
 	for _, status := range delta.Txns {
 		txn := posting.Oracle().GetTxn(status.StartTs)
 		txn.UpdateCachedKeys(status.CommitTs)
 	}
 
+	n.deltaInquiry.phase(index, pkey, "cache_invalidation_end", nil)
 	// Now advance Oracle(), so we can service waiting reads.
+	n.deltaInquiry.phase(index, pkey, "oracle_begin", nil)
 	posting.Oracle().ProcessDelta(delta)
+	if n.deltaInquiry != nil {
+		n.deltaInquiry.event(inquiryEvent{Phase: "oracle_end", Index: index, Key: pkey, MaxAssigned: posting.Oracle().MaxAssigned()})
+	}
 	return nil
 }
 
@@ -1663,7 +1706,7 @@ func (n *node) Run() {
 				if sz := atomic.AddInt64(&n.pendingSize, pendingSize); sz > 2*maxPendingSize {
 					glog.Warningf("Inflight proposal size: %d. There would be some throttling.", sz)
 				}
-				n.applyCh <- entries
+				n.enqueueApply(entries)
 			}
 
 			if span != nil {

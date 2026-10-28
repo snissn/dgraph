@@ -85,3 +85,7 @@ isolation, ambiguous failure without retry, carried and oversized requests, Clos
 admission, and abrupt exit after grouped acknowledgements with verified persistent value pointers.
 Performance acceptance requires the real Dgraph comparison; a held-request test establishes
 reachable grouping but does not establish natural workload throughput.
+
+The optional [serial Delta inquiry](delta_inquiry/README.md) observes upstream queued adjacency and
+actual submission/Flush/Oracle boundaries without enabling cross-Delta preparation. Its diagnostic
+candidate counts do not establish native physical grouping or semantic eligibility.
