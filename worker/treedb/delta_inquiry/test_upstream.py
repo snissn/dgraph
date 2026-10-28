@@ -117,6 +117,22 @@ class UpstreamTests(unittest.TestCase):
             event.update(sequence=n, elapsed_ns=n*100, captured_ns=n*100-1)
         self.assertEqual(analyze_upstream(es), expected)
 
+    def test_no_connection_is_not_zero_arrival_evidence(self):
+        es = [event for event in fixture() if event['phase'] in
+              ('enabled', 'oracle_closed', 'apply_closed')]
+        for n, event in enumerate(es, 1):
+            event.update(sequence=n, elapsed_ns=n*100, captured_ns=n*100-1)
+        with self.assertRaisesRegex(ValueError, 'no connected Oracle stream'):
+            analyze_upstream(es)
+        connected = [event for event in fixture() if event['phase'] in
+                     ('enabled', 'oracle_stream_open', 'oracle_receiver_closed',
+                      'oracle_stream_closed', 'oracle_closed', 'apply_closed')]
+        for n, event in enumerate(connected, 1):
+            event.update(sequence=n, elapsed_ns=n*100, captured_ns=n*100-1)
+        observed = analyze_upstream(connected)
+        self.assertEqual(observed['streams_opened'], 1)
+        self.assertEqual(observed['received_messages'], 0)
+
     def test_unknown_oracle_phase_and_real_unknown_stream_refused(self):
         es = fixture()
         next(e for e in es if e['phase'] == 'oracle_send_begin')['phase'] = 'oracle_mystery'

@@ -16,12 +16,13 @@ not replace source/binary binding or native physical-sync counters.
 `version=1` JSON records follow the `DELTA_INQUIRY` marker and following space. Every new record has
 a random per-observer process `session` identity. A per-node mutex assigns contiguous sequence
 numbers, wall timestamps and monotonic `elapsed_ns` at logging; sequence is authoritative for
-observed ordering. The enabled record retains available embedded build/toolchain/module settings;
-external clean source and executable hashes remain required when VCS metadata is absent. `index` and
-`key` identify the Raft proposal; `request` is local to that Delta's writer. `bytes` is encoded Raft
-entry size; `payload_bytes` counts successful SetEntry key/value or Delete key lengths, excluding
-metadata/envelopes. Counts are adapter input, not retained heap or physical work. `start_ts`,
-`commit_ts` and raw Delta decisions retain their original timestamps.
+serialized emission order. Upstream capture order can differ, as described below. The enabled record
+retains available embedded build/toolchain/module settings; external clean source and executable
+hashes remain required when VCS metadata is absent. `index` and `key` identify the Raft proposal;
+`request` is local to that Delta's writer. `bytes` is encoded Raft entry size; `payload_bytes`
+counts successful SetEntry key/value or Delete key lengths, excluding metadata/envelopes. Counts are
+adapter input, not retained heap or physical work. `start_ts`, `commit_ts` and raw Delta decisions
+retain their original timestamps.
 
 The event seams are the existing production owners:
 
@@ -112,15 +113,15 @@ require complete retained capture and normal loss checks.
 python3 worker/treedb/delta_inquiry/upstream.py alpha.log > upstream.json
 ```
 
-The upstream analyzer requires startup, contiguous emission sequence, normal apply close, Oracle
-owner close and both receiver/consumer close for every stream. Those independent owners may close in
-either order. Cancellation can leave received/admitted messages unconsumed or a partial aggregate
-discarded under the original behavior; these are reported explicitly, never replaced by zero
-arrivals. An abrupt process death or lost record remains retained evidence without complete
-frequency inference. Preserve raw logs from one process including all files and stderr duplicates;
-new captures validate session identity as well as sequence; mixed/duplicated records are rejected,
-not deduplicated. Legacy #57 traces without session identity retain the external single-process
-prerequisite and are unsupported by the upstream analyzer.
+The upstream analyzer requires at least one connected stream, startup, contiguous emission sequence,
+normal apply close, Oracle owner close and both receiver/consumer close for every stream. Those
+independent owners may close in either order. Cancellation can leave received/admitted messages
+unconsumed or a partial aggregate discarded under the original behavior; these are reported
+explicitly, never replaced by zero arrivals. An abrupt process death or lost record remains retained
+evidence without complete frequency inference. Preserve raw logs from one process including all
+files and stderr duplicates; new captures validate session identity as well as sequence;
+mixed/duplicated records are rejected, not deduplicated. Legacy #57 traces without session identity
+retain the external single-process prerequisite and are unsupported by the upstream analyzer.
 
 For each original proposal wait, the report separately lists prior received and confirmed-admitted
 backlog still unconsumed at wait begin, and messages observed received and messages whose send
@@ -148,3 +149,7 @@ checks, but do not belong to the Zero receiver. Unknown `oracle_*` phases and ge
 records with missing or unknown stream epochs still fail closed. A preserved first analysis of a
 real mixed trace exposed the earlier prefix-classification bug; repairing the offline parser does
 not alter that raw capture or the frozen executable.
+
+If no Oracle stream ever connects, owner shutdown alone is not zero-arrival evidence; the upstream
+analyzer rejects the trace without frequency inference. Preserve the connection failures and raw
+logs as unavailable-observation evidence.

@@ -124,6 +124,8 @@ def analyze_upstream(events):
     if sum(e['phase'] == 'oracle_closed' for e in oracle) != 1:
         raise ValueError('incomplete oracle owner')
     streams = [e['stream'] for e in oracle if e['phase'] == 'oracle_stream_open']
+    if not streams:
+        raise ValueError('no connected Oracle stream; no frequency inference')
     if streams != list(range(1, len(streams)+1)):
         raise ValueError('missing or repeated stream epoch')
     for stream in streams:
