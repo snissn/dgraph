@@ -50,6 +50,7 @@ func auditPreparation(path string) (preparationAudit, error) {
 		b = b[:at+1]
 	}
 	originals := make(map[originalID]*originalTrace)
+	notApplied := make(map[originalID]bool)
 	active := make(map[originalID]bool)
 	var session string
 	var previousCompleted uint64
@@ -88,6 +89,7 @@ func auditPreparation(path string) (preparationAudit, error) {
 				return out, fmt.Errorf("duplicate Delta identity %+v", id)
 			}
 			originals[id] = &originalTrace{phases: make(map[string]uint64)}
+			notApplied[id] = true
 		}
 		original := originals[id]
 		if original == nil {
@@ -108,6 +110,14 @@ func auditPreparation(path string) (preparationAudit, error) {
 			if e.Phase != phase {
 				continue
 			}
+			// Preparation may overlap, but every successor finalizer must wait
+			// for all earlier originals' complete Applied endpoint. Applied order
+			// alone cannot detect an early successor Oracle/proposal publication.
+			for earlier := range notApplied {
+				if earlier.Index < id.Index {
+					return out, fmt.Errorf("%s identity %+v precedes earlier original %+v Applied", phase, id, earlier)
+				}
+			}
 			if original.phases[phase] != 0 {
 				return out, fmt.Errorf("duplicate %s identity %+v", phase, id)
 			}
@@ -126,6 +136,7 @@ func auditPreparation(path string) (preparationAudit, error) {
 				return out, fmt.Errorf("reversed original finalization index %d after %d", id.Index, previousCompleted)
 			}
 			previousCompleted = id.Index
+			delete(notApplied, id)
 			if original.materialized {
 				out.CompletedOriginals++
 				delete(active, id)
@@ -385,4 +396,129 @@ func TestStagingAndBarrierAudit(t *testing.T) {
 			require.Error(t, rejectFatalLog(p))
 		}
 	})
+}
+
+// A successor can publish its Oracle/proposal result too early even when its
+// Applied endpoint remains after A. Checking Applied order alone misses this.
+func TestPreparationAuditRejectsEarlySuccessorPublication(t *testing.T) {
+	var events []map[string]any
+	add := func(index int, phases ...string) {
+		for _, phase := range phases {
+			events = append(events, map[string]any{"session": "test", "index": index, "key": index + 100, "phase": phase})
+		}
+	}
+	add(1, "delta_begin", "materialize_begin")
+	add(2, "delta_begin", "materialize_begin", "flush_begin", "flush_end", "cache_invalidation_begin", "cache_invalidation_end", "oracle_begin", "oracle_end", "proposal_done_begin")
+	add(1, "flush_begin", "flush_end", "cache_invalidation_begin", "cache_invalidation_end", "oracle_begin", "oracle_end", "proposal_done_begin", "applied_done")
+	add(2, "applied_done")
+	var b strings.Builder
+	for i, e := range events {
+		e["sequence"] = i + 1
+		raw, err := json.Marshal(e)
+		require.NoError(t, err)
+		b.WriteString("DELTA_INQUIRY ")
+		b.Write(raw)
+		b.WriteByte('\n')
+	}
+	path := filepath.Join(t.TempDir(), "alpha.log")
+	require.NoError(t, os.WriteFile(path, []byte(b.String()), 0600))
+	_, err := auditPreparation(path)
+	require.Error(t, err, "B publication before A Applied must fail even when Applied order is A then B")
+}
+
+// Read-only replay of retained successful runs; external inventories still bind
+// the files and binaries. Failed runs are retained separately, never promoted by
+// a log parser. This adds no live server or host dependency to ordinary tests.
+func TestRetainedClusterEvidence(t *testing.T) {
+	root := os.Getenv("DGRAPH_ORDERED_CLUSTER_REPLAY")
+	if root == "" {
+		t.Skip("set DGRAPH_ORDERED_CLUSTER_REPLAY to a retained successful run")
+	}
+	body, err := os.ReadFile(filepath.Join(root, "receipts.jsonl"))
+	require.NoError(t, err)
+	type process struct {
+		PID      int
+		Signal   string
+		Exited   bool
+		Code     int
+		Status   string
+		Error    string
+		LogClose string
+	}
+	processes := map[string]*process{}
+	success, finished := false, false
+	lines := strings.Split(strings.TrimSpace(string(body)), "\n")
+	for _, line := range lines {
+		var e struct {
+			Kind string          `json:"kind"`
+			Data json.RawMessage `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(line), &e))
+		var data struct {
+			Name     string `json:"name"`
+			PID      int    `json:"pid"`
+			Signal   string `json:"signal"`
+			Code     int    `json:"exit_code"`
+			Status   string `json:"status"`
+			Error    string `json:"error"`
+			LogClose string `json:"log_close_error"`
+			Failed   bool   `json:"failed"`
+		}
+		require.NoError(t, json.Unmarshal(e.Data, &data))
+		switch e.Kind {
+		case "process_start":
+			require.Nil(t, processes[data.Name])
+			processes[data.Name] = &process{PID: data.PID}
+		case "process_signal":
+			p := processes[data.Name]
+			require.NotNil(t, p)
+			require.Equal(t, p.PID, data.PID)
+			require.Empty(t, p.Signal)
+			p.Signal = data.Signal
+		case "process_exit":
+			p := processes[data.Name]
+			require.NotNil(t, p)
+			require.Equal(t, p.PID, data.PID)
+			require.False(t, p.Exited)
+			p.Exited = true
+			p.Code = data.Code
+			p.Status = data.Status
+			p.Error = data.Error
+			p.LogClose = data.LogClose
+		case "success":
+			require.False(t, success)
+			success = true
+		case "test_finished":
+			require.False(t, finished)
+			require.False(t, data.Failed)
+			finished = true
+		}
+	}
+	require.True(t, success)
+	require.True(t, finished)
+	require.GreaterOrEqual(t, len(processes), 4)
+	for name, p := range processes {
+		require.True(t, p.Exited, name)
+		require.Equal(t, "<nil>", p.LogClose, name)
+		if p.Signal == "killed" {
+			require.Equal(t, -1, p.Code)
+			require.Equal(t, "signal: killed", p.Status)
+			require.Equal(t, "signal: killed", p.Error)
+		} else {
+			require.Equal(t, "terminated", p.Signal)
+			require.Zero(t, p.Code)
+			require.Equal(t, "<nil>", p.Error)
+		}
+		path := filepath.Join(root, name+".log")
+		require.NoError(t, rejectFatalLog(path))
+		if strings.HasPrefix(name, "alpha-") {
+			out, err := auditPreparation(path)
+			require.NoError(t, err)
+			if p.Signal != "killed" {
+				require.Zero(t, out.UnpublishedMaterialized)
+				require.False(t, out.IncompleteTail)
+			}
+			t.Logf("%s: %+v", name, out)
+		}
+	}
 }

@@ -94,3 +94,16 @@ performance, broader network partitions/leadership churn, snapshot/compaction,
 and other crash cuts. SIGKILL with the host/filesystem alive is process recovery,
 not power-loss certification. This finite three-replica test does not close all
 recovery or distributed-system qualification gates.
+
+Retained successful runs can be audited without starting processes:
+
+```sh
+DGRAPH_ORDERED_CLUSTER_REPLAY=/absolute/retained-successful-run \
+  go test -race -modfile=/absolute/prototype.mod \
+  ./worker/treedb/clusterqualification -run '^TestRetainedClusterEvidence$' -count=1 -v
+```
+
+This checks actual PID/signal/exit correspondence, fatal markers and each Alpha
+session, including the requirement that every later original's finalization
+starts after the preceding original's Applied endpoint. Failed runs remain
+failed; replay does not supply external binary, source or module custody.
