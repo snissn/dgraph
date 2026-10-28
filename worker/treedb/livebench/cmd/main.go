@@ -1900,7 +1900,7 @@ func validateStorageDiagnostic(d *storageDiagnostic, r livebench.Result) error {
 	if d.RunID == "" || d.RunID != r.RunID || d.Backend != r.Config.Backend || d.DurabilityClass != r.Config.DurabilityClass ||
 		(d.Backend != "treedb" && d.Backend != "badger") || (d.DurabilityClass != "relaxed" && d.DurabilityClass != "durable") ||
 		r.Context.RawPath == "" || d.PostingDir != filepath.Join(filepath.Dir(r.Context.RawPath), "cluster", "p") ||
-		d.Boundary != storageDiagnosticBoundary || !r.Context.Excluded || !strings.Contains(r.Context.ExclusionReason, storageDiagnosticReason) {
+		d.Boundary != storageDiagnosticBoundary || !strings.Contains(d.Context.ExclusionReason, storageDiagnosticReason) || !r.Context.Excluded || !strings.Contains(r.Context.ExclusionReason, storageDiagnosticReason) {
 		return errors.New("storage diagnostic identity or boundary mismatch")
 	}
 	if d.TimedFinished.IsZero() || !d.TimedFinished.Equal(r.TimedFinished) || d.WalkStartedAt.IsZero() ||
@@ -1908,7 +1908,7 @@ func validateStorageDiagnostic(d *storageDiagnostic, r livebench.Result) error {
 		d.WriteStartedAt.IsZero() || d.WriteStartedAt.Before(d.WalkFinishedAt) {
 		return errors.New("storage diagnostic walk envelope mismatch")
 	}
-	if !reflect.DeepEqual(d.Config, r.Config) || !reflect.DeepEqual(d.Context, r.Context) ||
+	if !reflect.DeepEqual(d.Config, r.Config) || !reflect.DeepEqual(storageReproductionContext(d.Context), storageReproductionContext(r.Context)) ||
 		!storageDigest(d.Context.DgraphSHA, 20) || d.Context.GomapVersion == "" || d.Context.GoVersion == "" ||
 		!storageDigest(d.Context.BinarySHA256, 32) || d.Context.BinaryBuildInfo == "" || len(d.Context.ExactCommand) == 0 ||
 		!storageDigest(d.HarnessBinarySHA256, 32) || d.HarnessBuildInfo == "" {
@@ -2103,4 +2103,12 @@ func (d *storageDiagnostic) resolveStorageFields() {
 			d.EngineStatsAvailability.Error = d.Store.Body[i+len("stats_error="):]
 		}
 	}
+}
+
+// Recovery-time contamination changes the final exclusion disposition, not the
+// already sealed observation's source, binary, command, or environment identity.
+func storageReproductionContext(c livebench.Context) livebench.Context {
+	c.Contaminants = nil
+	c.ExclusionReason = ""
+	return c
 }

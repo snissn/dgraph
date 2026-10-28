@@ -312,3 +312,43 @@ func TestStorageAttributionPreservesHTTPFailureBytes(t *testing.T) {
 		}
 	}
 }
+
+func TestStorageAttributionFinalContaminantsPreserveBinding(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "cluster", "p")
+	if err := os.MkdirAll(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "index.db"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	r := storageTestResult(root)
+	d := newStorageDiagnostic(root, r)
+	l, a, err := diskUsageObserved(root, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Metrics = metrics("treedb", "store_wal", 0, 0, l, a, nil, nil, nil, nil)
+	completeStorageTestObservation(d)
+	out := filepath.Join(filepath.Dir(filepath.Dir(root)), "storage.json")
+	if err := writeStorageDiagnostic(out, d, r); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved storageDiagnostic
+	if err := json.Unmarshal(raw, &saved); err != nil {
+		t.Fatal(err)
+	}
+	// Recovery may discover new contaminants after this immutable observation.
+	r.Context.Contaminants = append(r.Context.Contaminants, "host load rose after recovery")
+	r.Context.ExclusionReason += "; host load rose after recovery"
+	if err := validateStorageDiagnostic(&saved, r); err != nil {
+		t.Fatalf("final contamination invalidated provenance: %v", err)
+	}
+	r.Context.BinarySHA256 = strings.Repeat("d", 64)
+	if err := validateStorageDiagnostic(&saved, r); err == nil {
+		t.Fatal("changed binary binding accepted")
+	}
+}
