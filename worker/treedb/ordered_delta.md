@@ -42,6 +42,15 @@ runs one live posting replica and later replays all persisted replica logs; it i
 not a three-live-Alpha network test. The process-exit fixture explicitly syncs its
 Raft log and does not certify production power-loss recovery.
 
+The separate opt-in `clusterqualification` fixture runs a real Zero and three
+concurrently live Alpha posting replicas through public transactions. Its test
+executable can hold the actual native pre-sync boundary, preserve observed
+watermark barriers, kill the leader at that cut, and verify survivor progress,
+same-directory replay/catchup, conflicting decisions and all-Alpha process
+recovery. It does not inject a Raft Sync or change process survival. See that
+fixture's README for exact provisional dependency, source/binary binding,
+conditional activation and remaining network/snapshot/crash-cut limits.
+
 No experimental native tracing, analyzer or watermark bridge is included. The
 already-merged Delta observer remains unchanged. Natural grouping diagnostics do
 not establish throughput or sync savings. Production/default qualification still
