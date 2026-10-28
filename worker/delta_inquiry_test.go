@@ -161,11 +161,12 @@ func TestDeltaInquiryProductionSerialBoundary(t *testing.T) {
 	require.Equal(t, base, posting.Oracle().MaxAssigned())
 	require.Zero(t, n.Applied.DoneUntil())
 	mu.Lock()
-	for _, e := range events {
+	snapshot := append([]inquiryEvent(nil), events...)
+	mu.Unlock()
+	for _, e := range snapshot {
 		require.False(t, e.Index == 2 && e.Phase == "submit_begin")
 		require.NotEqual(t, "oracle_end", e.Phase)
 	}
-	mu.Unlock()
 	shutdown()
 	require.Equal(t, base+5, posting.Oracle().MaxAssigned())
 	mu.Lock()
