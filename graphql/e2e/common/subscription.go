@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"time"
 
 	"github.com/golang/glog"
 	"github.com/gorilla/websocket"
@@ -128,6 +129,16 @@ func (client *GraphQLSubscriptionClient) RecvMsg() ([]byte, error) {
 		return nil, nil
 	}
 	return msg.Payload, nil
+}
+
+// RecvMsgWithTimeout bounds one receive, including an expected completion message.
+// A timeout makes the websocket unusable, as with any websocket read deadline.
+func (client *GraphQLSubscriptionClient) RecvMsgWithTimeout(timeout time.Duration) ([]byte, error) {
+	if err := client.conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		return nil, err
+	}
+	defer func() { _ = client.conn.SetReadDeadline(time.Time{}) }()
+	return client.RecvMsg()
 }
 
 // Terminate will terminate the subscription.
