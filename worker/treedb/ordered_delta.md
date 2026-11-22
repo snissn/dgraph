@@ -3,8 +3,9 @@
 This source candidate keeps `DGRAPH_ORDERED_DELTA_PROVISIONAL=1` as an explicit qualification
 switch. It remains disabled by default. Selection requires the ordinary TreeDB durable `wal_on_sync`
 route, HardSync disabled, no Raft-checkpoint prototype, and an open store. Other routes retain
-synchronous serial application. The native completion progress repair tracked by GoMap #5301 must
-land and the public dependency must be updated before enabling this path for production.
+synchronous serial application. The tracked `go.mod` dependency now pins merged `snissn/gomap`
+`main` (`v0.6.2-0.20261122191546-bfa26f93a0c5`, including `#5301` and `#5597`) directly without
+local replacements.
 
 Zero's checksum sequence counts Raft proposals, rather than checksum-map changes. Adjacent
 independent commit-bearing Deltas can prepare together when their full maps compare equal and their

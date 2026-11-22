@@ -5,22 +5,20 @@ group 1 with separate posting stores, Oracles and caches. It is correctness/reco
 for the default-disabled ordered-Delta path, not a benchmark or a production/default-readiness
 decision.
 
-The production dependency pin is unchanged. Runtime qualification currently requires the exact
-provisional GoMap #5301 module `v0.6.2-0.20261028140238-b82615a042cd`. Build using an **external**
-modfile and independently verify its replacement source against that published module archive. The
-binary build-info guard checks the version/replacement name and records the binary hash; the guard
-alone does not authenticate a local directory's contents. Retain the external source/module/binary
-hashes and commands beside each run.
+The tracked `go.mod` dependency pin now binds merged `snissn/gomap` `main`
+(`v0.6.2-0.20261122191546-bfa26f93a0c5`, including `#5301` and `#5597`) directly without an external
+modfile or local replacement. The binary build-info guard verifies that exact pinned version with
+`Replace == nil` and records the binary hash beside each run.
 
-For example, with Go 1.26.4 and a previously verified `/absolute/prototype.mod`:
+For example:
 
 ```sh
-GOWORK=off go test -c -race -modfile=/absolute/prototype.mod \
-  -o /mnt/fast4tb/my-qualification/dgraph-cluster.test ./dgraph
+GOWORK=off go test -c -race \
+  -o /tmp/my-qualification/dgraph-cluster.test ./dgraph
 DGRAPH_ORDERED_CLUSTER_TEST_SERVER=1 \
-DGRAPH_ORDERED_CLUSTER_BINARY=/mnt/fast4tb/my-qualification/dgraph-cluster.test \
-DGRAPH_ORDERED_CLUSTER_DIR=/mnt/fast4tb/my-qualification/new-run \
-GOWORK=off go test -race -modfile=/absolute/prototype.mod \
+DGRAPH_ORDERED_CLUSTER_BINARY=/tmp/my-qualification/dgraph-cluster.test \
+DGRAPH_ORDERED_CLUSTER_DIR=/tmp/my-qualification/new-run \
+GOWORK=off go test -race \
   ./worker/treedb/clusterqualification \
   -run '^TestOrderedDeltaThreeLiveAlphaRecovery$' -count=1 -timeout=7m -v
 ```

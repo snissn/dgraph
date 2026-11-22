@@ -64,16 +64,17 @@ func TestOrderedDeltaThreeLiveAlphaRecovery(t *testing.T) {
 	body, err := os.ReadFile(binary)
 	require.NoError(t, err)
 	sum := sha256.Sum256(body)
-	// A test using the known broken tracked pin must never produce a green
-	// qualification receipt. The external replacement is independently source-bound.
-	expected := "v0.6.2-0.20261028140238-b82615a042cd"
+	// A test using the known broken pre-#5301 pin must never produce a green
+	// qualification receipt. Bind the exact merged GoMap main pin without any
+	// local replacement directive.
+	expected := "v0.6.2-0.20261122191546-bfa26f93a0c5"
 	bound := false
 	for _, dep := range info.Deps {
 		if dep.Path == "github.com/snissn/gomap" {
-			bound = dep.Version == expected && dep.Replace == nil || dep.Replace != nil && filepath.Base(dep.Replace.Path) == "gomap@"+expected
+			bound = dep.Version == expected && dep.Replace == nil
 		}
 	}
-	require.True(t, bound, "requires the exact provisional #5301 b826 dependency; tracked a7 is not a runtime qualification")
+	require.True(t, bound, "requires the exact merged GoMap pin %s without replacement", expected)
 	record("binary", map[string]any{"path": binary, "sha256": hex.EncodeToString(sum[:]), "build": info.String()})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
