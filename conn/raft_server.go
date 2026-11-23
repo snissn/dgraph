@@ -50,8 +50,11 @@ func (r *lockedSource) Seed(seed int64) {
 // ProposalCtx stores the context for a proposal with extra information.
 type ProposalCtx struct {
 	Found uint32
-	ErrCh chan error
-	Ctx   context.Context
+	// Committed observes the first real committed log index, independently of apply.
+	// The optional channel must have capacity one; sends never block the Ready owner.
+	Committed chan<- uint64
+	ErrCh     chan error
+	Ctx       context.Context
 }
 
 type proposals struct {
